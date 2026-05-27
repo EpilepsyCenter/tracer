@@ -130,8 +130,8 @@ new things the user can do or new behaviours they will encounter.
 - New `?` button between the loading-status area and the gear.
   Opens the help modal. Everything else on the toolbar (Open
   File, Recent ▾, sweep nav, Scaling, Traces, Overlay, Average,
-  Tags, Analyses, Batch, Cohort, Export Traces, gear) is
-  unchanged in function — only how it looks.
+  Analyses ▾, Tools ▾ [Tags / Batch / Cohort / Export Traces],
+  gear) is unchanged in function — only how it looks.
 
 **Chapters that do NOT need updates** (style-only changes):
 
@@ -330,7 +330,7 @@ Order in the actual menu (`Toolbar.tsx:98–108`):
 - Trace Export
 - Batch
 - Cohort
-_(Spectral is in the dropdown but its window is minimal — flag this when writing chapter 2 prose. Metadata, Trace Export, Batch, Cohort are reached from elsewhere on the toolbar — verify exact placement when drafting.)_
+_(Spectral is in the dropdown but its window is minimal — flag this when writing chapter 2 prose. Metadata (Tags), Trace Export, Batch, Cohort are NOT in the Analyses ▾ menu — they live in the separate **Tools ▾** dropdown immediately to its right.)_
 
 ### Sweep navigation (only visible when a file is open)
 - Prev / Next buttons (`←` / `→`)

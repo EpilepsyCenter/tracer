@@ -162,8 +162,8 @@ those that operate across files (Tags, Batch, Cohort, Export Traces)
 remain available at all times.
 
 From left to right, the toolbar is laid out in five regions:
-**file**, **sweep**, **display**, **analyses**, and **status /
-settings**.
+**file**, **sweep**, **display**, **analyses & tools**, and
+**status / settings**.
 
 ![Toolbar overview](screenshots/toolbar-full-left-to-right.png)
 
@@ -229,12 +229,6 @@ These controls govern what is drawn in the trace viewer.
 
 ### Analyses, tagging and cross-recording tools
 
-The **Tags…** button opens the **Metadata** window, where you can
-attach tags and notes to a recording, group, or series. Tags drive
-the **Batch** and **Cohort** workflows that follow, so it sits
-deliberately just before the Analyses dropdown — read the toolbar
-left-to-right and you have *tag → analyse → batch → aggregate*.
-
 **Analyses ▾** opens the menu of per-recording analysis windows.
 Each entry opens a dedicated window devoted to one kind of analysis;
 they are documented one chapter at a time in Part II of this manual.
@@ -259,8 +253,16 @@ Several windows can be open at once, and they stay in sync with the
 main window: changing the selected sweep or moving a cursor in one
 place updates the others.
 
-The next three buttons operate across recordings rather than within
-one, and so are available even when no file is open:
+**Tools ▾** sits just after the Analyses menu and gathers the
+tagging and cross-recording actions into a single dropdown. Unlike
+the per-recording analyses, every entry here operates across files,
+so the menu is available even when no recording is open. The entries
+read top-to-bottom in workflow order — *tag → batch → aggregate →
+export*:
+
+- **Tags…** opens the **Metadata** window, where you can attach tags
+  and notes to a recording, group, or series. Tags drive the Batch
+  and Cohort workflows below, which is why it leads the menu.
 
 - **Batch…** replays a tagged template's analyses across every
   recording in a folder, so a parameter set you have tuned on one
@@ -3406,8 +3408,8 @@ Second, it offers **batch tagging** across multiple files at
 once — useful for an experimental cohort where every cell needs
 the same genotype tag.
 
-*Reach this window from the toolbar's **Tags…** button, or press
-`⌘K` and type **metadata** (or **tags**).*
+*Reach this window from the toolbar's **Tools ▾ → Tags…** menu, or
+press `⌘K` and type **metadata** (or **tags**).*
 
 ### When to use this window
 
@@ -3548,8 +3550,8 @@ It is the right place to assemble the figure that goes in the
 manuscript: cross-recording, vector-clean, with a live preview
 that matches the export pixel-for-pixel.
 
-*Reach this window from the toolbar's **Export Traces…** button,
-or press `⌘K` and type **export** (or **figure**).*
+*Reach this window from the toolbar's **Tools ▾ → Export Traces…**
+menu, or press `⌘K` and type **export** (or **figure**).*
 
 ### When to use this window
 
@@ -3720,8 +3722,8 @@ intentional: batch is the right answer when your protocol is
 uniform across cells and only the data differs, and curation is
 inherently per-cell.
 
-*Reach this window from the toolbar's **Batch…** button, or press
-`⌘K` and type **batch**.*
+*Reach this window from the toolbar's **Tools ▾ → Batch…** menu, or
+press `⌘K` and type **batch**.*
 
 ### When to use this window
 
@@ -3852,7 +3854,7 @@ to a Cohort result was analysed previously, either by hand in an
 analysis window or by the Batch window. Cohort reads the
 `.tracer` sidecars and aggregates the values stored there.
 
-*Reach this window from the toolbar's **Cohort…** button, or
+*Reach this window from the toolbar's **Tools ▾ → Cohort…** menu, or
 press `⌘K` and type **cohort**.*
 
 ### When to use this window

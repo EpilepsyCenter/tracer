@@ -107,6 +107,18 @@ const ANALYSIS_TYPES = [
   { type: 'spectral', label: 'Spectral Analysis' },
 ]
 
+// Cross-recording / tagging tools. Folded into the single "Tools ▾"
+// dropdown so the toolbar's right-hand cluster stays narrow on small
+// screens. All four operate across files (no open recording required),
+// and read top-to-bottom in the workflow order tag → batch → aggregate
+// → export. Each opens a dedicated window via openAnalysisWindow().
+const TOOL_TYPES = [
+  { type: 'metadata', label: 'Tags…', icon: 'tag', title: 'Tag recordings, groups and series (works without an open file)' },
+  { type: 'batch_analysis', label: 'Batch…', icon: 'grid', title: "Replay a template's analyses across a folder of tagged recordings" },
+  { type: 'cohort_analysis', label: 'Cohort…', icon: 'users', title: 'Aggregate per-cell metrics across a folder of recordings' },
+  { type: 'trace_export', label: 'Export Traces…', icon: 'download', title: 'Build publication-ready figures from sweeps across one or more recordings' },
+] as const
+
 export function Toolbar() {
   const {
     recording, openFile, loading,
@@ -132,6 +144,7 @@ export function Toolbar() {
 
   const [showSettings, setShowSettings] = useState(false)
   const [showAnalyses, setShowAnalyses] = useState(false)
+  const [showTools, setShowTools] = useState(false)
   const [showAverageMenu, setShowAverageMenu] = useState(false)
   const [showRecent, setShowRecent] = useState(false)
   const [showScaling, setShowScaling] = useState(false)
@@ -170,6 +183,7 @@ export function Toolbar() {
   }, [])
   const settingsRef = useRef<HTMLDivElement>(null)
   const analysesRef = useRef<HTMLDivElement>(null)
+  const toolsRef = useRef<HTMLDivElement>(null)
   const averageRef = useRef<HTMLDivElement>(null)
   const recentRef = useRef<HTMLDivElement>(null)
 
@@ -184,13 +198,16 @@ export function Toolbar() {
 
   // Close popovers on outside click
   useEffect(() => {
-    if (!showSettings && !showAnalyses && !showAverageMenu && !showRecent) return
+    if (!showSettings && !showAnalyses && !showTools && !showAverageMenu && !showRecent) return
     const onClick = (e: MouseEvent) => {
       if (showSettings && settingsRef.current && !settingsRef.current.contains(e.target as Node)) {
         setShowSettings(false)
       }
       if (showAnalyses && analysesRef.current && !analysesRef.current.contains(e.target as Node)) {
         setShowAnalyses(false)
+      }
+      if (showTools && toolsRef.current && !toolsRef.current.contains(e.target as Node)) {
+        setShowTools(false)
       }
       if (showAverageMenu && averageRef.current && !averageRef.current.contains(e.target as Node)) {
         setShowAverageMenu(false)
@@ -201,7 +218,7 @@ export function Toolbar() {
     }
     document.addEventListener('mousedown', onClick)
     return () => document.removeEventListener('mousedown', onClick)
-  }, [showSettings, showAnalyses, showAverageMenu, showRecent])
+  }, [showSettings, showAnalyses, showTools, showAverageMenu, showRecent])
 
   // Reset popover defaults every time it opens.
   useEffect(() => {
@@ -286,6 +303,13 @@ export function Toolbar() {
 
   const handleOpenAnalysis = async (type: string) => {
     setShowAnalyses(false)
+    if (window.electronAPI?.openAnalysisWindow) {
+      await window.electronAPI.openAnalysisWindow(type)
+    }
+  }
+
+  const handleOpenTool = async (type: string) => {
+    setShowTools(false)
     if (window.electronAPI?.openAnalysisWindow) {
       await window.electronAPI.openAnalysisWindow(type)
     }
@@ -549,25 +573,6 @@ export function Toolbar() {
 
       <div className="toolbar-separator" />
 
-      {/* Tags — opens the metadata window. Moved to the main toolbar
-          (vs the in-line Tags… that used to live next to the file
-          name) since tagging now works on closed files too: a user
-          may want to batch-tag a folder of recordings without any
-          file open. Workflow order in the toolbar reads tag → analyze
-          → aggregate, hence the position here before Analyses. */}
-      <button
-        className="btn"
-        onClick={async () => {
-          if (window.electronAPI?.openAnalysisWindow) {
-            await window.electronAPI.openAnalysisWindow('metadata')
-          }
-        }}
-        title="Open the metadata window to tag recordings (works without an open file)"
-      >
-        <Icon name="tag" />
-        Tags…
-      </button>
-
       {/* Analyses dropdown */}
       <div style={{ position: 'relative' }} ref={analysesRef}>
         <button
@@ -609,56 +614,54 @@ export function Toolbar() {
         )}
       </div>
 
-      {/* Batch Analysis — Phase 4b. Drives every-file detection
-          using a tagged template's params. Sits right after Analyses
-          to read tag → analyse → batch → aggregate in left-to-right
-          order. Always enabled. */}
-      <button
-        className="btn"
-        onClick={async () => {
-          if (window.electronAPI?.openAnalysisWindow) {
-            await window.electronAPI.openAnalysisWindow('batch_analysis')
-          }
-        }}
-        title="Replay a template's analyses across a folder of tagged recordings"
-        style={{ marginLeft: 6 }}
-      >
-        <Icon name="grid" />
-        Batch…
-      </button>
+      {/* Tools dropdown — folds the cross-recording / tagging actions
+          (Tags, Batch, Cohort, Export Traces) into one menu so the
+          toolbar's right-hand cluster stays narrow on small screens.
+          All four operate across files, so the button is always
+          enabled even with no recording open. Menu order mirrors the
+          workflow: tag → batch → aggregate → export. */}
+      <div style={{ position: 'relative', marginLeft: 6 }} ref={toolsRef}>
+        <button
+          className="btn"
+          onClick={() => setShowTools(!showTools)}
+          title="Tagging and cross-recording tools"
+        >
+          <Icon name="grid" />
+          Tools
+          <Icon name="chevron-down" size={11} />
+        </button>
 
-      {/* Cohort Analysis — separate from the per-file Analyses dropdown
-          because it operates on a folder of sidecars, not the active
-          recording. Always enabled (no recording dependency). */}
-      <button
-        className="btn"
-        onClick={async () => {
-          if (window.electronAPI?.openAnalysisWindow) {
-            await window.electronAPI.openAnalysisWindow('cohort_analysis')
-          }
-        }}
-        title="Aggregate per-cell metrics across a folder of recordings"
-        style={{ marginLeft: 4 }}
-      >
-        <Icon name="users" />
-        Cohort…
-      </button>
-
-      {/* Trace Export — Phase C. Cross-recording publication-ready
-          figures. Always enabled (no recording dependency). */}
-      <button
-        className="btn"
-        onClick={async () => {
-          if (window.electronAPI?.openAnalysisWindow) {
-            await window.electronAPI.openAnalysisWindow('trace_export')
-          }
-        }}
-        title="Build publication-ready figures from sweeps across one or more recordings"
-        style={{ marginLeft: 4 }}
-      >
-        <Icon name="download" />
-        Export Traces…
-      </button>
+        {showTools && (
+          <div className="settings-popover" style={{ left: 0, right: 'auto', width: 200 }}>
+            {TOOL_TYPES.map((t) => (
+              <button
+                key={t.type}
+                onClick={() => handleOpenTool(t.type)}
+                title={t.title}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  width: '100%',
+                  padding: '6px 10px',
+                  background: 'none',
+                  border: 'none',
+                  textAlign: 'left',
+                  color: 'var(--text-primary)',
+                  fontSize: 'var(--font-size-sm)',
+                  fontFamily: 'var(--font-ui)',
+                  cursor: 'pointer',
+                  borderRadius: 4,
+                }}
+                className="analysis-menu-item"
+              >
+                <Icon name={t.icon} />
+                {t.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
 
       {loading && (
         <span style={{ marginLeft: 'auto', color: 'var(--accent)', fontSize: 'var(--font-size-sm)' }}>Loading...</span>
