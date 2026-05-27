@@ -57,9 +57,23 @@ function findFreePort(): Promise<number> {
   })
 }
 
+// Resolve the dev-mode Python interpreter. Packaged builds ship a frozen
+// ``main`` executable (no interpreter needed); in dev we spawn one directly.
+//   - ``TRACER_PYTHON`` wins if set — point it at a venv interpreter
+//     (e.g. ``.venv\Scripts\python.exe`` on Windows, ``.venv/bin/python``
+//     elsewhere) to run the backend without activating the venv first.
+//   - Otherwise default per-platform: ``python`` on Windows, since its
+//     venvs and python.org installs expose ``python.exe`` but not
+//     ``python3.exe`` — a bare ``python3`` there resolves to the Microsoft
+//     Store stub and the backend never starts. ``python3`` everywhere else.
+function devPythonInterpreter(): string {
+  if (process.env.TRACER_PYTHON) return process.env.TRACER_PYTHON
+  return process.platform === 'win32' ? 'python' : 'python3'
+}
+
 async function startPythonBackend(port: number): Promise<void> {
   const isDev = !app.isPackaged
-  const pythonPath = isDev ? 'python3' : join(process.resourcesPath, 'backend', 'main')
+  const pythonPath = isDev ? devPythonInterpreter() : join(process.resourcesPath, 'backend', 'main')
   const args = isDev ? [join(__dirname, '..', 'backend', 'main.py'), '--port', String(port)] : ['--port', String(port)]
 
   return new Promise((resolve, reject) => {
