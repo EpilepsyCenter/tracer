@@ -661,6 +661,28 @@ export function FPspWindow({
 
   const flaggedCount = entry ? entry.points.filter((p) => p.flagged).length : 0
 
+  // One editable start→end row for a cursor window. Typed values commit
+  // on blur/Enter (NumInput) and flow through the same setters as the
+  // viewer's drag handles, so typing and dragging stay in sync. Not a
+  // nested component — a plain JSX-returning helper, so the NumInputs
+  // keep their identity (and focus) across re-renders.
+  const cursorTimeRow = (
+    label: string,
+    color: string,
+    start: number,
+    end: number,
+    onStart: (v: number) => void,
+    onEnd: (v: number) => void,
+  ) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 4, width: '100%' }}>
+      <span style={{ color, fontWeight: 600, width: 56, flexShrink: 0 }}>{label}</span>
+      <NumInput value={start} min={0} decimals={4} onChange={onStart} style={{ width: 72 }} />
+      <span style={{ color: 'var(--text-muted)' }}>→</span>
+      <NumInput value={end} min={0} decimals={4} onChange={onEnd} style={{ width: 72 }} />
+      <span style={{ color: 'var(--text-muted)' }}>s</span>
+    </div>
+  )
+
   return (
     <div style={{
       display: 'flex',
@@ -836,22 +858,36 @@ export function FPspWindow({
               fontSize: 'var(--font-size-label)',
               fontFamily: 'var(--font-mono)',
             }}>
-              <span style={{ color: MARKER.baseline, fontWeight: 600 }}>Baseline:</span>
-              <span>{cursors.baselineStart.toFixed(4)}→{cursors.baselineEnd.toFixed(4)}s</span>
-              <span style={{ color: MARKER.volley, fontWeight: 600, width: '100%' }}>
-                {mode === 'ppr' ? 'V1:' : 'Volley:'}
-              </span>
-              <span>{cursors.fitStart.toFixed(4)}→{cursors.fitEnd.toFixed(4)}s</span>
-              <span style={{ color: MARKER.fepsp, fontWeight: 600, width: '100%' }}>
-                {mode === 'ppr' ? 'F1:' : 'fEPSP:'}
-              </span>
-              <span>{cursors.peakStart.toFixed(4)}→{cursors.peakEnd.toFixed(4)}s</span>
+              {cursorTimeRow(
+                'Baseline', MARKER.baseline,
+                cursors.baselineStart, cursors.baselineEnd,
+                (v) => updateCursors({ baselineStart: v }),
+                (v) => updateCursors({ baselineEnd: v }),
+              )}
+              {cursorTimeRow(
+                mode === 'ppr' ? 'V1' : 'Volley', MARKER.volley,
+                cursors.fitStart, cursors.fitEnd,
+                (v) => updateCursors({ fitStart: v }),
+                (v) => updateCursors({ fitEnd: v }),
+              )}
+              {cursorTimeRow(
+                mode === 'ppr' ? 'F1' : 'fEPSP', MARKER.fepsp,
+                cursors.peakStart, cursors.peakEnd,
+                (v) => updateCursors({ peakStart: v }),
+                (v) => updateCursors({ peakEnd: v }),
+              )}
               {mode === 'ppr' && (
                 <>
-                  <span style={{ color: MARKER.volley, fontWeight: 600, width: '100%' }}>V2:</span>
-                  <span>{volley2Start.toFixed(4)}→{volley2End.toFixed(4)}s</span>
-                  <span style={{ color: MARKER.fepsp, fontWeight: 600, width: '100%' }}>F2:</span>
-                  <span>{fepsp2Start.toFixed(4)}→{fepsp2End.toFixed(4)}s</span>
+                  {cursorTimeRow(
+                    'V2', MARKER.volley,
+                    volley2Start, volley2End,
+                    setVolley2Start, setVolley2End,
+                  )}
+                  {cursorTimeRow(
+                    'F2', MARKER.fepsp,
+                    fepsp2Start, fepsp2End,
+                    setFepsp2Start, setFepsp2End,
+                  )}
                 </>
               )}
               <button
