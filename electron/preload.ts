@@ -6,15 +6,23 @@ import { homedir, platform } from 'os'
 // ---------------------------------------------------------------------------
 // Read preferences SYNCHRONOUSLY at preload time
 // ---------------------------------------------------------------------------
+// The directory name MUST match ``app.getPath('userData')`` in the main
+// process, which derives from ``app.setName('TRACER')`` (main.ts) — so it
+// is "TRACER" (upper-case), not the package.json name "tracer". macOS /
+// Windows filesystems are case-insensitive by default and mask a mismatch;
+// Linux (ext4) is case-sensitive, so a lower-case "tracer" here reads a
+// non-existent file and every sync-hydrated pref (recentFiles, …) comes
+// back empty.
+const APP_DIR = 'TRACER'
 function getPrefsPath(): string {
   const home = homedir()
   const p = platform()
   if (p === 'darwin') {
-    return join(home, 'Library', 'Application Support', 'tracer', 'preferences.json')
+    return join(home, 'Library', 'Application Support', APP_DIR, 'preferences.json')
   } else if (p === 'win32') {
-    return join(process.env.APPDATA || join(home, 'AppData', 'Roaming'), 'tracer', 'preferences.json')
+    return join(process.env.APPDATA || join(home, 'AppData', 'Roaming'), APP_DIR, 'preferences.json')
   } else {
-    return join(process.env.XDG_CONFIG_HOME || join(home, '.config'), 'tracer', 'preferences.json')
+    return join(process.env.XDG_CONFIG_HOME || join(home, '.config'), APP_DIR, 'preferences.json')
   }
 }
 
