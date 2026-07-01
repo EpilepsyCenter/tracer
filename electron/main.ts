@@ -4,6 +4,19 @@ import { join, dirname, basename } from 'path'
 import { createServer } from 'net'
 import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync, unlinkSync, readdirSync, statSync } from 'fs'
 
+// When the app is launched from a GUI (double-clicked AppImage, Finder,
+// a .desktop entry) the main process's stdout/stderr are wired to a pipe
+// with no reader — or one that closes. Our Python-backend log forwarding
+// (console.log/console.error below) then writes into a broken pipe and
+// Node raises EPIPE. Unhandled, that surfaces as "A JavaScript error
+// occurred in the main process: Error: write EPIPE" and takes the whole
+// app down — but only in packaged builds, never in dev where stdout is a
+// real terminal. Swallow EPIPE on the stdio streams so logging can never
+// crash the app; re-raise anything else so real faults still surface.
+const ignoreEpipe = (err: NodeJS.ErrnoException) => { if (err.code !== 'EPIPE') throw err }
+process.stdout.on('error', ignoreEpipe)
+process.stderr.on('error', ignoreEpipe)
+
 // Pin the app name BEFORE the app ready event so the macOS application
 // menu + dock both read "TRACER" instead of "Electron". In packaged
 // builds electron-builder bakes ``productName`` into the bundle's
