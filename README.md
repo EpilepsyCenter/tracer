@@ -12,7 +12,11 @@ Current release: **v1.0.0**. macOS Apple-Silicon DMG, Windows NSIS, and Linux Ap
 
 No build required — pre-built installers for every supported platform are attached to each tagged release on the [releases page](https://github.com/EpilepsyCenter/tracer/releases/latest):
 
-- **macOS (Apple Silicon)** — `TRACER-<version>.dmg`. Open the DMG and drag TRACER to Applications. The app is not notarized yet, so on first launch macOS will block it; either right-click → Open, or run `xattr -dr com.apple.quarantine /Applications/TRACER.app` once.
+- **macOS (Apple Silicon)** — `TRACER-<version>.dmg`. Open the DMG and drag TRACER to Applications. The app isn't notarized by Apple yet, so the first launch is blocked with *"Apple could not verify TRACER…"*. Click *Done*, then open **System Settings → Privacy & Security**, scroll down, and click **Open Anyway** next to the TRACER message. You only need to do this once.
+  - If macOS instead says TRACER **"is damaged and can't be opened"** (v1.0.0 and earlier), the app is fine. Run this once in Terminal, then open it normally:
+    ```bash
+    xattr -dr com.apple.quarantine /Applications/TRACER.app
+    ```
 - **Windows (x64)** — `TRACER Setup <version>.exe` (NSIS installer). SmartScreen may warn the first time — click *More info* → *Run anyway*.
 - **Linux (x64 / arm64)** — `TRACER-<version>.AppImage`. `chmod +x` it and double-click, or run it from a terminal. On Ubuntu 22.04+ you may need `sudo apt install libfuse2` (or use `--appimage-extract-and-run`).
 

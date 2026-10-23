@@ -228,6 +228,10 @@ section .sub{font-size:15px;line-height:1.6;color:var(--text-secondary);max-widt
 .cta-big .btn-lg:hover{background:var(--dark-bg-3);border-color:var(--dark-accent);color:var(--dark-accent);}
 .cta-big .btn-lg.primary{background:var(--dark-accent);border-color:var(--dark-accent);color:var(--dark-bg);}
 .cta-big .btn-lg.primary:hover{background:var(--dark-accent-hover);border-color:var(--dark-accent-hover);color:var(--dark-bg);}
+.cta-big p.install-note{font-size:13px;max-width:62ch;margin:28px auto 0;color:var(--dark-text-mute);}
+.cta-big .install-note strong{color:var(--dark-text-2);font-weight:500;}
+.cta-big .install-note em{font-style:normal;color:var(--dark-text-2);}
+.cta-big .install-note code{font-family:var(--font-mono);font-size:12px;color:var(--dark-text);background:var(--dark-bg-3);border:1px solid var(--dark-border);border-radius:4px;padding:1px 6px;overflow-wrap:anywhere;}
 .cta-big .foot-line{
   margin-top:40px;font-family:var(--font-mono);font-size:10px;color:var(--dark-text-mute);
   letter-spacing:0.14em;text-transform:uppercase;
@@ -529,6 +533,12 @@ section .sub{font-size:15px;line-height:1.6;color:var(--text-secondary);max-widt
       <a class="btn-lg primary" href={releases}>Download TRACER 1.0.0 ↓</a>
       <a class="btn-lg" href={link('/docs')}>Read the docs →</a>
     </div>
+    <p class="install-note">
+      <strong>First launch on macOS:</strong> TRACER isn't notarized by Apple yet, so macOS blocks it the first time.
+      Open <strong>System Settings → Privacy &amp; Security</strong> and click <strong>Open Anyway</strong>.
+      If macOS says the app <em>"is damaged"</em> (v1.0.0), it isn't. Run
+      <code>xattr -dr com.apple.quarantine /Applications/TRACER.app</code> once in Terminal.
+    </p>
     <div style="margin-top:40px;">
       <div class="foot-line">
         <span>macOS 12+ Apple Silicon</span>

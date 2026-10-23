@@ -66,8 +66,10 @@ jobs:
 
       - name: Build frontend + installer
         env:
-          # electron-builder picks this up to skip code-signing on CI
-          # (colleagues get an unsigned installer — fine for lab testing)
+          # No Developer ID on CI, so electron-builder's own signing is
+          # skipped. The afterPack hook (scripts/adhoc-sign.cjs) ad-hoc
+          # signs the mac app instead, so Gatekeeper shows "Open Anyway"
+          # rather than "damaged".
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: |
           npx tsc

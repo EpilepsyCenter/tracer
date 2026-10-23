@@ -53,6 +53,7 @@
         "to": "lockup.png"
       }
     ],
+    "afterPack": "scripts/adhoc-sign.cjs",
     "mac": {
       "target": "dmg",
       "icon": "build/icon.icns"
