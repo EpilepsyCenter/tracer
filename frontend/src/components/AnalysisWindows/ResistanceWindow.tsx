@@ -694,6 +694,13 @@ export function ResistanceWindow({
   const yRangeRef = useRef<[number, number] | null>(null)
   const hasRealDataRef = useRef(false)
 
+  // A different recording slice → once its trace arrives, drop the saved
+  // zoom so it auto-fits instead of sitting in the old range. (Clearing
+  // straight away isn't enough: redraws of the old plot would save the
+  // old range again before the new trace loads.)
+  const zoomResetFromRef = useRef<unknown>(undefined)
+  useEffect(() => { zoomResetFromRef.current = traceTime }, [currentGroup, currentSeries, currentChannel, zeroOffset])
+
   // Drag state
   type DragTarget =
     | { kind: 'baseline-edge'; edge: 'start' | 'end' }
@@ -782,6 +789,7 @@ export function ResistanceWindow({
   }
 
   useEffect(() => {
+    const resetZoomOnBuild = zoomResetFromRef.current !== undefined && traceTime !== zoomResetFromRef.current
     const container = traceChartRef.current
     if (!container || !traceTime || !traceValues) {
       if (tracePlotRef.current) { tracePlotRef.current.destroy(); tracePlotRef.current = null }
@@ -790,6 +798,14 @@ export function ResistanceWindow({
 
     const frameId = requestAnimationFrame(() => {
       if (tracePlotRef.current) { tracePlotRef.current.destroy(); tracePlotRef.current = null }
+      // Cleared here, not before the frame: the old plot can still redraw
+      // (and re-save its range) until it's destroyed.
+      if (resetZoomOnBuild) {
+        xRangeRef.current = null
+        yRangeRef.current = null
+        hasRealDataRef.current = false
+        zoomResetFromRef.current = undefined
+      }
 
       const w = Math.max(container.clientWidth, 200)
       const h = Math.max(container.clientHeight, 100)

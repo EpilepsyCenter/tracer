@@ -330,9 +330,14 @@ class BurstDetection(AnalysisBase):
         # remove DC drift before find_peaks). Cluster bursts on the
         # filtered signal, but measure amplitudes on raw.
         filtered = _apply_pre_detection_filter(data, sr, params)
+        # Spikes are found as excursions from the FILTERED signal's
+        # median, so report that as the baseline (same as the threshold
+        # method): the baseline / threshold lines then sit on the trace
+        # the burst viewer draws (it applies the same filter).
+        baseline_value = float(np.median(filtered))
 
         raw_thresh = params.get("spike_threshold", None)
-        centered = np.abs(filtered - np.median(filtered))
+        centered = np.abs(filtered - baseline_value)
         # Treat None, 0, and negative values all as "auto" — the frontend
         # sends 0 as its sentinel for auto because JSON has no undefined.
         if raw_thresh is None or float(raw_thresh) <= 0:
@@ -353,8 +358,10 @@ class BurstDetection(AnalysisBase):
                 "n_bursts": 0,
                 "bursts": [],
                 "n_spikes": int(len(peaks)),
-                "baseline_value": float(np.median(data)),
+                "baseline_value": baseline_value,
                 "threshold_value": float(spike_threshold),
+                "threshold_high": baseline_value + float(spike_threshold),
+                "threshold_low": baseline_value - float(spike_threshold),
             }
 
         max_isi_ms = float(params.get("max_isi_ms", 100.0))
@@ -374,7 +381,6 @@ class BurstDetection(AnalysisBase):
         if len(current) >= min_spikes:
             bursts.append(self._spike_cluster_to_burst(current, sr, data))
 
-        baseline_value = float(np.median(data))
         # Measure amplitudes on the filtered signal (ISI detection ran on it)
         # so the mini-viewer markers line up with the displayed filtered trace.
         self._populate_burst_fields(bursts, filtered, sr,

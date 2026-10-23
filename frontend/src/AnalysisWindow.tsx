@@ -81,6 +81,14 @@ export function AnalysisWindow({ view }: { view: string }) {
   const cursorsRef = useRef(cursors)
   cursorsRef.current = cursors
 
+  // Mirror the main window's cursors into this window's store. Windows
+  // that drag a single band edge merge it with ``useAppStore`` cursors
+  // before broadcasting; without this mirror that store still holds the
+  // defaults, and the first drag snapped every other band to them.
+  useEffect(() => {
+    useAppStore.getState().setCursors(cursors)
+  }, [cursors])
+
   // Initialize
   useEffect(() => {
     initTheme();

@@ -865,6 +865,7 @@ export function CursorAnalysisWindow({
         }}>
           <div style={{ height: ui.plotHeight, minHeight: 120, flexShrink: 0, position: 'relative' }}>
             <MiniViewer
+              viewKey={`${localData.group}:${localData.series}:${localData.trace}:${applyZero}`}
               data={previewData}
               heightSignal={ui.plotHeight}
               baseline={localData.baseline}
@@ -1171,7 +1172,7 @@ function MiniViewer({
   data, heightSignal, baseline, slots, traceUnit, measurements,
   previewSweep, displayYOffset, zeroOffset, onZeroOffsetChange,
   onBaselineChange, onSlotChange,
-  onResetCursorsInView,
+  onResetCursorsInView, viewKey,
 }: {
   data: { time: number[]; values: number[]; zeroOffset?: number } | null
   heightSignal: number
@@ -1192,6 +1193,8 @@ function MiniViewer({
    *  visible X range" action. Called with the live xMin/xMax so the
    *  parent can place baseline + enabled slot peaks back in view. */
   onResetCursorsInView: (xMin: number, xMax: number) => void
+  /** Changes when the recording slice shown changes; clears the saved zoom. */
+  viewKey: string
 }) {
   const themeKey = useThemeKey()
   const containerRef = useRef<HTMLDivElement>(null)
@@ -1235,6 +1238,13 @@ function MiniViewer({
   // lock to the placeholder's bogus Y range and the real trace
   // would render offscreen once it arrives.
   const hasRealDataRef = useRef(false)
+
+  // A different recording slice → once its trace arrives, drop the saved
+  // zoom so it auto-fits instead of sitting in the old range. (Clearing
+  // straight away isn't enough: redraws of the old plot would save the
+  // old range again before the new trace loads.)
+  const zoomResetFromRef = useRef<unknown>(undefined)
+  useEffect(() => { zoomResetFromRef.current = data }, [viewKey])
 
   // Drag state: cursor edges, whole-band moves, and plot panning.
   type DragTarget =
@@ -1290,6 +1300,12 @@ function MiniViewer({
   // those refs; on rebuild, the new plot's range functions return
   // the same values and the visual zoom is preserved.
   useEffect(() => {
+    if (zoomResetFromRef.current !== undefined && data !== zoomResetFromRef.current) {
+      xRangeRef.current = null
+      yRangeRef.current = null
+      hasRealDataRef.current = false
+      zoomResetFromRef.current = undefined
+    }
     const el = containerRef.current
     if (!el) return
 

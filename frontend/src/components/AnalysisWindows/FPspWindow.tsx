@@ -1178,6 +1178,7 @@ export function FPspWindow({
                       fepspEnd: fepsp2End,
                     } : null}
                     onXRangeChange={(xMin, xMax) => setPrimaryXRange([xMin, xMax])}
+                    viewKey={`${group}:${viewerSeries}:${channel}:${zeroOffset}:${filterEnabled ? `${filterType}-${filterLow}-${filterHigh}-${filterOrder}` : 'raw'}`}
                   />
                 </div>
                 {overlayChannels.map((ch) => {
@@ -2355,7 +2356,7 @@ function FPspSweepViewer({
   zeroOffset, onZeroOffsetChange, zeroOffsetApplied,
   markerPoint, markerEntry,
   pprBands,
-  onXRangeChange,
+  onXRangeChange, viewKey,
 }: {
   traceTime: number[] | null
   traceValues: number[] | null
@@ -2394,6 +2395,9 @@ function FPspSweepViewer({
   /** Fired on pan / wheel / reset / initial auto-fit so stacked
    *  overlay viewers can mirror the x range. Same pattern as AP/IV. */
   onXRangeChange?: (xMin: number, xMax: number) => void
+  /** Changes when the series / channel / filter / zero-offset shown
+   *  changes; the saved zoom is cleared so the new trace auto-fits. */
+  viewKey: string
 }) {
   const themeKey = useThemeKey()
   const containerRef = useRef<HTMLDivElement>(null)
@@ -2425,6 +2429,13 @@ function FPspSweepViewer({
   const xRangeRef = useRef<[number, number] | null>(null)
   const yRangeRef = useRef<[number, number] | null>(null)
   const hasRealDataRef = useRef(false)
+
+  // A different recording slice → once its trace arrives, drop the saved
+  // zoom so it auto-fits instead of sitting in the old range. (Clearing
+  // straight away isn't enough: redraws of the old plot would save the
+  // old range again before the new trace loads.)
+  const zoomResetFromRef = useRef<unknown>(undefined)
+  useEffect(() => { zoomResetFromRef.current = traceTime }, [viewKey])
 
   type DragTarget =
     | { kind: 'baseline-edge'; edge: 'start' | 'end' }
@@ -2586,6 +2597,7 @@ function FPspSweepViewer({
   }
 
   useEffect(() => {
+    const resetZoomOnBuild = zoomResetFromRef.current !== undefined && traceTime !== zoomResetFromRef.current
     const container = containerRef.current
     if (!container || !traceTime || !traceValues) {
       if (plotRef.current) { plotRef.current.destroy(); plotRef.current = null }
@@ -2593,6 +2605,14 @@ function FPspSweepViewer({
     }
     const frameId = requestAnimationFrame(() => {
       if (plotRef.current) { plotRef.current.destroy(); plotRef.current = null }
+      // Cleared here, not before the frame: the old plot can still redraw
+      // (and re-save its range) until it's destroyed.
+      if (resetZoomOnBuild) {
+        xRangeRef.current = null
+        yRangeRef.current = null
+        hasRealDataRef.current = false
+        zoomResetFromRef.current = undefined
+      }
       const w = Math.max(container.clientWidth, 200)
       const h = Math.max(container.clientHeight, 100)
       hasRealDataRef.current = true

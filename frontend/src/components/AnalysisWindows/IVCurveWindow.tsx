@@ -692,6 +692,7 @@ export function IVCurveWindow({
                   })
                 }}
                 onXRangeChange={(xMin, xMax) => setPrimaryXRange([xMin, xMax])}
+                viewKey={`${group}:${series}:${channel}:${zeroOffset}`}
               />
             </div>
             {overlayChannels.map((ch) => {
@@ -1191,7 +1192,7 @@ function TraceMiniViewer({
   theme, fontSize,
   zeroOffset, onZeroOffsetChange,
   resetCursorsInView,
-  onXRangeChange,
+  onXRangeChange, viewKey,
 }: {
   traceTime: number[] | null
   traceValues: number[] | null
@@ -1213,6 +1214,9 @@ function TraceMiniViewer({
   /** Fired on pan / wheel / reset / initial auto-fit so stacked
    *  overlay viewers mirror the x range. Same pattern as AP. */
   onXRangeChange?: (xMin: number, xMax: number) => void
+  /** Changes when the group / series / channel / zero-offset shown
+   *  changes; the saved zoom is cleared so the new trace auto-fits. */
+  viewKey: string
 }) {
   const themeKey = useThemeKey()
   const containerRef = useRef<HTMLDivElement>(null)
@@ -1230,6 +1234,13 @@ function TraceMiniViewer({
   const xRangeRef = useRef<[number, number] | null>(null)
   const yRangeRef = useRef<[number, number] | null>(null)
   const hasRealDataRef = useRef(false)
+
+  // A different recording slice → once its trace arrives, drop the saved
+  // zoom so it auto-fits instead of sitting in the old range. (Clearing
+  // straight away isn't enough: redraws of the old plot would save the
+  // old range again before the new trace loads.)
+  const zoomResetFromRef = useRef<unknown>(undefined)
+  useEffect(() => { zoomResetFromRef.current = traceTime }, [viewKey])
 
   // Stash the onXRangeChange callback in a ref so handlers wired once
   // can see the latest prop without requiring a remount.
@@ -1292,6 +1303,7 @@ function TraceMiniViewer({
   }
 
   useEffect(() => {
+    const resetZoomOnBuild = zoomResetFromRef.current !== undefined && traceTime !== zoomResetFromRef.current
     const container = containerRef.current
     if (!container || !traceTime || !traceValues) {
       if (plotRef.current) { plotRef.current.destroy(); plotRef.current = null }
@@ -1299,6 +1311,14 @@ function TraceMiniViewer({
     }
     const frameId = requestAnimationFrame(() => {
       if (plotRef.current) { plotRef.current.destroy(); plotRef.current = null }
+      // Cleared here, not before the frame: the old plot can still redraw
+      // (and re-save its range) until it's destroyed.
+      if (resetZoomOnBuild) {
+        xRangeRef.current = null
+        yRangeRef.current = null
+        hasRealDataRef.current = false
+        zoomResetFromRef.current = undefined
+      }
       const w = Math.max(container.clientWidth, 200)
       const h = Math.max(container.clientHeight, 100)
       hasRealDataRef.current = true

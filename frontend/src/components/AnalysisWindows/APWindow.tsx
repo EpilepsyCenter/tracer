@@ -946,6 +946,7 @@ export function APWindow({
                 minHeight: 0,
               }}>
                 <APSweepViewer
+                  viewKey={`${group}:${series}:${trace}:${zeroOffset}`}
                   traceTime={traceTime}
                   traceValues={traceValues}
                   traceUnits={traceUnits}
@@ -2611,7 +2612,7 @@ function APSweepViewer({
   entry,
   heightSignal,
   zoomToSpikeRequest,
-  onXRangeChange,
+  onXRangeChange, viewKey,
   onAddSpike,
   onRemoveSpikeAt,
   showBounds,
@@ -2655,6 +2656,8 @@ function APSweepViewer({
    *  translucent shaded spans behind the spike markers; empty when
    *  grouping is off or no clusters qualify. */
   trainsForSweep: TrainSummary[]
+  /** Changes when the recording slice shown changes; clears the saved zoom. */
+  viewKey: string
 }) {
   const themeKey = useThemeKey()
   void previewSweep; void totalSweeps; void traceUnits
@@ -2668,6 +2671,13 @@ function APSweepViewer({
 
   const xRangeRef = useRef<[number, number] | null>(null)
   const yRangeRef = useRef<[number, number] | null>(null)
+
+  // A different recording slice → once its trace arrives, drop the saved
+  // zoom so it auto-fits instead of sitting in the old range. (Clearing
+  // straight away isn't enough: redraws of the old plot would save the
+  // old range again before the new trace loads.)
+  const zoomResetFromRef = useRef<unknown>(undefined)
+  useEffect(() => { zoomResetFromRef.current = traceTime }, [viewKey])
   const boundsRef = useRef({ start: boundsStartS, end: boundsEndS })
   boundsRef.current = { start: boundsStartS, end: boundsEndS }
   const spikesRef = useRef<APPoint[]>(previewSpikes)
@@ -2753,16 +2763,25 @@ function APSweepViewer({
 
     // Bounds bands — translucent blue, label inside.
     const drawBand = (x0: number, x1: number, color: string, label: string) => {
-      const px0 = u.valToPos(x0, 'x', true)
-      const px1 = u.valToPos(x1, 'x', true)
+      // Clip to the plot area: a band that starts before the visible
+      // range (e.g. bounds from 0 s) would otherwise put its label in
+      // the y-axis gutter, where it gets cut off.
+      const plotL = u.bbox.left
+      const plotR = u.bbox.left + u.bbox.width
+      const l = Math.max(plotL, Math.min(u.valToPos(x0, 'x', true), u.valToPos(x1, 'x', true)))
+      const r = Math.min(plotR, Math.max(u.valToPos(x0, 'x', true), u.valToPos(x1, 'x', true)))
+      if (r <= l) return
       ctx.save()
       ctx.globalAlpha = 0.14
       ctx.fillStyle = color
-      ctx.fillRect(Math.min(px0, px1), top, Math.abs(px1 - px0), bottom - top)
+      ctx.fillRect(l, top, r - l, bottom - top)
       ctx.globalAlpha = 1
       ctx.fillStyle = color
       ctx.font = `600 ${10 * dpr}px ${cssVar('--font-ui')}`
-      ctx.fillText(label, Math.min(px0, px1) + 2 * dpr, top + 12 * dpr)
+      // uPlot leaves textAlign at 'right' after drawing the y axis.
+      ctx.textAlign = 'left'
+      ctx.textBaseline = 'alphabetic'
+      ctx.fillText(label, l + 4 * dpr, top + 12 * dpr)
       ctx.restore()
     }
     const b = boundsRef.current
@@ -2996,6 +3015,7 @@ function APSweepViewer({
   }
 
   useEffect(() => {
+    const resetZoomOnBuild = zoomResetFromRef.current !== undefined && traceTime !== zoomResetFromRef.current
     const container = containerRef.current
     if (!container || !traceTime || !traceValues) {
       if (plotRef.current) { plotRef.current.destroy(); plotRef.current = null }
@@ -3003,6 +3023,13 @@ function APSweepViewer({
     }
     const frame = requestAnimationFrame(() => {
       if (plotRef.current) { plotRef.current.destroy(); plotRef.current = null }
+      // Cleared here, not before the frame: the old plot can still redraw
+      // (and re-save its range) until it's destroyed.
+      if (resetZoomOnBuild) {
+        xRangeRef.current = null
+        yRangeRef.current = null
+        zoomResetFromRef.current = undefined
+      }
       const w = Math.max(container.clientWidth, 200)
       const h = Math.max(container.clientHeight, 100)
       // ``traceValues`` already reflects the requested zero-offset
