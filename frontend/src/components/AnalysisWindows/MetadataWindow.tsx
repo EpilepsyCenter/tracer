@@ -58,9 +58,9 @@ interface FolderEntry {
 }
 
 const STATUS_COLORS: Record<MetaStatus, string> = {
-  red: '#ef4444',
-  yellow: '#eab308',
-  green: '#22c55e',
+  red: 'var(--error)',
+  yellow: 'var(--warning)',
+  green: 'var(--success)',
 }
 
 const STATUS_TITLES: Record<MetaStatus, string> = {
@@ -504,8 +504,7 @@ export function MetadataWindow({ backendUrl, fileInfo }: {
           window — both produce the same per-folder list with editable
           tags on every file.
         </span>
-        <button className="btn btn-primary" onClick={pickFolder}
-          style={{ padding: '6px 14px' }}>
+        <button className="btn btn-primary btn-lg" onClick={pickFolder}>
           Pick folder…
         </button>
       </div>
@@ -524,12 +523,11 @@ export function MetadataWindow({ backendUrl, fileInfo }: {
         borderBottom: '1px solid var(--border)',
         background: 'var(--bg-secondary)',
         color: 'var(--text-muted)',
-        fontSize: 'var(--font-size-base)',
+        fontSize: 'var(--font-size-sm)',
         flexShrink: 0,
       }}>
         <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Folder:</span>
         <span style={{
-          fontFamily: 'var(--font-mono)',
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           flex: 1,
         }} title={folder}>{folder}</span>
@@ -537,19 +535,16 @@ export function MetadataWindow({ backendUrl, fileInfo }: {
           className="btn"
           onClick={() => setConsistencyOpen(true)}
           title="Find near-duplicate tags across the folder (e.g. typos, case variants)"
-          style={{ padding: '2px 8px', fontSize: 'var(--font-size-base)' }}
         >Consistency check</button>
         <button
           className="btn"
           onClick={pickFolder}
           title="Switch to a different folder of recordings"
-          style={{ padding: '2px 8px', fontSize: 'var(--font-size-base)' }}
         >Pick folder…</button>
         <button
           className="btn"
           onClick={() => refreshFolder()}
           title="Re-scan folder for sidecars"
-          style={{ padding: '2px 8px', fontSize: 'var(--font-size-base)' }}
         >Refresh</button>
       </div>
 
@@ -624,7 +619,6 @@ export function MetadataWindow({ backendUrl, fileInfo }: {
             display: 'flex', alignItems: 'center', gap: 6,
             padding: '4px 8px',
             borderBottom: '1px solid var(--border)',
-            background: 'var(--bg-primary)',
             fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)',
             flexShrink: 0,
           }}>
@@ -634,18 +628,16 @@ export function MetadataWindow({ backendUrl, fileInfo }: {
                 : `${entries.length} file${entries.length === 1 ? '' : 's'}`}
             </span>
             <button
-              className="btn"
+              className="btn btn-sm"
               onClick={checkAll}
               disabled={entries.length === 0 || checked.size === entries.length}
               title="Select every file in the folder"
-              style={{ fontSize: 'var(--font-size-xs)', padding: '1px 6px' }}
             >All</button>
             <button
-              className="btn"
+              className="btn btn-sm"
               onClick={clearChecked}
               disabled={checked.size === 0}
               title="Clear batch selection"
-              style={{ fontSize: 'var(--font-size-xs)', padding: '1px 6px' }}
             >Clear</button>
           </div>
 
@@ -669,10 +661,8 @@ export function MetadataWindow({ backendUrl, fileInfo }: {
                 style={{
                   display: 'flex', alignItems: 'center', gap: 8,
                   padding: '5px 8px',
-                  borderBottom: '1px solid var(--border-subtle, var(--border))',
-                  cursor: 'pointer',
-                  background: isSelected ? 'var(--bg-tertiary)' : 'transparent',
-                  fontFamily: 'var(--font-mono)',
+                  borderBottom: '1px solid var(--border-subtle)',
+                  background: isSelected ? 'var(--bg-selected)' : 'transparent',
                   opacity: e.hasSidecar || isActive ? 1 : 0.65,
                 }}
               >
@@ -682,7 +672,7 @@ export function MetadataWindow({ backendUrl, fileInfo }: {
                   onChange={() => toggleChecked(e.filePath)}
                   onClick={(ev) => ev.stopPropagation()}
                   title="Include in batch tagging"
-                  style={{ cursor: 'pointer', flexShrink: 0 }}
+                  style={{ flexShrink: 0 }}
                 />
                 <span
                   title={STATUS_TITLES[status]}
@@ -690,7 +680,6 @@ export function MetadataWindow({ backendUrl, fileInfo }: {
                     width: 9, height: 9, borderRadius: '50%',
                     background: STATUS_COLORS[status],
                     flexShrink: 0,
-                    boxShadow: '0 0 0 1px rgba(0,0,0,0.25)',
                   }}
                 />
                 <span style={{
@@ -701,7 +690,6 @@ export function MetadataWindow({ backendUrl, fileInfo }: {
                   <span style={{
                     fontSize: 'var(--font-size-xs)',
                     color: 'var(--text-muted)',
-                    fontFamily: 'var(--font-sans)',
                   }}>open</span>
                 )}
               </div>
@@ -886,7 +874,7 @@ function FileEditor({
         paddingBottom: 6, borderBottom: '1px solid var(--border)',
       }}>
         <span style={{
-          fontFamily: 'var(--font-mono)', fontSize: 'var(--font-size-base)',
+          fontSize: 'var(--font-size-base)',
           fontWeight: 600,
         }}>{fileName}</span>
         {!isActiveRecording && (
@@ -902,20 +890,11 @@ function FileEditor({
             lastSavedAt={lastSavedAt}
           />
           <button
-            className="btn"
+            className="btn btn-primary"
             onClick={() => { void onSaveNow() }}
             disabled={saving}
             title="Force-save this file's metadata to disk. Auto-save also fires on every chip / field change; this is the explicit safety button."
-            style={{
-              padding: '4px 14px',
-              fontSize: 'var(--font-size-sm)',
-              fontWeight: 600,
-              background: 'var(--accent, #3b82f6)',
-              color: '#fff',
-              border: 'none',
-              opacity: saving ? 0.6 : 1,
-              cursor: saving ? 'wait' : 'pointer',
-            }}
+            style={{ cursor: saving ? 'wait' : undefined }}
           >Save</button>
         </div>
       </div>
@@ -932,14 +911,7 @@ function FileEditor({
             value={cellId}
             onChange={(e) => updateField('cell_id', e.target.value)}
             placeholder="rec_42"
-            style={{
-              width: '100%', padding: '4px 8px',
-              border: '1px solid var(--border)', borderRadius: 3,
-              background: 'var(--bg-primary)',
-              color: 'var(--text-primary)',
-              fontFamily: 'var(--font-mono)',
-              fontSize: 'var(--font-size-base)',
-            }}
+            style={{ width: '100%' }}
           />
         </Field>
         <Field label="Animal ID" hint="Multiple cells from the same animal share this ID — used by Cohort Analysis to group with N=animal.">
@@ -948,14 +920,7 @@ function FileEditor({
             value={animalId}
             onChange={(e) => updateField('animal_id', e.target.value)}
             placeholder="mouse_07"
-            style={{
-              width: '100%', padding: '4px 8px',
-              border: '1px solid var(--border)', borderRadius: 3,
-              background: 'var(--bg-primary)',
-              color: 'var(--text-primary)',
-              fontFamily: 'var(--font-mono)',
-              fontSize: 'var(--font-size-base)',
-            }}
+            style={{ width: '100%' }}
           />
         </Field>
       </div>
@@ -987,7 +952,7 @@ function FileEditor({
           </div>
         ) : treeError ? (
           <div style={{
-            color: '#e57373', fontStyle: 'italic',
+            color: 'var(--error)', fontStyle: 'italic',
             padding: '4px 0', fontSize: 'var(--font-size-xs)',
           }}>
             ⚠ Couldn't read recording tree: {treeError}
@@ -1015,7 +980,6 @@ function FileEditor({
                   <span
                     title={key}
                     style={{
-                      fontFamily: 'var(--font-mono)',
                       fontSize: 'var(--font-size-xs)',
                       color: 'var(--text-muted)',
                       overflow: 'hidden', textOverflow: 'ellipsis',
@@ -1043,15 +1007,7 @@ function FileEditor({
           onChange={(e) => updateField('notes', e.target.value)}
           placeholder="any free-form notes about this recording…"
           rows={4}
-          style={{
-            width: '100%', padding: '6px 8px',
-            border: '1px solid var(--border)', borderRadius: 3,
-            background: 'var(--bg-primary)',
-            color: 'var(--text-primary)',
-            fontFamily: 'var(--font-mono)',
-            fontSize: 'var(--font-size-base)',
-            resize: 'vertical',
-          }}
+          style={{ width: '100%', resize: 'vertical' }}
         />
       </Field>
     </div>
@@ -1129,20 +1085,17 @@ function BatchEditor({
           className="btn"
           onClick={onCancelSelection}
           disabled={busy}
-          style={{
-            marginLeft: 'auto', fontSize: 'var(--font-size-xs)', padding: '2px 8px',
-          }}
+          style={{ marginLeft: 'auto' }}
         >Cancel selection</button>
       </div>
 
       <div style={{
         fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)',
         padding: '6px 8px',
-        background: 'var(--bg-secondary)',
+        background: 'var(--bg-field)',
         border: '1px solid var(--border)',
-        borderRadius: 3,
+        borderRadius: 'var(--radius-md)',
         maxHeight: 100, overflowY: 'auto',
-        fontFamily: 'var(--font-mono)',
       }}>
         {checkedPaths.map((p) => (
           <div key={p} style={{
@@ -1163,24 +1116,12 @@ function BatchEditor({
             onChange={(e) => setAnimalIdDraft(e.target.value)}
             placeholder="mouse_07"
             disabled={busy}
-            style={{
-              flex: 1, padding: '4px 8px',
-              border: '1px solid var(--border)', borderRadius: 3,
-              background: 'var(--bg-primary)',
-              color: 'var(--text-primary)',
-              fontFamily: 'var(--font-mono)',
-              fontSize: 'var(--font-size-base)',
-            }}
+            style={{ flex: 1 }}
           />
           <button
-            className="btn"
+            className="btn btn-primary"
             onClick={applyAnimalId}
             disabled={busy}
-            style={{
-              padding: '4px 12px', fontSize: 'var(--font-size-xs)',
-              background: 'var(--accent, #3b82f6)', color: '#fff',
-              border: 'none',
-            }}
           >Apply</button>
         </div>
       </Field>
@@ -1200,14 +1141,9 @@ function BatchEditor({
             />
           </div>
           <button
-            className="btn"
+            className="btn btn-primary"
             onClick={apply}
             disabled={busy || addTags.length === 0}
-            style={{
-              padding: '4px 12px', fontSize: 'var(--font-size-xs)',
-              background: 'var(--accent, #3b82f6)', color: '#fff',
-              border: 'none',
-            }}
           >Apply</button>
         </div>
       </Field>
@@ -1230,7 +1166,6 @@ function BatchEditor({
             className="btn"
             onClick={remove}
             disabled={busy || removeTags.length === 0}
-            style={{ padding: '4px 12px', fontSize: 'var(--font-size-xs)' }}
           >Remove</button>
         </div>
       </Field>
@@ -1240,7 +1175,7 @@ function BatchEditor({
           padding: '6px 10px',
           background: 'var(--bg-secondary)',
           border: '1px solid var(--border)',
-          borderRadius: 3,
+          borderRadius: 'var(--radius-md)',
           fontSize: 'var(--font-size-xs)',
         }}>
           <div>
@@ -1254,7 +1189,7 @@ function BatchEditor({
           {progress.errors.length > 0 && (
             <ul style={{
               marginTop: 4, paddingLeft: 18,
-              color: '#ef4444', fontFamily: 'var(--font-mono)',
+              color: 'var(--error)',
             }}>
               {progress.errors.map((err, i) => <li key={i}>{err}</li>)}
             </ul>
@@ -1445,9 +1380,9 @@ function ConsistencyCheckModal({
           width: 640, maxHeight: '80vh',
           display: 'flex', flexDirection: 'column',
           background: 'var(--bg-primary)',
-          border: '1px solid var(--border)',
-          borderRadius: 4,
-          boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+          borderRadius: 'var(--radius-lg)',
+          boxShadow: 'var(--shadow-popover)',
+          overflow: 'hidden',
           color: 'var(--text-primary)',
         }}
       >
@@ -1459,13 +1394,10 @@ function ConsistencyCheckModal({
         }}>
           <span style={{ fontWeight: 600, flex: 1 }}>Tag consistency check</span>
           <button
+            className="icon-btn"
             onClick={onClose}
             disabled={working}
-            style={{
-              background: 'transparent', border: 'none',
-              color: 'var(--text-muted)', cursor: 'pointer',
-              fontSize: 18, padding: 0,
-            }}
+            style={{ fontSize: 18 }}
           >×</button>
         </div>
 
@@ -1490,14 +1422,9 @@ function ConsistencyCheckModal({
               {clusters.map((cluster, idx) => {
                 const canon = canonicalFor(idx)
                 return (
-                  <div key={idx} style={{
-                    border: '1px solid var(--border)',
-                    borderRadius: 3,
-                    padding: '8px 10px',
-                    marginBottom: 8,
-                  }}>
-                    <div style={{ marginBottom: 6, fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
-                      Variants ({cluster.length}):
+                  <div key={idx} className="section-card" style={{ marginBottom: 8 }}>
+                    <div className="section-card-title">
+                      Variants ({cluster.length})
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                       {cluster.map((occ) => {
@@ -1505,8 +1432,6 @@ function ConsistencyCheckModal({
                         return (
                           <label key={occ.tag} style={{
                             display: 'flex', alignItems: 'center', gap: 8,
-                            cursor: 'pointer',
-                            fontFamily: 'var(--font-mono)',
                             fontSize: 'var(--font-size-base)',
                           }}>
                             <input
@@ -1527,14 +1452,9 @@ function ConsistencyCheckModal({
                       marginTop: 8, display: 'flex', justifyContent: 'flex-end',
                     }}>
                       <button
-                        className="btn"
+                        className="btn btn-primary"
                         onClick={() => applyCluster(idx)}
                         disabled={working || cluster.every((c) => c.tag === canon)}
-                        style={{
-                          padding: '3px 10px', fontSize: 'var(--font-size-xs)',
-                          background: 'var(--accent, #3b82f6)', color: '#fff',
-                          border: 'none',
-                        }}
                       >Rename variants → "{canon}"</button>
                     </div>
                   </div>
@@ -1554,7 +1474,6 @@ function ConsistencyCheckModal({
             className="btn"
             onClick={onClose}
             disabled={working}
-            style={{ padding: '3px 14px', fontSize: 'var(--font-size-base)' }}
           >Done</button>
         </div>
       </div>
@@ -1585,15 +1504,15 @@ function SaveStatus({ saving, saveError, lastSavedAt }: {
       <span style={{
         fontSize: 'var(--font-size-xs)',
         color: 'var(--text-muted)',
-      }}>saving…</span>
+      }}>Saving…</span>
     )
   }
   if (saveError) {
     return (
       <span
         title={saveError}
-        style={{ fontSize: 'var(--font-size-xs)', color: '#ef4444' }}
-      >save failed</span>
+        style={{ fontSize: 'var(--font-size-xs)', color: 'var(--error)' }}
+      >Save failed</span>
     )
   }
   if (lastSavedAt == null) {
@@ -1601,7 +1520,7 @@ function SaveStatus({ saving, saveError, lastSavedAt }: {
       <span style={{
         fontSize: 'var(--font-size-xs)',
         color: 'var(--text-muted)',
-      }}>not yet saved this session</span>
+      }}>Not yet saved this session</span>
     )
   }
   const sec = Math.max(0, Math.floor((Date.now() - lastSavedAt) / 1000))
@@ -1612,7 +1531,7 @@ function SaveStatus({ saving, saveError, lastSavedAt }: {
   return (
     <span style={{
       fontSize: 'var(--font-size-xs)',
-      color: '#22c55e',
+      color: 'var(--success)',
     }}>Saved · {label}</span>
   )
 }
@@ -1627,7 +1546,7 @@ function Field({ label, hint, children }: {
       <label style={{
         fontWeight: 600,
         color: 'var(--text-primary)',
-        fontSize: 'var(--font-size-base)',
+        fontSize: 'var(--font-size-sm)',
       }}>{label}</label>
       {hint && (
         <span style={{

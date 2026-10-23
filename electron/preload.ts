@@ -127,4 +127,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('analysis-window-closed', handler)
     return () => ipcRenderer.removeListener('analysis-window-closed', handler)
   },
+
+  // Theme — keeps Electron's nativeTheme (menus, dialogs, title bars,
+  // window background) in step with the System / Light / Dark setting.
+  setThemeSource: (pref: 'system' | 'light' | 'dark'): void => {
+    ipcRenderer.send('set-theme-source', pref)
+  },
+
+  // Native menu bar
+  setMenuState: (state: { hasRecording?: boolean }): void => {
+    ipcRenderer.send('set-menu-state', state)
+  },
+  onMenuAction: (callback: (action: string, arg?: string) => void) => {
+    const handler = (_event: any, action: string, arg?: string) => callback(action, arg)
+    ipcRenderer.on('menu-action', handler)
+    return () => ipcRenderer.removeListener('menu-action', handler)
+  },
 })

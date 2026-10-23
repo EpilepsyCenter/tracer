@@ -2,78 +2,47 @@ import React from 'react'
 import { useAppStore, getMetaStatus } from '../../stores/appStore'
 
 /**
- * Header strip that sits between the toolbar and the trace viewer.
- *
- * Two zones:
- *
- *   LEFT  — identity zone: status dot, filename, file-level tag
- *           chips. Reads at-a-glance: "what file am I looking at,
- *           and what's its tagging state".
- *
- *   RIGHT — telemetry zone: format, group / series / sweep
- *           position, sample rate, sample count. Mono w/ tabular
- *           figures so columns line up between sweeps.
- *
- * Renders ``null`` when no recording is loaded so the trace area is
- * flush with the toolbar.
+ * Title block at the start of the main toolbar: tag-status dot,
+ * file name and file-level tag chips on the first line; format,
+ * position and sampling details on the second.
  */
-export function RecordingHeader() {
-  const { recording, traceData, currentGroup, currentSeries, currentSweep } =
-    useAppStore()
+export function RecordingTitle() {
+  const { recording, traceData, currentGroup, currentSeries } = useAppStore()
 
-  if (!recording) return null
+  if (!recording) {
+    return (
+      <div className="toolbar-title">
+        <span className="toolbar-title-name" style={{ color: 'var(--text-muted)', fontWeight: 500 }}>
+          No recording open
+        </span>
+      </div>
+    )
+  }
 
+  const group = recording.groups[currentGroup]
+  const series = group?.series[currentSeries]
+  const seriesLabel = series?.label || `Series ${currentSeries + 1}`
   const sampleRate = traceData?.samplingRate
   const sampleCount = traceData?.values.length
 
+  const detail = [
+    recording.format,
+    group?.label || `Group ${currentGroup + 1}`,
+    seriesLabel,
+    sampleRate != null ? `${sampleRate.toLocaleString('en-US')} Hz` : null,
+    sampleCount != null ? `${sampleCount.toLocaleString('en-US')} samples` : null,
+  ].filter(Boolean).join(' · ')
+
   return (
-    <div className="recording-header" role="contentinfo">
-      <div className="recording-header-left">
+    <div className="toolbar-title">
+      <span className="toolbar-title-name" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <MetaStatusDot />
-        <span className="filename" title={recording.filePath}>
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }} title={recording.filePath}>
           {recording.fileName}
         </span>
         <FileTagChips />
-      </div>
-
-      <div className="recording-header-right">
-        <span className="key">fmt</span>
-        <span className="val">{recording.format}</span>
-        <span className="sep">·</span>
-
-        <span className="key">grp</span>
-        <span className="val">
-          {String(currentGroup + 1).padStart(2, '0')}
-        </span>
-        <span className="sep">/</span>
-        <span className="key">ser</span>
-        <span className="val">
-          {String(currentSeries + 1).padStart(2, '0')}
-        </span>
-        <span className="sep">/</span>
-        <span className="key">swp</span>
-        <span className="val">
-          {String(currentSweep + 1).padStart(3, '0')}
-        </span>
-
-        {sampleRate != null && (
-          <>
-            <span className="sep">·</span>
-            <span className="val">
-              {sampleRate.toLocaleString('en-US')} Hz
-            </span>
-          </>
-        )}
-
-        {sampleCount != null && (
-          <>
-            <span className="sep">·</span>
-            <span className="val">
-              {sampleCount.toLocaleString('en-US')} samples
-            </span>
-          </>
-        )}
-      </div>
+      </span>
+      <span className="toolbar-title-detail" style={{ fontVariantNumeric: 'tabular-nums' }}>{detail}</span>
     </div>
   )
 }
@@ -114,8 +83,8 @@ function MetaStatusDot() {
       title={`${label} — ${tooltip}`}
       aria-label={label}
       style={{
-        background: colour,
-        boxShadow: `0 0 0 1px color-mix(in oklab, ${colour} 60%, transparent), 0 0 6px color-mix(in oklab, ${colour} 50%, transparent)`,
+        display: 'inline-block', width: 7, height: 7, borderRadius: '50%',
+        flexShrink: 0, background: colour,
       }}
     />
   )
@@ -127,9 +96,9 @@ function FileTagChips() {
   if (!fileTags || fileTags.length === 0) return null
   const tooltip = fileTags.join(', ')
   return (
-    <span className="file-tag-chips" title={tooltip}>
+    <span title={tooltip} style={{ display: 'inline-flex', gap: 4, flexShrink: 1, overflow: 'hidden' }}>
       {fileTags.map((tag, i) => (
-        <span className="tag-chip" key={`${tag}-${i}`}>
+        <span key={`${tag}-${i}`} style={{ padding: '0 7px', borderRadius: 999, background: 'color-mix(in oklab, var(--accent) 14%, transparent)', fontSize: 11, fontWeight: 400, lineHeight: '17px', whiteSpace: 'nowrap' }}>
           {tag}
         </span>
       ))}

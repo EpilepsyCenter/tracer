@@ -80,17 +80,11 @@ export function TracesDropdown() {
       <button
         className="btn"
         onClick={() => setOpen((v) => !v)}
-        style={{
-          padding: '4px 12px',
-          fontSize: 'var(--font-size-sm)',
-          fontWeight: 600,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-        }}
-        title="Show or hide individual traces (voltage, current, stimulus, auxiliary channels)"
+        style={{ padding: '0 6px 0 10px' }}
+        title="Show or hide individual traces (voltage, current, stimulus, auxiliary channels). Right-click a channel for scaling."
       >
-        Traces ({visibleCount}) <span style={{ fontSize: 11 }}>▾</span>
+        Traces ({visibleCount})
+        <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="var(--text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m4 6 4 4 4-4" /></svg>
       </button>
 
       {open && (
@@ -101,12 +95,11 @@ export function TracesDropdown() {
             left: 0,
             marginTop: 4,
             minWidth: 220,
-            background: 'var(--bg-surface)',
-            border: '1px solid var(--border)',
-            borderRadius: 4,
-            boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
-            zIndex: 100,
-            padding: 4,
+            background: 'var(--bg-field)',
+            borderRadius: 6,
+            boxShadow: 'var(--shadow-popover)',
+            zIndex: 1000,
+            padding: 5,
           }}
         >
           {rows.map((r) => (
@@ -117,12 +110,11 @@ export function TracesDropdown() {
                 alignItems: 'center',
                 gap: 8,
                 padding: '4px 6px',
-                cursor: 'pointer',
                 userSelect: 'none',
-                borderRadius: 3,
+                borderRadius: 4,
               }}
               onMouseEnter={(e) => {
-                (e.currentTarget as HTMLElement).style.background = 'var(--bg-hover, var(--bg-primary))'
+                (e.currentTarget as HTMLElement).style.background = 'var(--bg-hover)'
               }}
               onMouseLeave={(e) => {
                 (e.currentTarget as HTMLElement).style.background = 'transparent'

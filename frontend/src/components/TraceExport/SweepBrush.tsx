@@ -164,9 +164,9 @@ export function SweepBrush({ count, selected, onChange }: Props) {
               height: STRIP_H,
               width: cellW * cellsPerRow,
               maxWidth: '100%',
-              background: 'var(--bg-secondary)',
-              border: '1px solid var(--border)',
-              borderRadius: 3,
+              background: 'var(--bg-field)',
+              border: '1px solid var(--border-control)',
+              borderRadius: 'var(--radius-sm)',
               overflow: 'hidden',
             }}>
               {Array.from({ length: row.rowCount }, (_, k) => {
@@ -202,10 +202,11 @@ export function SweepBrush({ count, selected, onChange }: Props) {
                     Math.max(0, cellW * row.rowCount - 32),
                   ),
                   top: -22,
-                  fontSize: 10,
-                  background: 'var(--bg-primary)',
+                  fontSize: 'var(--font-size-xs)',
+                  fontFamily: 'var(--font-mono)',
+                  background: 'var(--bg-field)',
                   border: '1px solid var(--border)',
-                  borderRadius: 3,
+                  borderRadius: 'var(--radius-sm)',
                   padding: '0 4px',
                   pointerEvents: 'none',
                   color: 'var(--text-primary)',
@@ -240,10 +241,11 @@ export function SweepBrush({ count, selected, onChange }: Props) {
                       top: 3,
                       width: 28,
                       textAlign: 'center',
-                      fontSize: 9,
+                      fontSize: 'var(--font-size-xs)',
+                      lineHeight: 1,
                       color: 'var(--text-muted)',
                       pointerEvents: 'none',
-                      fontFamily: 'var(--font-mono, monospace)',
+                      fontFamily: 'var(--font-mono)',
                     }}>{i + 1}</div>
                   </React.Fragment>
                 )

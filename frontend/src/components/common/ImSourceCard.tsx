@@ -44,11 +44,8 @@ export function ImSourceCard({
   detected: ImSource | null | undefined
 }) {
   return (
-    <div style={{
-      display: 'flex', flexDirection: 'column', gap: 6,
-      padding: 8,
-      border: '1px solid var(--border)', borderRadius: 4,
-      background: 'var(--bg-primary)',
+    <div className="section-card" style={{
+      gap: 6,
       fontSize: 'var(--font-size-label)',
     }}>
       <label style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -64,12 +61,11 @@ export function ImSourceCard({
       {mode === 'auto' && (
         <div style={{
           fontSize: 'var(--font-size-label)',
-          color: detected?.mode === 'none' ? '#e57373' : 'var(--text-muted)',
-          fontFamily: 'var(--font-mono)',
+          color: detected?.mode === 'none' ? 'var(--error)' : 'var(--text-muted)',
           padding: '3px 6px',
           borderLeft: '2px solid var(--border)',
-          background: 'var(--bg-secondary)',
-          borderRadius: 2,
+          background: 'var(--bg-hover)',
+          borderRadius: 'var(--radius-sm)',
         }}>
           {describeDetected(detected)}
         </div>
@@ -82,22 +78,22 @@ export function ImSourceCard({
           gap: 6,
         }}>
           <label style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <span style={{ color: 'var(--text-muted)' }}>start (s)</span>
+            <span style={{ color: 'var(--text-muted)' }}>Start (s)</span>
             <NumInput value={manual.startS} step={0.01}
               onChange={(v) => onManualChange({ startS: v })} />
           </label>
           <label style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <span style={{ color: 'var(--text-muted)' }}>end (s)</span>
+            <span style={{ color: 'var(--text-muted)' }}>End (s)</span>
             <NumInput value={manual.endS} step={0.01}
               onChange={(v) => onManualChange({ endS: v })} />
           </label>
           <label style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <span style={{ color: 'var(--text-muted)' }}>start Im (pA)</span>
+            <span style={{ color: 'var(--text-muted)' }}>Start Im (pA)</span>
             <NumInput value={manual.startPA} step={1}
               onChange={(v) => onManualChange({ startPA: v })} />
           </label>
           <label style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <span style={{ color: 'var(--text-muted)' }}>step (pA)</span>
+            <span style={{ color: 'var(--text-muted)' }}>Step (pA)</span>
             <NumInput value={manual.stepPA} step={1}
               onChange={(v) => onManualChange({ stepPA: v })} />
           </label>

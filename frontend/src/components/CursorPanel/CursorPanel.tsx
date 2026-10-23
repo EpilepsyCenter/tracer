@@ -74,7 +74,7 @@ function CursorInput({
           style={{ margin: 0, accentColor: color }}
         />
         <span
-          style={{ fontSize: 'var(--font-size-xs)', fontWeight: 600, color, cursor: 'pointer' }}
+          style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600, color }}
           onClick={() => setCursorVisibility({ [visKey]: !cursorVisibility[visKey] })}
         >
           {label}
@@ -113,6 +113,7 @@ function RangeInput({
     <input
       type="text"
       inputMode="decimal"
+      className="num"
       value={value}
       placeholder={placeholder}
       style={style}
@@ -444,23 +445,22 @@ export function CursorPanel() {
   }
 
   return (
-    <div className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
       {/* ---- Cursors ---- */}
       <Section title="">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
           <label style={{
-            display: 'flex', alignItems: 'center', gap: 5,
-            cursor: 'pointer', userSelect: 'none',
-            fontSize: 'var(--font-size-label)', fontWeight: 600,
-            textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--text-muted)',
+            display: 'flex', alignItems: 'center', gap: 6,
+            userSelect: 'none',
+            fontSize: 'var(--font-size-xs)', fontWeight: 600,
+            color: 'var(--text-muted)',
           }}>
             <input type="checkbox" checked={showCursors} onChange={toggleCursors}
               style={{ margin: 0, accentColor: 'var(--accent)' }} />
             Cursors
           </label>
-          <button className="btn" onClick={resetCursorsToDefaults} disabled={!traceData}
-            style={{ padding: '1px 6px', fontSize: 'var(--font-size-label)' }}>
-            reset
+          <button className="btn btn-sm" onClick={resetCursorsToDefaults} disabled={!traceData}>
+            Reset
           </button>
         </div>
         <CursorInput label="Baseline" color="var(--cursor-baseline)" startKey="baselineStart" endKey="baselineEnd" visKey="baseline" />
@@ -494,14 +494,9 @@ export function CursorPanel() {
             display: 'flex',
             alignItems: 'center',
             gap: 5,
-            cursor: hasBurstsInCurrentSweep ? 'pointer' : 'not-allowed',
             userSelect: 'none',
-            fontSize: 'var(--font-size-label)',
-            fontWeight: 600,
-            textTransform: 'uppercase',
-            letterSpacing: 0.4,
-            color: hasBurstsInCurrentSweep ? 'var(--text-muted)' : 'var(--text-disabled, #666)',
-            opacity: hasBurstsInCurrentSweep ? 1 : 0.5,
+            fontSize: 'var(--font-size-sm)',
+            color: hasBurstsInCurrentSweep ? 'var(--text-secondary)' : 'var(--text-disabled)',
           }}
         >
           <input
@@ -511,12 +506,9 @@ export function CursorPanel() {
             disabled={!hasBurstsInCurrentSweep}
             style={{ margin: 0, accentColor: 'var(--accent)' }}
           />
-          Show/hide detected bursts
+          Show detected bursts
           {hasBurstsInCurrentSweep && (
-            <span style={{
-              marginLeft: 4, fontWeight: 400, letterSpacing: 0,
-              textTransform: 'none',
-            }}>
+            <span style={{ marginLeft: 2, color: 'var(--text-muted)' }}>
               ({currentSeriesBurstCount})
             </span>
           )}
@@ -535,14 +527,9 @@ export function CursorPanel() {
             alignItems: 'center',
             gap: 5,
             marginTop: 4,
-            cursor: hasEventsInCurrentSweep ? 'pointer' : 'not-allowed',
             userSelect: 'none',
-            fontSize: 'var(--font-size-label)',
-            fontWeight: 600,
-            textTransform: 'uppercase',
-            letterSpacing: 0.4,
-            color: hasEventsInCurrentSweep ? 'var(--text-muted)' : 'var(--text-disabled, #666)',
-            opacity: hasEventsInCurrentSweep ? 1 : 0.5,
+            fontSize: 'var(--font-size-sm)',
+            color: hasEventsInCurrentSweep ? 'var(--text-secondary)' : 'var(--text-disabled)',
           }}
         >
           <input
@@ -552,12 +539,9 @@ export function CursorPanel() {
             disabled={!hasEventsInCurrentSweep}
             style={{ margin: 0, accentColor: 'var(--accent)' }}
           />
-          Show/hide detected events
+          Show detected events
           {hasEventsInCurrentSweep && (
-            <span style={{
-              marginLeft: 4, fontWeight: 400, letterSpacing: 0,
-              textTransform: 'none',
-            }}>
+            <span style={{ marginLeft: 2, color: 'var(--text-muted)' }}>
               ({currentSeriesEventCount})
             </span>
           )}

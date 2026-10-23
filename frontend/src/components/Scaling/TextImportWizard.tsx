@@ -97,7 +97,7 @@ export function TextImportWizard({ filePath, onClose }: Props) {
       onClick={() => onClose(null)}
       style={{
         position: 'fixed', inset: 0, zIndex: 110,
-        background: 'rgba(0,0,0,0.5)',
+        background: 'rgba(0,0,0,0.18)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}
     >
@@ -105,27 +105,28 @@ export function TextImportWizard({ filePath, onClose }: Props) {
         onClick={(e) => e.stopPropagation()}
         style={{
           width: 'min(720px, 90vw)', maxHeight: '85vh',
-          background: 'var(--bg-primary)', color: 'var(--text-primary)',
-          border: '1px solid var(--border)', borderRadius: 6,
+          background: 'var(--bg-secondary)', color: 'var(--text-primary)',
+          borderRadius: 'var(--radius-lg)',
+          boxShadow: 'var(--shadow-popover), 0 24px 60px rgba(0,0,0,0.25)',
           display: 'flex', flexDirection: 'column', overflow: 'hidden',
           fontFamily: 'var(--font-ui)',
         }}
       >
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '8px 12px', background: 'var(--bg-secondary)',
+          padding: '10px 12px 10px 16px',
           borderBottom: '1px solid var(--border)',
         }}>
-          <strong>Import text file{probe ? ` — ${probe.file_name}` : ''}</strong>
-          <button className="btn" onClick={() => onClose(null)} style={{ padding: '2px 8px' }}>×</button>
+          <span style={{ fontSize: 'var(--font-size-base)', fontWeight: 600 }}>Import text file{probe ? ` — ${probe.file_name}` : ''}</span>
+          <button className="icon-btn" onClick={() => onClose(null)} title="Close">×</button>
         </div>
 
-        <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
+        <div style={{ padding: '8px 16px', borderBottom: '1px solid var(--border)', fontSize: 'var(--font-size-sm)', color: 'var(--text-muted)' }}>
           Confirm how the file should be parsed. Defaults are auto-detected from the first ~50 rows.
         </div>
 
-        <div style={{ flex: 1, overflow: 'auto', padding: 12 }}>
-          {error && <div style={{ color: '#c00', fontSize: 'var(--font-size-xs)' }}>{error}</div>}
+        <div style={{ flex: 1, overflow: 'auto', padding: '12px 16px' }}>
+          {error && <div className="notice notice-error">{error}</div>}
           {!probe && !error && <div style={{ color: 'var(--text-muted)' }}>Probing file…</div>}
           {probe && (
             <>
@@ -167,17 +168,18 @@ export function TextImportWizard({ filePath, onClose }: Props) {
                     value={sampleRate}
                     onChange={(e) => setSampleRate(e.target.value)}
                     placeholder="e.g. 10000"
+                    className="num"
                     style={inputStyle(140)}
                   />
                 </Field>
               )}
 
-              <div style={{ marginTop: 12, marginBottom: 4, fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
+              <div style={{ marginTop: 12, marginBottom: 4, fontSize: 'var(--font-size-xs)', fontWeight: 600, color: 'var(--text-muted)' }}>
                 Channel columns ({channelCols.length})
               </div>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--font-size-sm)' }}>
+              <table className="data-table" style={{ border: '1px solid var(--border)' }}>
                 <thead>
-                  <tr style={{ background: 'var(--bg-secondary)', textAlign: 'left' }}>
+                  <tr>
                     <th style={th}>Column</th>
                     <th style={th}>Label</th>
                     <th style={th}>Units</th>
@@ -185,10 +187,10 @@ export function TextImportWizard({ filePath, onClose }: Props) {
                 </thead>
                 <tbody>
                   {channelCols.map((c) => (
-                    <tr key={c.index} style={{ borderTop: '1px solid var(--border)' }}>
+                    <tr key={c.index}>
                       <td style={td}>{c.index + 1}</td>
-                      <td style={td}>{c.label || `Ch ${c.index + 1}`}</td>
-                      <td style={td}>
+                      <td style={{ ...td, fontFamily: 'var(--font-ui)' }}>{c.label || `Ch ${c.index + 1}`}</td>
+                      <td style={{ ...td, fontFamily: 'var(--font-ui)' }}>
                         <input
                           type="text"
                           value={unitsPerCol[c.index] ?? ''}
@@ -204,13 +206,13 @@ export function TextImportWizard({ filePath, onClose }: Props) {
                 </tbody>
               </table>
 
-              <div style={{ marginTop: 12, marginBottom: 4, fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
+              <div style={{ marginTop: 12, marginBottom: 4, fontSize: 'var(--font-size-xs)', fontWeight: 600, color: 'var(--text-muted)' }}>
                 Preview
               </div>
               <pre style={{
-                margin: 0, padding: 8, fontSize: 'var(--font-size-label)',
-                background: 'var(--bg-tertiary, var(--bg-secondary))',
-                border: '1px solid var(--border)', borderRadius: 3,
+                margin: 0, padding: 8, fontSize: 'var(--font-size-xs)',
+                background: 'var(--bg-field)',
+                border: '1px solid var(--border)', borderRadius: 'var(--radius)',
                 maxHeight: 180, overflow: 'auto',
                 fontFamily: 'var(--font-mono)',
               }}>
@@ -222,7 +224,7 @@ export function TextImportWizard({ filePath, onClose }: Props) {
 
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
-          gap: 8, padding: 8,
+          gap: 8, padding: '10px 12px',
           borderTop: '1px solid var(--border)', background: 'var(--bg-secondary)',
         }}>
           <button className="btn" onClick={() => onClose(null)}>Cancel</button>
@@ -236,33 +238,19 @@ export function TextImportWizard({ filePath, onClose }: Props) {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-      <label style={{ width: 130, fontSize: 'var(--font-size-xs)' }}>{label}</label>
+      <label style={{ width: 130, fontSize: 'var(--font-size-sm)', color: 'var(--text-secondary)' }}>{label}</label>
       {children}
     </div>
   )
 }
 
-const selectStyle: React.CSSProperties = {
-  padding: '2px 6px',
-  background: 'var(--bg-primary)',
-  color: 'var(--text-primary)',
-  border: '1px solid var(--border)',
-  borderRadius: 3,
-  fontSize: 'var(--font-size-sm)',
-}
+const selectStyle: React.CSSProperties = {}
 
 function inputStyle(width: number): React.CSSProperties {
-  return {
-    width, padding: '2px 6px',
-    background: 'var(--bg-primary)',
-    color: 'var(--text-primary)',
-    border: '1px solid var(--border)',
-    borderRadius: 3,
-    fontSize: 'var(--font-size-sm)',
-  }
+  return { width }
 }
 
-const th: React.CSSProperties = { padding: '4px 8px', fontWeight: 500, fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }
+const th: React.CSSProperties = { padding: '5px 8px' }
 const td: React.CSSProperties = { padding: '4px 8px' }
 
 function round(x: number): number {

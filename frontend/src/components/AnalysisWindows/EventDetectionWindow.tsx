@@ -7,7 +7,7 @@ import {
   EventsData, EventsParams, EventsTemplate, EventRow,
   defaultEventsParams,
 } from '../../stores/appStore'
-import { useThemeStore } from '../../stores/themeStore'
+import { useThemeStore, useThemeKey } from '../../stores/themeStore'
 import { NumInput } from '../common/NumInput'
 import {
   Viewport, SetViewport, ViewportBar, ViewportSlider, shiftViewportBy,
@@ -61,13 +61,14 @@ function channelsForSeries(fileInfo: FileInfo | null, group: number, series: num
 
 // Cursor-band colors — match the baseline cursor convention used
 // everywhere else in TRACER (FPsp, IV, Cursor, Resistance, AP).
-const CURSOR_COLOR = '#64b5f6'   // blue (matches baseline cursors elsewhere)
+// CSS form for JSX; canvas code reads ``cssVar('--cursor-baseline')``.
+const CURSOR_COLOR = 'var(--cursor-baseline)'
 
 /** Per-template peak colors — index 0 = primary, 1 = 2nd, 2 = 3rd.
  *  Used by the events viewer to color peak markers in multi-template
  *  detection mode AND by the Template panel to label which slot
  *  contributes which color. Stays distinct from the manual-event
- *  orange (#ffb74d) so manual + template-3 don't collide visually. */
+ *  orange (--marker-manual) so manual + template-3 don't collide visually. */
 export const TEMPLATE_COLORS = ['#e57373', '#81d4fa', '#aed581'] as const
 
 /** Group color palette — one per group (1–5). Used by the small
@@ -1245,17 +1246,13 @@ export function EventDetectionWindow({
             </div>
           </div>
           {error && (
-            <div style={{
-              flexShrink: 0, padding: '6px 10px',
-              background: 'var(--bg-error, #5c1b1b)',
-              color: '#fff', borderRadius: 3,
+            <div className="notice notice-error" style={{
+              flexShrink: 0,
               display: 'flex', alignItems: 'center', gap: 8,
-              fontSize: 'var(--font-size-xs)',
             }}>
               <span style={{ flex: 1 }}>⚠ {error}</span>
-              <button className="btn" onClick={() => setError(null)}
-                style={{ padding: '1px 6px', fontSize: 'var(--font-size-label)' }}>
-                dismiss
+              <button className="btn btn-sm" onClick={() => setError(null)}>
+                Dismiss
               </button>
             </div>
           )}
@@ -1343,32 +1340,30 @@ export function EventDetectionWindow({
             background: 'var(--bg-primary)',
           }}>
             <div style={{
-              display: 'flex', gap: 2,
+              display: 'flex', gap: 6, alignItems: 'center',
               borderBottom: '1px solid var(--border)',
               flexShrink: 0,
-              padding: '2px 2px 0 2px',
+              padding: '4px 6px',
+              background: 'var(--bg-secondary)',
             }}>
-              {(['table', 'histogram', 'iei', 'rate', 'ampvstime', 'trains'] as const).map((k) => (
-                <button key={k} className="btn"
-                  onClick={() => setBottomTab(k)}
-                  style={{
-                    padding: '3px 10px',
-                    fontSize: 'var(--font-size-label)',
-                    background: bottomTab === k
-                      ? 'var(--bg-primary)' : 'transparent',
-                    borderBottom: bottomTab === k
-                      ? '2px solid var(--accent, #64b5f6)' : '2px solid transparent',
-                    borderRadius: '3px 3px 0 0',
-                  }}>
-                  {k === 'table' ? 'Results'
-                    : k === 'histogram' ? 'Amp hist'
-                    : k === 'iei' ? 'IEI hist'
-                    : k === 'rate' ? 'Rate'
-                    : k === 'ampvstime' ? 'Amp vs time'
-                    : `Trains${trainData.flatSummaries.length > 0
-                      ? ` (${trainData.flatSummaries.length})` : ''}`}
-                </button>
-              ))}
+              <div className="segmented" role="tablist">
+                {(['table', 'histogram', 'iei', 'rate', 'ampvstime', 'trains'] as const).map((k) => (
+                  <button key={k}
+                    role="tab"
+                    aria-selected={bottomTab === k}
+                    className={bottomTab === k ? 'active' : undefined}
+                    onClick={() => setBottomTab(k)}
+                    style={{ flex: 'none' }}>
+                    {k === 'table' ? 'Results'
+                      : k === 'histogram' ? 'Amp hist'
+                      : k === 'iei' ? 'IEI hist'
+                      : k === 'rate' ? 'Rate'
+                      : k === 'ampvstime' ? 'Amp vs time'
+                      : `Trains${trainData.flatSummaries.length > 0
+                        ? ` (${trainData.flatSummaries.length})` : ''}`}
+                  </button>
+                ))}
+              </div>
               <span style={{ flex: 1 }} />
               {/* Template filter — visible only when multi-template
                   detection actually tagged at least one event. AND-ed
@@ -1425,27 +1420,19 @@ export function EventDetectionWindow({
                   on the entry, so opening it after we've selected
                   drops the user straight onto the right event for
                   drag-mode editing. */}
-              <button className="btn"
+              <button className="btn btn-sm"
                 onClick={openEventsBrowser}
                 disabled={!entry || entry.events.length === 0
                           || entry.selectedIdx == null}
                 title="Open the Event Browser focused on the selected event for kinetics editing"
-                style={{
-                  padding: '3px 10px', marginBottom: 2,
-                  fontSize: 'var(--font-size-label)',
-                  alignSelf: 'center',
-                }}>
+                style={{ alignSelf: 'center' }}>
                 Edit selected…
               </button>
-              <button className="btn"
+              <button className="btn btn-sm"
                 onClick={openEventsBrowser}
                 disabled={!entry || entry.events.length === 0}
                 title="Open the detached Browser & Overlay window"
-                style={{
-                  padding: '3px 10px', marginBottom: 2,
-                  fontSize: 'var(--font-size-label)',
-                  alignSelf: 'center',
-                }}>
+                style={{ alignSelf: 'center' }}>
                 Open browser + overlay…
               </button>
             </div>
@@ -1591,13 +1578,9 @@ function Card({
   // to the title after repeated open/close cycles.
   const header = (
     <div
-      onClick={collapsible ? onToggle : undefined}
-      style={{
-        display: 'flex', alignItems: 'center', gap: 6,
-        cursor: collapsible ? 'pointer' : 'default',
-        userSelect: 'none',
-      }}>
-      <span style={{ fontWeight: 600, color: 'var(--text-muted)' }}>{title}</span>
+      className="section-card-title"
+      onClick={collapsible ? onToggle : undefined}>
+      <span>{title}</span>
       {rightAdornment}
       {collapsible && (
         <span aria-hidden="true" style={{
@@ -1614,12 +1597,7 @@ function Card({
     </div>
   )
   return (
-    <div style={{
-      display: 'flex', flexDirection: 'column', gap: 6,
-      padding: 8, border: '1px solid var(--border)', borderRadius: 4,
-      background: 'var(--bg-primary)',
-      fontSize: 'var(--font-size-label)',
-    }}>
+    <div className="section-card">
       {header}
       {!collapsed && children}
     </div>
@@ -1819,7 +1797,7 @@ function SkipRegionsCard({
             <div key={i} style={{
               display: 'flex', flexDirection: 'column', gap: 4,
               padding: 6, borderRadius: 3,
-              background: r.enabled ? 'rgba(229,115,115,0.1)' : 'var(--bg-secondary)',
+              background: r.enabled ? 'color-mix(in oklab, var(--error) 10%, transparent)' : 'var(--bg-field)',
               border: '1px solid var(--border)',
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -1832,12 +1810,12 @@ function SkipRegionsCard({
                     startS: Math.min(cursors.baselineStart, cursors.baselineEnd),
                     endS: Math.max(cursors.baselineStart, cursors.baselineEnd),
                   })}
-                  style={{ padding: '1px 6px', fontSize: 10 }}>
-                  from cursors
+                  style={{ padding: '1px 6px', fontSize: 'var(--font-size-xs)' }}>
+                  From cursors
                 </button>
                 <button className="btn"
                   onClick={() => removeRegion(i)}
-                  style={{ padding: '1px 6px', fontSize: 10 }}
+                  style={{ padding: '1px 6px', fontSize: 'var(--font-size-xs)' }}
                   title="Remove this region">✕</button>
               </div>
               {/* Start / end pinned to 4 decimals + a hard maxWidth so
@@ -1977,7 +1955,7 @@ function FilterCard({
  *  want to pick by shape ("the fast one" / "the slow one") before
  *  looking at coefficients. */
 function TemplateThumbnail({
-  template, width = 60, height = 18, stroke = '#64b5f6',
+  template, width = 60, height = 18, stroke = 'var(--marker-bounds)',
 }: {
   template: EventsTemplate
   width?: number; height?: number; stroke?: string
@@ -2005,7 +1983,7 @@ function TemplateThumbnail({
     <svg width={width} height={height}
          style={{ verticalAlign: 'middle', flexShrink: 0 }}>
       <polyline points={pts}
-        fill="none" stroke={stroke} strokeWidth={1.2} />
+        fill="none" style={{ stroke }} strokeWidth={1.2} />
     </svg>
   )
 }
@@ -2071,9 +2049,8 @@ function TemplatePanel({
           display: 'flex', alignItems: 'center', gap: 6,
         }}>
           <TemplateThumbnail template={activeTemplate}
-            stroke={activeTemplate.direction === 'negative' ? '#e57373' : '#64b5f6'} />
-          <div style={{
-            fontFamily: 'var(--font-mono)',
+            stroke={activeTemplate.direction === 'negative' ? 'var(--marker-detected)' : 'var(--marker-bounds)'} />
+          <div className="num" style={{
             color: 'var(--text-muted)',
             fontSize: 'var(--font-size-label)',
             lineHeight: 1.5,
@@ -2251,11 +2228,11 @@ function ThresholdPanel({
         <>
           <HelpText>
             {isThresholdMethod
-              ? 'Drag the blue cursor band on the viewer to cover a quiet section, then Compute RMS.'
+              ? 'Drag the cursor band on the viewer to cover a quiet section, then Compute RMS.'
               : 'Compute RMS over a quiet region; feeds the Exclusion → Min |amp| (× RMS) option below.'}
           </HelpText>
-          <div style={{
-            fontFamily: 'var(--font-mono)', color: CURSOR_COLOR,
+          <div className="num" style={{
+            color: CURSOR_COLOR,
             fontSize: 'var(--font-size-label)',
           }}>
             {cursors.baselineStart.toFixed(3)} → {cursors.baselineEnd.toFixed(3)} s
@@ -2350,6 +2327,7 @@ function EventsSweepViewer({
    *  when grouping is off or no clusters qualify. */
   trainsForSweep: TrainSummary[]
 }) {
+  const themeKey = useThemeKey()
   void theme; void fontSize
   const rootRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -2690,9 +2668,7 @@ function EventsSweepViewer({
     // events below." Empty when grouping is off.
     const trains = trainsRef.current
     if (trains.length > 0) {
-      const trainColor = 'rgba(255,167,38,0.13)'
-      const edgeColor = 'rgba(255,167,38,0.45)'
-      const labelColor = 'rgba(255,167,38,0.95)'
+      const trainColor = cssVar('--marker-manual')
       ctx.save()
       ctx.font = `bold ${10 * dpr}px ${cssVar('--font-mono')}`
       for (const t of trains) {
@@ -2702,41 +2678,44 @@ function EventsSweepViewer({
         const lo = Math.min(a, b)
         const w = Math.max(1 * dpr, Math.abs(b - a))
         ctx.fillStyle = trainColor
+        ctx.globalAlpha = 0.13
         ctx.fillRect(lo, u.bbox.top, w, u.bbox.height)
-        ctx.strokeStyle = edgeColor
+        ctx.strokeStyle = trainColor
+        ctx.globalAlpha = 0.45
         ctx.lineWidth = 1 * dpr
         ctx.beginPath()
         ctx.moveTo(a, u.bbox.top); ctx.lineTo(a, u.bbox.top + u.bbox.height)
         ctx.moveTo(b, u.bbox.top); ctx.lineTo(b, u.bbox.top + u.bbox.height)
         ctx.stroke()
-        ctx.fillStyle = labelColor
+        ctx.globalAlpha = 0.95
         ctx.fillText(`T${t.id + 1}`, lo + 3 * dpr, u.bbox.top + 12 * dpr)
       }
       ctx.restore()
     }
 
-    // Cursor baseline band (blue) — drag-move / drag-edge on pointerdown below.
+    // Cursor baseline band — drag-move / drag-edge on pointerdown below.
     {
       const a = u.valToPos(c.baselineStart, 'x', true)
       const b = u.valToPos(c.baselineEnd, 'x', true)
       if (isFinite(a) && isFinite(b)) {
+        const cursorColor = cssVar('--cursor-baseline')
         ctx.save()
         ctx.globalAlpha = 0.14
-        ctx.fillStyle = CURSOR_COLOR
+        ctx.fillStyle = cursorColor
         ctx.fillRect(
           Math.min(a, b), u.bbox.top,
           Math.abs(b - a), u.bbox.height,
         )
         ctx.globalAlpha = 0.85
-        ctx.strokeStyle = CURSOR_COLOR
+        ctx.strokeStyle = cursorColor
         ctx.lineWidth = 1.5 * dpr
         ctx.beginPath()
         ctx.moveTo(a, u.bbox.top); ctx.lineTo(a, u.bbox.top + u.bbox.height)
         ctx.moveTo(b, u.bbox.top); ctx.lineTo(b, u.bbox.top + u.bbox.height)
         ctx.stroke()
         ctx.globalAlpha = 1
-        ctx.fillStyle = CURSOR_COLOR
-        ctx.font = `bold ${10 * dpr}px ${cssVar('--font-mono')}`
+        ctx.fillStyle = cursorColor
+        ctx.font = `600 ${10 * dpr}px ${cssVar('--font-ui')}`
         ctx.fillText('cursors', Math.min(a, b) + 2 * dpr, u.bbox.top + 12 * dpr)
         ctx.restore()
       }
@@ -2754,20 +2733,21 @@ function EventsSweepViewer({
         const a = u.valToPos(r.startS, 'x', true)
         const b = u.valToPos(r.endS, 'x', true)
         if (!isFinite(a) || !isFinite(b)) continue
+        const skipColor = cssVar('--error')
         ctx.save()
         if (r.enabled) {
           ctx.globalAlpha = 0.18
-          ctx.fillStyle = '#e57373'
+          ctx.fillStyle = skipColor
           ctx.fillRect(
             Math.min(a, b), u.bbox.top,
             Math.abs(b - a), u.bbox.height,
           )
           ctx.globalAlpha = 0.85
-          ctx.strokeStyle = '#e57373'
+          ctx.strokeStyle = skipColor
           ctx.lineWidth = 1.5 * dpr
         } else {
           ctx.globalAlpha = 0.35
-          ctx.strokeStyle = '#e57373'
+          ctx.strokeStyle = skipColor
           ctx.lineWidth = 1 * dpr
           ctx.setLineDash([4 * dpr, 3 * dpr])
         }
@@ -2777,8 +2757,8 @@ function EventsSweepViewer({
         ctx.stroke()
         ctx.setLineDash([])
         ctx.globalAlpha = 1
-        ctx.fillStyle = '#e57373'
-        ctx.font = `bold ${10 * dpr}px ${cssVar('--font-mono')}`
+        ctx.fillStyle = skipColor
+        ctx.font = `600 ${10 * dpr}px ${cssVar('--font-ui')}`
         ctx.fillText(`skip ${i + 1}${r.enabled ? '' : ' (off)'}`,
           Math.min(a, b) + 2 * dpr, u.bbox.top + 24 * dpr)
         ctx.restore()
@@ -2794,7 +2774,7 @@ function EventsSweepViewer({
       const xMin = u.scales.x.min ?? 0
       const xMax = u.scales.x.max ?? 0
       ctx.save()
-      ctx.strokeStyle = '#26c6da'
+      ctx.strokeStyle = cssVar('--cursor-baseline')
       ctx.lineWidth = 1.25 * dpr
       ctx.setLineDash([])
       ctx.beginPath()
@@ -2836,7 +2816,7 @@ function EventsSweepViewer({
       if (threshold != null && isFinite(threshold)) {
         const py = u.valToPos(threshold - offsetRef.current, 'y', true)
         ctx.save()
-        ctx.strokeStyle = '#e57373'
+        ctx.strokeStyle = cssVar('--marker-detected')
         ctx.lineWidth = 1 * dpr
         ctx.setLineDash([6 * dpr, 4 * dpr])
         ctx.beginPath()
@@ -2860,7 +2840,7 @@ function EventsSweepViewer({
       if (isFinite(floor)) {
         const py = u.valToPos(floor - offsetRef.current, 'y', true)
         ctx.save()
-        ctx.strokeStyle = '#ffa726'
+        ctx.strokeStyle = cssVar('--warning')
         ctx.lineWidth = 1 * dpr
         ctx.setLineDash([3 * dpr, 3 * dpr])
         ctx.beginPath()
@@ -2885,7 +2865,7 @@ function EventsSweepViewer({
       const gf = groupFilterRef.current
       const tf = templateFilterRef.current
       ctx.save()
-      ctx.strokeStyle = '#000000'
+      ctx.strokeStyle = cssVar('--text-primary')
       ctx.lineWidth = 1 * dpr
       for (let i = 0; i < e.events.length; i++) {
         const ev = e.events[i]
@@ -2974,6 +2954,8 @@ function EventsSweepViewer({
 
       const peakR = 4 * dpr
       const dotR = 2.5 * dpr
+      const manualColor = cssVar('--marker-manual')
+      const detectedColor = cssVar('--marker-detected')
 
       // Sample the displayed trace (post-filter, post-zero-offset)
       // so markers stay glued to the line whatever the user toggles.
@@ -2990,10 +2972,10 @@ function EventsSweepViewer({
         const px = u.valToPos(ev.peakTimeS, 'x', true)
         const py = u.valToPos(peakSampled != null ? peakSampled : ev.peakVal, 'y', true)
         const color = ev.manual
-          ? '#ffb74d'
+          ? manualColor
           : (ev.templateIdx != null && TEMPLATE_COLORS[ev.templateIdx])
             ? TEMPLATE_COLORS[ev.templateIdx]
-            : '#e57373'
+            : detectedColor
         let bucket = peakByColor.get(color)
         if (!bucket) { bucket = []; peakByColor.set(color, bucket) }
         bucket.push(px, py)
@@ -3025,7 +3007,7 @@ function EventsSweepViewer({
       // ---- Now render each batched layer with minimal state churn ----
       // Foot dots (gray) — single path, single fill.
       if (footPts.length) {
-        ctx.fillStyle = '#9e9e9e'
+        ctx.fillStyle = cssVar('--text-muted')
         ctx.beginPath()
         for (let k = 0; k < footPts.length; k += 2) {
           ctx.moveTo(footPts[k] + dotR, footPts[k + 1])
@@ -3035,7 +3017,7 @@ function EventsSweepViewer({
       }
       // Decay endpoints (purple) — single path, single fill.
       if (decayPts.length) {
-        ctx.fillStyle = '#ab47bc'
+        ctx.fillStyle = cssVar('--cursor-fit')
         ctx.beginPath()
         for (let k = 0; k < decayPts.length; k += 2) {
           ctx.moveTo(decayPts[k] + dotR, decayPts[k + 1])
@@ -3068,17 +3050,17 @@ function EventsSweepViewer({
         }
         ctx.restore()
       }
-      // Selected ring (white) and primed-discard ring (blue) — one
-      // event each at most; cheap.
+      // Selected ring (high-contrast) and primed-discard ring (accent)
+      // — one event each at most; cheap.
       if (selectedXY) {
-        ctx.strokeStyle = '#ffffff'
+        ctx.strokeStyle = cssVar('--text-primary')
         ctx.lineWidth = 1.5 * dpr
         ctx.beginPath()
         ctx.arc(selectedXY[0], selectedXY[1], 5 * dpr, 0, 2 * Math.PI)
         ctx.stroke()
       }
       if (primedXY) {
-        ctx.strokeStyle = '#64b5f6'
+        ctx.strokeStyle = cssVar('--accent')
         ctx.lineWidth = 2 * dpr
         ctx.beginPath()
         ctx.arc(primedXY[0], primedXY[1], 7 * dpr, 0, 2 * Math.PI)
@@ -3226,13 +3208,13 @@ function EventsSweepViewer({
             grid: { stroke: cssVar('--chart-grid'), width: 1 },
             ticks: { stroke: cssVar('--chart-tick'), width: 1 },
             label: 'Time (s)', labelSize: 14,
-            font: `${cssVar('--font-size-xs')} ${cssVar('--font-mono')}`,
+            font: `${cssVar('--font-size-xs')} ${cssVar('--font-ui')}`,
           },
           { stroke: cssVar('--chart-axis'),
             grid: { stroke: cssVar('--chart-grid'), width: 1 },
             ticks: { stroke: cssVar('--chart-tick'), width: 1 },
             size: 55,
-            font: `${cssVar('--font-size-xs')} ${cssVar('--font-mono')}`,
+            font: `${cssVar('--font-size-xs')} ${cssVar('--font-ui')}`,
           },
           // Right-hand Y axis for the DM series. Only visible when a
           // DM series is present; otherwise uPlot still allocates
@@ -3240,13 +3222,13 @@ function EventsSweepViewer({
           ...(dmAligned ? [{
             scale: 'dm',
             side: 1 as const,
-            stroke: '#ffb74d',
+            stroke: cssVar('--trace-color-3'),
             grid: { show: false },
-            ticks: { stroke: '#ffb74d', width: 1 },
+            ticks: { stroke: cssVar('--trace-color-3'), width: 1 },
             size: 55,
             label: dmCurrent?.method === 'deconvolution' ? 'deconv' : 'r',
             labelSize: 12,
-            font: `${cssVar('--font-size-xs')} ${cssVar('--font-mono')}`,
+            font: `${cssVar('--font-size-xs')} ${cssVar('--font-ui')}`,
           }] : []),
         ],
         cursor: { drag: { x: false, y: false } },
@@ -3255,7 +3237,7 @@ function EventsSweepViewer({
           { stroke: cssVar('--trace-color-1'), width: 1.25 },
           // DM series — only present when dmAligned is populated.
           ...(dmAligned ? [{
-            stroke: '#ffb74d',
+            stroke: cssVar('--trace-color-3'),
             width: 1,
             scale: 'dm',
             spanGaps: false,
@@ -3272,7 +3254,7 @@ function EventsSweepViewer({
                 const ctx = u.ctx
                 const dpr = devicePixelRatio || 1
                 ctx.save()
-                ctx.strokeStyle = '#ffb74d'
+                ctx.strokeStyle = cssVar('--trace-color-3')
                 ctx.lineWidth = 1 * dpr
                 ctx.setLineDash([6 * dpr, 4 * dpr])
                 ctx.beginPath()
@@ -3657,7 +3639,7 @@ function EventsSweepViewer({
     // the callbacks and force a full uPlot teardown + rebuild — which
     // is what made adding a manual event or scrolling with many markers
     // feel like the whole trace was being recomputed.
-  }, [data, dm, drawOverlays])
+  }, [data, dm, drawOverlays, themeKey])
 
   // ResizeObserver: keep uPlot sized to container.
   useEffect(() => {
@@ -3702,23 +3684,19 @@ function EventsSweepViewer({
         shiftViewport={shiftViewport}
         goHome={goHome} goEnd={goEnd}
       />
-      <div style={{
-        padding: '3px 8px', fontSize: 'var(--font-size-xs)',
-        color: 'var(--text-muted)', background: 'var(--bg-secondary)',
-        flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8,
-        borderBottom: '1px solid var(--border)',
+      <div className="viewer-header" style={{
+        color: 'var(--text-muted)', flexShrink: 0,
       }}>
         <span>Sweep {sweep + 1}{entry ? ` · ${entry.events.length} events` : ''}</span>
         <button
-          className="btn"
+          className="btn btn-sm"
           onClick={fitYNow}
           title="Re-fit the y range to the trace currently inside the visible x window. Useful after toggling the filter or zero-offset shifts the baseline out of view."
-          style={{ padding: '0 6px', fontSize: 'var(--font-size-label)' }}
         >
           Fit Y
         </button>
         <label
-          style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}
+          style={{ display: 'flex', alignItems: 'center', gap: 4 }}
           title="Subtract the per-sweep DC baseline server-side, mirroring the AP and Burst windows. Stored detection thresholds, baseline curve, and biexp fits are shifted to match."
         >
           <input
@@ -3729,8 +3707,8 @@ function EventsSweepViewer({
           />
           <span>Zero offset</span>
         </label>
-        <span style={{ marginLeft: 'auto', fontStyle: 'italic' }}>
-          drag empty: pan · click empty: add event · click marker:
+        <span style={{ marginLeft: 'auto', fontStyle: 'italic', fontSize: 'var(--font-size-xs)' }}>
+          Drag empty: pan · click empty: add event · click marker:
           prime / discard · drag cursor band: move · wheel: zoom
         </span>
       </div>
@@ -3743,11 +3721,9 @@ function EventsSweepViewer({
       </div>
       <ViewportSlider viewport={viewport} sweepDuration={sweepDurationS} setViewport={setViewport} />
       {err && (
-        <div style={{
+        <div className="notice notice-error" style={{
           position: 'absolute', top: 30, left: 10,
-          padding: '4px 8px', background: 'rgba(92, 27, 27, 0.9)',
-          color: '#fff', borderRadius: 3,
-          fontSize: 'var(--font-size-xs)',
+          background: 'color-mix(in oklab, var(--error) 12%, var(--bg-field))',
         }}>
           ⚠ Trace load failed: {err}
         </div>
@@ -3801,7 +3777,10 @@ function EventsSummaryBar({ entry }: { entry: EventsData | undefined }) {
     padding: '3px 8px', borderRight: '1px solid var(--border)',
     whiteSpace: 'nowrap',
   }
-  const lbl: React.CSSProperties = { color: 'var(--text-muted)', fontSize: 10 }
+  const lbl: React.CSSProperties = {
+    color: 'var(--text-muted)', fontSize: 'var(--font-size-xs)',
+    fontFamily: 'var(--font-ui)',
+  }
   return (
     <div style={{
       display: 'flex', alignItems: 'stretch', flexWrap: 'wrap',
@@ -3810,11 +3789,11 @@ function EventsSummaryBar({ entry }: { entry: EventsData | undefined }) {
       borderBottom: '1px solid var(--border)',
     }}>
       <div style={cell}>
-        <span style={lbl}>n events</span>
+        <span style={lbl}>Events</span>
         <span>{entry.events.length}</span>
       </div>
       <div style={cell}>
-        <span style={lbl}>rate (Hz)</span>
+        <span style={lbl}>Rate (Hz)</span>
         <span>{fmt(freqHz, 2)}</span>
       </div>
       <div style={cell}>
@@ -3865,6 +3844,7 @@ function AmplitudeHistogram({
   groupFilter?: GroupFilter
   templateFilter?: TemplateFilter
 }) {
+  const themeKey = useThemeKey()
   const containerRef = useRef<HTMLDivElement>(null)
   const plotRef = useRef<uPlot | null>(null)
   const { onContextMenu, menu } = usePlotMenu({
@@ -3924,14 +3904,14 @@ function AmplitudeHistogram({
             grid: { stroke: cssVar('--chart-grid'), width: 1 },
             ticks: { stroke: cssVar('--chart-tick'), width: 1 },
             label: `Amplitude (${entry?.units ?? ''})`, labelSize: 14,
-            font: `${cssVar('--font-size-xs')} ${cssVar('--font-mono')}`,
+            font: `${cssVar('--font-size-xs')} ${cssVar('--font-ui')}`,
           },
           { stroke: cssVar('--chart-axis'),
             grid: { stroke: cssVar('--chart-grid'), width: 1 },
             ticks: { stroke: cssVar('--chart-tick'), width: 1 },
             size: 50,
             label: 'count',
-            font: `${cssVar('--font-size-xs')} ${cssVar('--font-mono')}`,
+            font: `${cssVar('--font-size-xs')} ${cssVar('--font-ui')}`,
           },
         ],
         cursor: { drag: { x: false, y: false } },
@@ -3947,7 +3927,8 @@ function AmplitudeHistogram({
             const bw = stats.centers.length > 1
               ? stats.centers[1] - stats.centers[0] : 1
             ctx.save()
-            ctx.fillStyle = 'rgba(100,181,246,0.35)'
+            ctx.fillStyle = cssVar('--trace-color-1')
+            ctx.globalAlpha = 0.35
             for (let i = 0; i < stats.centers.length; i++) {
               const x0 = u.valToPos(stats.centers[i] - bw / 2, 'x', true)
               const x1 = u.valToPos(stats.centers[i] + bw / 2, 'x', true)
@@ -3957,7 +3938,8 @@ function AmplitudeHistogram({
             }
             // Vertical line at mean.
             const mx = u.valToPos(stats.mean, 'x', true)
-            ctx.strokeStyle = '#e57373'
+            ctx.globalAlpha = 1
+            ctx.strokeStyle = cssVar('--trace-average')
             ctx.lineWidth = 1.5 * dpr
             ctx.setLineDash([4 * dpr, 3 * dpr])
             ctx.beginPath()
@@ -3972,7 +3954,7 @@ function AmplitudeHistogram({
       plotRef.current = new uPlot(opts, data, container)
     })
     return () => cancelAnimationFrame(frame)
-  }, [stats, entry?.units])
+  }, [stats, entry?.units, themeKey])
 
   useEffect(() => {
     const el = containerRef.current
@@ -4065,6 +4047,7 @@ function EventRatePlot({
   groupFilter?: GroupFilter
   templateFilter?: TemplateFilter
 }) {
+  const themeKey = useThemeKey()
   const containerRef = useRef<HTMLDivElement>(null)
   const plotRef = useRef<uPlot | null>(null)
   const { onContextMenu, menu } = usePlotMenu({
@@ -4111,13 +4094,13 @@ function EventRatePlot({
             grid: { stroke: cssVar('--chart-grid'), width: 1 },
             ticks: { stroke: cssVar('--chart-tick'), width: 1 },
             label: 'Time (s)', labelSize: 14,
-            font: `${cssVar('--font-size-xs')} ${cssVar('--font-mono')}`,
+            font: `${cssVar('--font-size-xs')} ${cssVar('--font-ui')}`,
           },
           { stroke: cssVar('--chart-axis'),
             grid: { stroke: cssVar('--chart-grid'), width: 1 },
             ticks: { stroke: cssVar('--chart-tick'), width: 1 },
             size: 50, label: 'Rate (Hz)',
-            font: `${cssVar('--font-size-xs')} ${cssVar('--font-mono')}`,
+            font: `${cssVar('--font-size-xs')} ${cssVar('--font-ui')}`,
           },
         ],
         cursor: { drag: { x: false, y: false } },
@@ -4129,7 +4112,8 @@ function EventRatePlot({
             const bw = stats.centers.length > 1
               ? stats.centers[1] - stats.centers[0] : binS
             ctx.save()
-            ctx.fillStyle = 'rgba(100,181,246,0.35)'
+            ctx.fillStyle = cssVar('--trace-color-1')
+            ctx.globalAlpha = 0.35
             for (let i = 0; i < stats.centers.length; i++) {
               const x0 = u.valToPos(stats.centers[i] - bw / 2, 'x', true)
               const x1 = u.valToPos(stats.centers[i] + bw / 2, 'x', true)
@@ -4145,7 +4129,7 @@ function EventRatePlot({
       plotRef.current = new uPlot(opts, payload, container)
     })
     return () => cancelAnimationFrame(frame)
-  }, [stats, binS])
+  }, [stats, binS, themeKey])
 
   useEffect(() => {
     const el = containerRef.current
@@ -4224,6 +4208,7 @@ function AmpVsTimeScatter({
   groupFilter?: GroupFilter
   templateFilter?: TemplateFilter
 }) {
+  const themeKey = useThemeKey()
   const containerRef = useRef<HTMLDivElement>(null)
   const plotRef = useRef<uPlot | null>(null)
   const { onContextMenu, menu } = usePlotMenu({
@@ -4261,13 +4246,13 @@ function AmpVsTimeScatter({
             grid: { stroke: cssVar('--chart-grid'), width: 1 },
             ticks: { stroke: cssVar('--chart-tick'), width: 1 },
             label: 'Time (s)', labelSize: 14,
-            font: `${cssVar('--font-size-xs')} ${cssVar('--font-mono')}`,
+            font: `${cssVar('--font-size-xs')} ${cssVar('--font-ui')}`,
           },
           { stroke: cssVar('--chart-axis'),
             grid: { stroke: cssVar('--chart-grid'), width: 1 },
             ticks: { stroke: cssVar('--chart-tick'), width: 1 },
             size: 55, label: `Amplitude (${entry?.units ?? ''})`,
-            font: `${cssVar('--font-size-xs')} ${cssVar('--font-mono')}`,
+            font: `${cssVar('--font-size-xs')} ${cssVar('--font-ui')}`,
           },
         ],
         cursor: { drag: { x: false, y: false } },
@@ -4278,7 +4263,8 @@ function AmpVsTimeScatter({
             const ctx = u.ctx
             const dpr = devicePixelRatio || 1
             ctx.save()
-            ctx.fillStyle = 'rgba(100,181,246,0.7)'
+            ctx.fillStyle = cssVar('--trace-color-1')
+            ctx.globalAlpha = 0.7
             for (let i = 0; i < data.xs.length; i++) {
               const px = u.valToPos(data.xs[i], 'x', true)
               const py = u.valToPos(data.ys[i], 'y', true)
@@ -4294,7 +4280,7 @@ function AmpVsTimeScatter({
       plotRef.current = new uPlot(opts, [data.xs, data.ys], container)
     })
     return () => cancelAnimationFrame(frame)
-  }, [data, entry?.units])
+  }, [data, entry?.units, themeKey])
 
   useEffect(() => {
     const el = containerRef.current
@@ -4323,10 +4309,9 @@ function AmpVsTimeScatter({
       <div style={{
         display: 'flex', gap: 8, alignItems: 'center',
         fontSize: 'var(--font-size-label)', flexShrink: 0,
-        fontFamily: 'var(--font-mono)',
       }}>
         {data
-          ? <span>n = {data.xs.length}</span>
+          ? <span className="num">n = {data.xs.length}</span>
           : <span style={{ color: 'var(--text-muted)' }}>Run detection first.</span>}
       </div>
       <div
@@ -4365,6 +4350,7 @@ function IEIHistogram({
   groupFilter?: GroupFilter
   templateFilter?: TemplateFilter
 }) {
+  const themeKey = useThemeKey()
   const containerRef = useRef<HTMLDivElement>(null)
   const plotRef = useRef<uPlot | null>(null)
   const { onContextMenu, menu } = usePlotMenu({
@@ -4425,13 +4411,13 @@ function IEIHistogram({
             grid: { stroke: cssVar('--chart-grid'), width: 1 },
             ticks: { stroke: cssVar('--chart-tick'), width: 1 },
             label: 'IEI (ms)', labelSize: 14,
-            font: `${cssVar('--font-size-xs')} ${cssVar('--font-mono')}`,
+            font: `${cssVar('--font-size-xs')} ${cssVar('--font-ui')}`,
           },
           { stroke: cssVar('--chart-axis'),
             grid: { stroke: cssVar('--chart-grid'), width: 1 },
             ticks: { stroke: cssVar('--chart-tick'), width: 1 },
             size: 50, label: 'count',
-            font: `${cssVar('--font-size-xs')} ${cssVar('--font-mono')}`,
+            font: `${cssVar('--font-size-xs')} ${cssVar('--font-ui')}`,
           },
         ],
         cursor: { drag: { x: false, y: false } },
@@ -4441,7 +4427,8 @@ function IEIHistogram({
             const ctx = u.ctx
             const dpr = devicePixelRatio || 1
             ctx.save()
-            ctx.fillStyle = 'rgba(100,181,246,0.4)'
+            ctx.fillStyle = cssVar('--trace-color-1')
+            ctx.globalAlpha = 0.4
             for (let i = 0; i < stats.centers.length; i++) {
               const x0 = u.valToPos(stats.centers[i] - stats.bw / 2, 'x', true)
               const x1 = u.valToPos(stats.centers[i] + stats.bw / 2, 'x', true)
@@ -4452,7 +4439,8 @@ function IEIHistogram({
             // Vertical line at the mean IEI — quick anchor for
             // comparing against 1 / rate.
             const mx = u.valToPos(stats.meanIei, 'x', true)
-            ctx.strokeStyle = '#e57373'
+            ctx.globalAlpha = 1
+            ctx.strokeStyle = cssVar('--trace-average')
             ctx.lineWidth = 1.5 * dpr
             ctx.setLineDash([4 * dpr, 3 * dpr])
             ctx.beginPath()
@@ -4466,7 +4454,7 @@ function IEIHistogram({
       plotRef.current = new uPlot(opts, [stats.centers, stats.counts], container)
     })
     return () => cancelAnimationFrame(frame)
-  }, [stats])
+  }, [stats, themeKey])
 
   useEffect(() => {
     const el = containerRef.current
@@ -4641,20 +4629,11 @@ function EventsResultsTable({
   }
   return (
     <>
-    <table style={{
-      width: '100%', borderCollapse: 'collapse',
-      fontSize: 'var(--font-size-xs)', fontFamily: 'var(--font-mono)',
-    }}>
+    <table className="data-table num">
       <thead>
         <tr>
           {headers.map((h, i) => (
-            <th key={i} style={{
-              padding: '3px 6px', textAlign: 'left',
-              borderBottom: '1px solid var(--border)',
-              color: 'var(--text-secondary)', fontWeight: 500,
-              position: 'sticky', top: 0,
-              background: 'var(--bg-primary)', whiteSpace: 'nowrap',
-            }}>{h}</th>
+            <th key={i} style={{ fontFamily: 'var(--font-ui)' }}>{h}</th>
           ))}
         </tr>
       </thead>
@@ -4686,11 +4665,10 @@ function EventsResultsTable({
                 if (!sel.isSelected(i)) sel.setSelected([i])
               })}
               style={{
-                cursor: 'pointer',
                 background: sel.isSelected(i)
-                  ? 'var(--accent-muted, rgba(100,181,246,0.30))'
+                  ? 'var(--accent-muted)'
                   : i === entry.selectedIdx
-                    ? 'var(--accent-muted, rgba(100,181,246,0.15))'
+                    ? 'var(--bg-selected)'
                     : (i % 2 === 0 ? 'transparent' : 'var(--bg-secondary)'),
                 fontStyle: e.manual ? 'italic' : 'normal',
               }}>
@@ -4699,7 +4677,7 @@ function EventsResultsTable({
               {showTplCol && (
                 <td style={td}>
                   {e.manual ? (
-                    <span style={{ color: '#ffb74d', fontWeight: 600 }}>M</span>
+                    <span style={{ color: 'var(--marker-manual)', fontWeight: 600 }}>M</span>
                   ) : e.templateIdx != null && TEMPLATE_COLORS[e.templateIdx] ? (
                     <span style={{
                       color: TEMPLATE_COLORS[e.templateIdx],
@@ -4722,13 +4700,13 @@ function EventsResultsTable({
               {showTrainCol && (
                 <td style={td}>
                   {trainIdByIdx?.[i] != null
-                    ? <span style={{ color: 'rgba(255,167,38,0.95)' }}>T{(trainIdByIdx![i] as number) + 1}</span>
+                    ? <span style={{ color: 'var(--marker-manual)' }}>T{(trainIdByIdx![i] as number) + 1}</span>
                     : <span style={{ color: 'var(--text-muted)' }}>—</span>}
                 </td>
               )}
               <td style={{ ...td, textAlign: 'right' }}>
-                <button className="btn" onClick={(ev) => { ev.stopPropagation(); onDiscard(i) }}
-                  style={{ padding: '1px 6px', fontSize: 'var(--font-size-label)' }}
+                <button className="btn btn-sm" onClick={(ev) => { ev.stopPropagation(); onDiscard(i) }}
+                  style={{ padding: '0 6px' }}
                   title="Remove this event from the results">
                   ✕
                 </button>
@@ -4744,9 +4722,7 @@ function EventsResultsTable({
 }
 
 const td: React.CSSProperties = {
-  padding: '2px 6px',
-  borderBottom: '1px solid var(--border)',
-  whiteSpace: 'nowrap',
+  padding: '2px 8px',
 }
 
 // ---------------------------------------------------------------------------
@@ -4873,13 +4849,9 @@ function EventTrainsTab({
             {trains.length}
           </strong> trains
         </span>
-        <button className="btn"
+        <button className="btn btn-sm"
           onClick={onExport}
-          style={{
-            marginLeft: 'auto',
-            fontSize: 'var(--font-size-label)',
-            padding: '2px 10px',
-          }}
+          style={{ marginLeft: 'auto' }}
           title="Export per-train summary to CSV">
           Export trains CSV
         </button>
@@ -4888,20 +4860,11 @@ function EventTrainsTab({
         flex: 1, overflow: 'auto',
         border: '1px solid var(--border)', borderRadius: 4,
       }}>
-        <table style={{
-          width: '100%', borderCollapse: 'collapse',
-          fontSize: 'var(--font-size-xs)', fontFamily: 'var(--font-mono)',
-        }}>
+        <table className="data-table num">
           <thead>
             <tr>
               {headers.map((h, i) => (
-                <th key={i} style={{
-                  padding: '3px 6px', textAlign: 'left',
-                  borderBottom: '1px solid var(--border)',
-                  color: 'var(--text-secondary)', fontWeight: 500,
-                  position: 'sticky', top: 0,
-                  background: 'var(--bg-primary)', whiteSpace: 'nowrap',
-                }}>{h}</th>
+                <th key={i} style={{ fontFamily: 'var(--font-ui)' }}>{h}</th>
               ))}
             </tr>
           </thead>
@@ -4913,12 +4876,11 @@ function EventTrainsTab({
                   if (!sel.isSelected(i)) sel.setSelected([i])
                 })}
                 style={{
-                  cursor: 'pointer',
                   background: sel.isSelected(i)
-                    ? 'var(--accent-muted, rgba(100,181,246,0.30))'
+                    ? 'var(--accent-muted)'
                     : (i % 2 === 0 ? 'transparent' : 'var(--bg-secondary)'),
                 }}>
-                <td style={td}><span style={{ color: 'rgba(255,167,38,0.95)' }}>T{t.id + 1}</span></td>
+                <td style={td}><span style={{ color: 'var(--marker-manual)' }}>T{t.id + 1}</span></td>
                 <td style={td}>{t.sweep + 1}</td>
                 <td style={td}>{t.startS.toFixed(4)}</td>
                 <td style={td}>{t.endS.toFixed(4)}</td>

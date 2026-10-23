@@ -49,14 +49,12 @@ export function TraceList({ selectedIds, onSelect, onAddClick }: Props) {
               }}
               style={{
                 padding: '6px 10px 6px 7px',
-                borderBottom: '1px solid var(--border)',
+                borderBottom: '1px solid var(--border-subtle)',
                 // Selected row: accent left-border + tinted background +
-                // bolder text. Three signals so the affordance reads
-                // clearly in light, dark, and high-contrast themes.
+                // bolder text so the affordance reads clearly in light
+                // and dark themes.
                 borderLeft: sel ? '3px solid var(--accent)' : '3px solid transparent',
-                background: sel ? 'var(--bg-active)' : 'transparent',
-                boxShadow: sel ? 'inset 0 0 0 1px var(--accent)' : 'none',
-                cursor: 'pointer',
+                background: sel ? 'var(--bg-selected)' : 'transparent',
                 fontSize: 'var(--font-size-sm)',
                 fontWeight: sel ? 600 : 400,
                 color: sel ? 'var(--accent)' : 'var(--text-primary)',
@@ -83,14 +81,14 @@ export function TraceList({ selectedIds, onSelect, onAddClick }: Props) {
                   className="btn"
                   onClick={(e) => { e.stopPropagation(); reorderItem(item.id, -1) }}
                   disabled={idx === 0}
-                  style={{ padding: '0 6px', fontSize: 11 }}
+                  style={{ padding: '0 6px', fontSize: 'var(--font-size-xs)' }}
                   title="Move up"
                 >↑</button>
                 <button
                   className="btn"
                   onClick={(e) => { e.stopPropagation(); reorderItem(item.id, 1) }}
                   disabled={idx === items.length - 1}
-                  style={{ padding: '0 6px', fontSize: 11 }}
+                  style={{ padding: '0 6px', fontSize: 'var(--font-size-xs)' }}
                   title="Move down"
                 >↓</button>
                 <button
@@ -100,7 +98,7 @@ export function TraceList({ selectedIds, onSelect, onAddClick }: Props) {
                     if (sel) onSelect(null, 'replace')
                     removeItem(item.id)
                   }}
-                  style={{ padding: '0 6px', fontSize: 11 }}
+                  style={{ padding: '0 6px', fontSize: 'var(--font-size-xs)' }}
                   title="Remove"
                 >×</button>
               </span>

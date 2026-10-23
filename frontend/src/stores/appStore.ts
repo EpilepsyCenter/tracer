@@ -6006,6 +6006,13 @@ declare global {
       closeAnalysisWindow: (type: string) => Promise<boolean>
       getOpenAnalysisWindows: () => Promise<string[]>
       onAnalysisWindowClosed: (callback: (type: string) => void) => () => void
+      /** Point Electron's nativeTheme at the user's choice so native
+       *  menus, dialogs and title bars match. */
+      setThemeSource?: (pref: 'system' | 'light' | 'dark') => void
+      /** Native menu-bar commands, delivered to the focused window. */
+      onMenuAction?: (callback: (action: string, arg?: string) => void) => () => void
+      /** Tell the menu bar whether a recording is open (enables Analysis items). */
+      setMenuState?: (state: { hasRecording?: boolean }) => void
     }
   }
 }

@@ -78,13 +78,7 @@ export function TrainOptions({ module, group, series, hostMergeFloorMs }: TrainO
   const belowFloor = hostMergeFloorMs != null && params.maxIeiMs <= hostMergeFloorMs
 
   return (
-    <div style={{
-      display: 'flex', flexDirection: 'column', gap: 6,
-      padding: 8,
-      border: '1px solid var(--border)',
-      borderRadius: 4,
-      background: 'var(--bg-primary)',
-    }}>
+    <div className="section-card">
       <label style={{
         display: 'flex', alignItems: 'center', gap: 6,
         fontSize: 'var(--font-size-label)',
@@ -107,7 +101,6 @@ export function TrainOptions({ module, group, series, hostMergeFloorMs }: TrainO
           <select
             value={params.metric}
             onChange={(e) => update({ metric: e.target.value as TrainParams['metric'] })}
-            style={{ fontSize: 'var(--font-size-label)' }}
           >
             <option value="gap">Gap (end → start)</option>
             <option value="peak_to_peak">Peak-to-peak</option>
@@ -158,9 +151,8 @@ export function TrainOptions({ module, group, series, hostMergeFloorMs }: TrainO
         </label>
 
         {belowFloor && (
-          <div style={{
+          <div className="notice notice-warning" style={{
             fontSize: 'var(--font-size-xs)',
-            color: 'var(--accent-warn, #c98a00)',
             lineHeight: 1.3,
           }}>
             ⚠ Max IEI ≤ this module's merge threshold ({hostMergeFloorMs} ms);

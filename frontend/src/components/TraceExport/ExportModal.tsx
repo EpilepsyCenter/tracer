@@ -155,7 +155,7 @@ export function ExportModal({ backendUrl, onClose }: Props) {
         style={{
           width: '80vw', maxWidth: 1100, height: '85vh',
           background: 'var(--bg-primary)', color: 'var(--text-primary)',
-          border: '1px solid var(--border)', borderRadius: 6,
+          borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-popover)',
           display: 'flex', flexDirection: 'column', overflow: 'hidden',
           fontFamily: 'var(--font-ui)',
         }}
@@ -171,7 +171,7 @@ export function ExportModal({ backendUrl, onClose }: Props) {
 
         <div style={{ flex: 1, overflow: 'auto', padding: 12, background: 'white' }}>
           {error && (
-            <div style={{ color: '#a00', marginBottom: 8, fontSize: 12 }}>{error}</div>
+            <div className="notice notice-error" style={{ marginBottom: 8 }}>{error}</div>
           )}
           {busy && !svg && <div style={{ color: 'var(--text-muted)' }}>Rendering…</div>}
           {svg && (
@@ -195,10 +195,9 @@ export function ExportModal({ backendUrl, onClose }: Props) {
           <span style={{ flex: 1 }} />
           <button className="btn" onClick={onClose}>Cancel</button>
           <button
-            className="btn"
+            className="btn btn-primary"
             onClick={save}
             disabled={busy || !!error}
-            style={{ background: 'var(--accent)', color: 'white' }}
           >
             Save…
           </button>

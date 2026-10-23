@@ -5,7 +5,7 @@ import {
   useAppStore,
   EventsData, EventRow,
 } from '../../stores/appStore'
-import { useThemeStore } from '../../stores/themeStore'
+import { useThemeStore, useThemeKey } from '../../stores/themeStore'
 import { NumInput } from '../common/NumInput'
 import { usePlotMenu } from '../common/PlotMenu'
 
@@ -130,21 +130,15 @@ export function EventsBrowserWindow({
 
       {/* Tab bar — Browser | Overlay. Only these two views live here;
           Results / Histogram / Rate stay in the main events window. */}
-      <div style={{
-        display: 'flex', gap: 2,
-        borderBottom: '1px solid var(--border)',
-        flexShrink: 0,
+      <div className="segmented" role="tablist" style={{
+        flexShrink: 0, alignSelf: 'flex-start',
       }}>
         {(['browser', 'overlay'] as const).map((k) => (
-          <button key={k} className="btn" onClick={() => setTab(k)}
-            style={{
-              padding: '4px 14px', fontSize: 'var(--font-size-label)',
-              background: tab === k ? 'var(--bg-primary)' : 'transparent',
-              borderBottom: tab === k
-                ? '2px solid var(--accent, #64b5f6)'
-                : '2px solid transparent',
-              borderRadius: '3px 3px 0 0',
-            }}>
+          <button key={k} onClick={() => setTab(k)}
+            role="tab"
+            aria-selected={tab === k}
+            className={tab === k ? 'active' : undefined}
+            style={{ flex: 'none', padding: '0 14px' }}>
             {k === 'browser' ? 'Browser' : 'Overlay'}
           </button>
         ))}
@@ -283,6 +277,7 @@ function EventBrowserPanel({
   onSelect: (idx: number) => void
   onDiscard: (idx: number) => void
 }) {
+  const themeKey = useThemeKey()
   const containerRef = useRef<HTMLDivElement>(null)
   const plotRef = useRef<uPlot | null>(null)
   const { onContextMenu, menu } = usePlotMenu({
@@ -525,13 +520,13 @@ function EventBrowserPanel({
             ticks: { stroke: cssVar('--chart-tick'), width: 1 },
             values: (_u, vals) => vals.map((v) => (v * 1000).toFixed(1)),
             label: 'Time (ms, 0 = peak)', labelSize: 14,
-            font: `${cssVar('--font-size-xs')} ${cssVar('--font-mono')}`,
+            font: `${cssVar('--font-size-xs')} ${cssVar('--font-ui')}`,
           },
           { stroke: cssVar('--chart-axis'),
             grid: { stroke: cssVar('--chart-grid'), width: 1 },
             ticks: { stroke: cssVar('--chart-tick'), width: 1 },
             size: 55, label: entry.units,
-            font: `${cssVar('--font-size-xs')} ${cssVar('--font-mono')}`,
+            font: `${cssVar('--font-size-xs')} ${cssVar('--font-ui')}`,
           },
         ],
         cursor: { drag: { x: false, y: false } },
@@ -542,8 +537,9 @@ function EventBrowserPanel({
             const dpr = devicePixelRatio || 1
             // Baseline horizontal line (gray dashed).
             const byPos = u.valToPos(ev.baselineVal, 'y', true)
+            const outline = cssVar('--marker-outline')
             ctx.save()
-            ctx.strokeStyle = 'rgba(158,158,158,0.7)'
+            ctx.strokeStyle = cssVar('--text-muted')
             ctx.setLineDash([4 * dpr, 3 * dpr])
             ctx.lineWidth = 1 * dpr
             ctx.beginPath()
@@ -551,14 +547,15 @@ function EventBrowserPanel({
             ctx.lineTo(u.bbox.left + u.bbox.width, byPos)
             ctx.stroke()
             ctx.setLineDash([])
-            // Half-amplitude bar (yellow dashed between left / right
+            // Half-amplitude bar (amber dashed between left / right
             // half crossings). EE's "FWHM" display on page 29.
             if (halfLeft != null && halfRight != null && amp !== 0) {
               const halfV = ev.baselineVal + 0.50 * amp
               const hyPos = u.valToPos(halfV, 'y', true)
               const hxL = u.valToPos(halfLeft, 'x', true)
               const hxR = u.valToPos(halfRight, 'x', true)
-              ctx.strokeStyle = '#ffeb3b'
+              const fwhmColor = cssVar('--warning')
+              ctx.strokeStyle = fwhmColor
               ctx.setLineDash([4 * dpr, 3 * dpr])
               ctx.lineWidth = 1.25 * dpr
               ctx.beginPath()
@@ -568,8 +565,8 @@ function EventBrowserPanel({
               // FWHM crossing dots — sit on the trace, so keep them a
               // touch smaller than the foot/peak anchors but still
               // clearly visible (matching the 20/80 rise dots).
-              ctx.fillStyle = '#ffeb3b'
-              ctx.strokeStyle = '#ffffff'
+              ctx.fillStyle = fwhmColor
+              ctx.strokeStyle = outline
               ctx.lineWidth = 1 * dpr
               ctx.beginPath(); ctx.arc(hxL, hyPos, 4 * dpr, 0, 2 * Math.PI)
               ctx.fill(); ctx.stroke()
@@ -587,10 +584,10 @@ function EventBrowserPanel({
               if (!isFinite(x) || !isFinite(y)) return
               ctx.fillStyle = color
               ctx.beginPath(); ctx.arc(x, y, r * dpr, 0, 2 * Math.PI); ctx.fill()
-              ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5 * dpr; ctx.stroke()
+              ctx.strokeStyle = outline; ctx.lineWidth = 1.5 * dpr; ctx.stroke()
             }
             // Foot (gray) — same size as burst baseline dots.
-            drawDot(u.valToPos(footOff, 'x', true), byPos, '#9e9e9e', 5)
+            drawDot(u.valToPos(footOff, 'x', true), byPos, cssVar('--text-muted'), 5)
             // 20/80 rise (cyan / teal) on the rising edge. Slightly
             // smaller because they sit ON the trace line — too big and
             // they'd obscure the rising edge shape.
@@ -607,10 +604,10 @@ function EventBrowserPanel({
             // Peak (red) — biggest, primary anchor for the event.
             const pxPos = u.valToPos(0, 'x', true)
             const pyPos = u.valToPos(ev.peakVal, 'y', true)
-            drawDot(pxPos, pyPos, '#e57373', 6)
+            drawDot(pxPos, pyPos, cssVar('--marker-detected'), 6)
             // Decay endpoint (purple)
             if (decayOff != null) {
-              drawDot(u.valToPos(decayOff, 'x', true), byPos, '#ab47bc', 5)
+              drawDot(u.valToPos(decayOff, 'x', true), byPos, cssVar('--cursor-fit'), 5)
             }
             ctx.restore()
           }],
@@ -626,7 +623,7 @@ function EventBrowserPanel({
       cancelAnimationFrame(frame)
       if (teardown) teardown()
     }
-  }, [winData, ev, entry])
+  }, [winData, ev, entry, themeKey])
 
   // Edit-Kinetics click capture — when a landmark is primed, the next
   // click on the plot's overlay layer is consumed as the new position.
@@ -702,8 +699,8 @@ function EventBrowserPanel({
         <button className="btn" onClick={() => onSelect(Math.max(0, (idx ?? 0) - 1))}
           disabled={(idx ?? 0) <= 0}
           style={{ padding: '3px 10px' }} title="Previous event (←)">← Prev</button>
-        <span style={{
-          fontFamily: 'var(--font-mono)', minWidth: 60, textAlign: 'center',
+        <span className="num" style={{
+          minWidth: 60, textAlign: 'center',
         }}>{cur} / {entry.events.length}</span>
         <button className="btn" onClick={() => onSelect(Math.min(entry.events.length - 1, (idx ?? 0) + 1))}
           disabled={(idx ?? 0) >= entry.events.length - 1}
@@ -753,15 +750,12 @@ function EventBrowserPanel({
             the new landmark, triggering a backend re-measure. Esc
             cancels a primed move without touching the kinetics. */}
         {ev && (
-          <button className="btn"
+          <button className={editMode ? 'btn btn-toggled' : 'btn'}
             onClick={() => { setEditMode((v) => !v); setPrimed(null) }}
-            style={{
-              padding: '3px 10px',
-              background: editMode ? '#42a5f5' : undefined,
-              color: editMode ? '#fff' : undefined,
-            }}
+            aria-pressed={editMode}
+            style={{ padding: '3px 10px' }}
             title="Manually drag the foot / decay endpoint of this event">
-            {editMode ? 'Edit ON' : 'Edit kinetics'}
+            {editMode ? 'Edit on' : 'Edit kinetics'}
           </button>
         )}
       </div>
@@ -779,8 +773,8 @@ function EventBrowserPanel({
             disabled={editBusy}
             style={{
               padding: '2px 10px',
-              background: primed === 'foot' ? '#9e9e9e' : undefined,
-              color: primed === 'foot' ? '#fff' : undefined,
+              background: primed === 'foot' ? 'var(--text-muted)' : undefined,
+              color: primed === 'foot' ? 'var(--on-accent)' : undefined,
             }}
             title="Click the trace to reposition the foot / baseline anchor">
             Foot
@@ -790,8 +784,8 @@ function EventBrowserPanel({
             disabled={editBusy}
             style={{
               padding: '2px 10px',
-              background: primed === 'decay' ? '#ab47bc' : undefined,
-              color: primed === 'decay' ? '#fff' : undefined,
+              background: primed === 'decay' ? 'var(--cursor-fit)' : undefined,
+              color: primed === 'decay' ? 'var(--on-accent)' : undefined,
             }}
             title="Click the trace to reposition the decay endpoint">
             Decay end
@@ -800,10 +794,10 @@ function EventBrowserPanel({
             <span style={{
               color: 'var(--text-muted)', fontStyle: 'italic',
             }}>
-              click the trace to set… (Esc cancels)
+              Click the trace to set… (Esc cancels)
             </span>
           )}
-          {editBusy && <span style={{ color: 'var(--text-muted)' }}>re-measuring…</span>}
+          {editBusy && <span style={{ color: 'var(--text-muted)' }}>Re-measuring…</span>}
         </div>
       )}
 
@@ -816,6 +810,7 @@ function EventBrowserPanel({
           padding: 8, border: '1px solid var(--border)', borderRadius: 4,
           background: 'var(--bg-primary)',
           fontFamily: 'var(--font-mono)', fontSize: 'var(--font-size-xs)',
+          fontVariantNumeric: 'tabular-nums',
           lineHeight: 1.7, overflow: 'auto',
         }}>
           {ev && (
@@ -833,20 +828,20 @@ function EventBrowserPanel({
               <div>FWHM {ev.halfWidthMs != null ? ev.halfWidthMs.toFixed(2) : '—'} ms</div>
               <div>AUC {ev.auc != null ? ev.auc.toFixed(3) : '—'} {unit}·s</div>
               <div style={{
-                marginTop: 6, color: ev.manual ? '#ffb74d' : 'var(--text-muted)',
-                fontStyle: 'italic',
-              }}>{ev.manual ? 'manual' : 'auto-detected'}</div>
+                marginTop: 6, color: ev.manual ? 'var(--marker-manual)' : 'var(--text-muted)',
+                fontStyle: 'italic', fontFamily: 'var(--font-ui)',
+              }}>{ev.manual ? 'Manual' : 'Auto-detected'}</div>
               <div style={{
                 marginTop: 10, paddingTop: 6, borderTop: '1px solid var(--border)',
                 color: 'var(--text-muted)', fontFamily: 'var(--font-ui)',
-                fontSize: 10, lineHeight: 1.35,
+                fontSize: 'var(--font-size-xs)', lineHeight: 1.35,
               }}>
-                Legend: <span style={{ color: '#e57373' }}>●</span> peak&nbsp;
-                <span style={{ color: '#9e9e9e' }}>●</span> foot&nbsp;
+                Legend: <span style={{ color: 'var(--marker-detected)' }}>●</span> peak&nbsp;
+                <span style={{ color: 'var(--text-muted)' }}>●</span> foot&nbsp;
                 <span style={{ color: '#4dd0e1' }}>●</span> 20%&nbsp;
                 <span style={{ color: '#26a69a' }}>●</span> 80%&nbsp;
-                <span style={{ color: '#ffeb3b' }}>●</span> FWHM&nbsp;
-                <span style={{ color: '#ab47bc' }}>●</span> end
+                <span style={{ color: 'var(--warning)' }}>●</span> FWHM&nbsp;
+                <span style={{ color: 'var(--cursor-fit)' }}>●</span> end
               </div>
             </>
           )}
@@ -871,8 +866,8 @@ function EventBrowserPanel({
             </label>
             <span style={{ flex: 1 }} />
             <span style={{
-              color: 'var(--text-muted)', fontSize: 10, fontStyle: 'italic',
-            }}>scroll = zoom X · Alt+scroll = zoom Y · drag = pan · dbl-click = reset</span>
+              color: 'var(--text-muted)', fontSize: 'var(--font-size-xs)', fontStyle: 'italic',
+            }}>Scroll = zoom X · Alt+scroll = zoom Y · drag = pan · dbl-click = reset</span>
           </div>
           <div
             ref={containerRef}
@@ -903,6 +898,7 @@ function AllEventsOverlayPanel({
   backendUrl: string
   entry: EventsData | undefined
 }) {
+  const themeKey = useThemeKey()
   const containerRef = useRef<HTMLDivElement>(null)
   const plotRef = useRef<uPlot | null>(null)
   const { onContextMenu, menu } = usePlotMenu({
@@ -1133,7 +1129,7 @@ function AllEventsOverlayPanel({
           stroke: 'rgba(128,128,128,0.35)', width: 0.8, spanGaps: false,
         })
       }
-      seriesDefs.push({ stroke: '#e57373', width: 2, spanGaps: false })
+      seriesDefs.push({ stroke: cssVar('--trace-average'), width: 2, spanGaps: false })
       const opts: uPlot.Options = {
         width: w, height: h,
         legend: { show: false },
@@ -1144,7 +1140,7 @@ function AllEventsOverlayPanel({
             ticks: { stroke: cssVar('--chart-tick'), width: 1 },
             label: `Time (ms, 0 = ${alignMode})`, labelSize: 14,
             values: (_u, vals) => vals.map((v) => (v * 1000).toFixed(0)),
-            font: `${cssVar('--font-size-xs')} ${cssVar('--font-mono')}`,
+            font: `${cssVar('--font-size-xs')} ${cssVar('--font-ui')}`,
           },
           { stroke: cssVar('--chart-axis'),
             grid: { stroke: cssVar('--chart-grid'), width: 1 },
@@ -1153,7 +1149,7 @@ function AllEventsOverlayPanel({
             label: scaleMode === 'amplitude' ? 'amp = 1'
                  : scaleMode === 'std' ? 'σ = 1'
                  : 'Δ baseline',
-            font: `${cssVar('--font-size-xs')} ${cssVar('--font-mono')}`,
+            font: `${cssVar('--font-size-xs')} ${cssVar('--font-ui')}`,
           },
         ],
         cursor: { drag: { x: false, y: false } },
@@ -1164,7 +1160,8 @@ function AllEventsOverlayPanel({
                 || dd.sdHi.length !== dd.time.length) return
             const ctx = u.ctx
             ctx.save()
-            ctx.fillStyle = 'rgba(229, 115, 115, 0.18)'
+            ctx.fillStyle = cssVar('--trace-average')
+            ctx.globalAlpha = 0.18
             ctx.beginPath()
             let started = false
             for (let i = 0; i < dd.time.length; i++) {
@@ -1184,8 +1181,9 @@ function AllEventsOverlayPanel({
             }
             ctx.closePath()
             ctx.fill()
+            ctx.globalAlpha = 1
             // Most-Distant highlight — overdraw the currently selected
-            // event's trace in bright blue, on top of the gray stack.
+            // event's trace in the accent colour, on top of the gray stack.
             // Reading from refs keeps the plot from rebuilding when the
             // user steps through events; uPlot's draw hook re-fires on
             // redraw(), which we trigger via a useEffect below.
@@ -1193,7 +1191,7 @@ function AllEventsOverlayPanel({
             const cur = dataRef.current
             if (rIdx != null && cur && cur.traces[rIdx]) {
               const row = cur.traces[rIdx]
-              ctx.strokeStyle = '#42a5f5'
+              ctx.strokeStyle = cssVar('--accent')
               ctx.lineWidth = 2
               ctx.beginPath()
               let drawing = false
@@ -1218,7 +1216,7 @@ function AllEventsOverlayPanel({
       cancelAnimationFrame(frame)
       if (teardown) teardown()
     }
-  }, [displayData, alignMode])
+  }, [displayData, alignMode, themeKey])
 
   useEffect(() => {
     const el = containerRef.current
@@ -1282,8 +1280,8 @@ function AllEventsOverlayPanel({
           <span style={{ color: 'var(--text-muted)' }}>Align</span>
           <select value={alignMode}
             onChange={(e) => setAlignMode(e.target.value as 'peak' | 'foot')}>
-            <option value="peak">peak</option>
-            <option value="foot">foot</option>
+            <option value="peak">Peak</option>
+            <option value="foot">Foot</option>
           </select>
         </label>
         <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
@@ -1308,8 +1306,8 @@ function AllEventsOverlayPanel({
           <span style={{ color: 'var(--text-muted)' }}>Scale</span>
           <select value={scaleMode}
             onChange={(e) => setScaleMode(e.target.value as ScaleMode)}>
-            <option value="none">none</option>
-            <option value="amplitude">amp → 1</option>
+            <option value="none">None</option>
+            <option value="amplitude">Amp → 1</option>
             <option value="std">σ → 1</option>
           </select>
         </label>
@@ -1318,22 +1316,22 @@ function AllEventsOverlayPanel({
           <span style={{ color: 'var(--text-muted)' }}>Shift</span>
           <select value={shiftMode}
             onChange={(e) => setShiftMode(e.target.value as ShiftMode)}>
-            <option value="none">none</option>
-            <option value="demean">demean</option>
+            <option value="none">None</option>
+            <option value="demean">Demean</option>
             <option value="align">{alignMode}=0</option>
-            <option value="first">first=0</option>
+            <option value="first">First=0</option>
           </select>
         </label>
         {data && (
-          <span style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-            {data.nIncluded} / {entry?.events.length ?? 0} events
+          <span style={{ color: 'var(--text-muted)' }}>
+            <span className="num">{data.nIncluded} / {entry?.events.length ?? 0}</span> events
           </span>
         )}
-        {loading && <span style={{ color: 'var(--text-muted)' }}>loading…</span>}
-        {err && <span style={{ color: '#e57373' }}>⚠ {err}</span>}
+        {loading && <span style={{ color: 'var(--text-muted)' }}>Loading…</span>}
+        {err && <span style={{ color: 'var(--error)' }}>⚠ {err}</span>}
         {/* Most-Distant outlier curation. Steps through events sorted
             by L2 distance from the mean event (most-distant first).
-            Highlighted event is drawn in blue; Delete removes it and
+            Highlighted event is drawn in the accent colour; Delete removes it and
             the overlay refetches automatically. */}
         <span style={{
           marginLeft: 8, paddingLeft: 8,
@@ -1357,8 +1355,8 @@ function AllEventsOverlayPanel({
                 title="More distant">
                 ◀
               </button>
-              <span style={{
-                fontFamily: 'var(--font-mono)', minWidth: 90,
+              <span className="num" style={{
+                minWidth: 90,
                 textAlign: 'center',
               }}>
                 #{distantRank + 1} / {distances.length}
@@ -1380,7 +1378,8 @@ function AllEventsOverlayPanel({
                 disabled={highlightedRowIdx == null}
                 style={{
                   padding: '2px 8px',
-                  background: '#c62828', color: '#fff',
+                  background: 'var(--bg-error)', color: '#fff',
+                  borderColor: 'transparent',
                 }}
                 title="Delete this event from the analysis">
                 Del
@@ -1396,8 +1395,8 @@ function AllEventsOverlayPanel({
         </span>
         <span style={{ flex: 1 }} />
         <span style={{
-          color: 'var(--text-muted)', fontSize: 10, fontStyle: 'italic',
-        }}>scroll = zoom · drag = pan · dbl-click = reset</span>
+          color: 'var(--text-muted)', fontSize: 'var(--font-size-xs)', fontStyle: 'italic',
+        }}>Scroll = zoom · drag = pan · dbl-click = reset</span>
       </div>
       <div
         ref={containerRef}

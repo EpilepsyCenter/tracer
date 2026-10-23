@@ -250,7 +250,6 @@ All paths relative to `docs/`:
 - `screenshots/trace-viewer-right-click-menu.png`
 - `screenshots/trace-viewer-cursors.png`
 - `screenshots/cursor-panel-readout.png`
-- `screenshots/settings-popover-palettes-fonts.png`
 - `screenshots/settings-popover-trace-colors.png`
 - `screenshots/sidecar-json-excerpt.png`
 - `screenshots/cursor-window-overview.png`

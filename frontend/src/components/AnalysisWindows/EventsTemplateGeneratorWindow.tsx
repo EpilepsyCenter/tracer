@@ -6,7 +6,7 @@ import {
   CursorPositions,
   EventsTemplate,
 } from '../../stores/appStore'
-import { useThemeStore } from '../../stores/themeStore'
+import { useThemeStore, useThemeKey } from '../../stores/themeStore'
 import { NumInput } from '../common/NumInput'
 import { CoefficientStepper } from '../common/CoefficientStepper'
 import {
@@ -47,8 +47,8 @@ function channelsForSeries(fileInfo: FileInfo | null, group: number, series: num
   return fileInfo?.groups?.[group]?.series?.[series]?.channels ?? []
 }
 
-const CURSOR_COLOR = '#64b5f6'
-const FIT_COLOR = '#ffb74d'
+// CSS form for JSX; canvas code reads ``cssVar('--cursor-baseline')``.
+const CURSOR_COLOR = 'var(--cursor-baseline)'
 
 export function EventsTemplateGeneratorWindow({
   backendUrl, fileInfo, mainGroup, mainSeries, mainTrace, cursors,
@@ -416,14 +416,8 @@ export function EventsTemplateGeneratorWindow({
           borderRadius: 4, border: '1px solid var(--border)',
           overflow: 'auto',
         }}>
-          <div style={{
-            padding: 8, border: '1px solid var(--border)', borderRadius: 4,
-            background: 'var(--bg-primary)', display: 'flex', flexDirection: 'column', gap: 6,
-            fontSize: 'var(--font-size-label)',
-          }}>
-            <span style={{ fontWeight: 600, color: 'var(--text-muted)' }}>
-              Library
-            </span>
+          <div className="section-card">
+            <span className="section-card-title">Library</span>
             <select value={activeId ?? ''}
               onChange={(e) => e.target.value && selectEventsTemplate(e.target.value)}
               style={{ width: '100%' }}>
@@ -434,14 +428,10 @@ export function EventsTemplateGeneratorWindow({
             </select>
           </div>
 
-          <div style={{
-            padding: 8, border: '1px solid var(--border)', borderRadius: 4,
-            background: 'var(--bg-primary)', display: 'flex', flexDirection: 'column', gap: 6,
-            fontSize: 'var(--font-size-label)',
-          }}>
-            <span style={{ fontWeight: 600, color: 'var(--text-muted)' }}>Cursors (event region)</span>
-            <div style={{
-              fontFamily: 'var(--font-mono)', color: CURSOR_COLOR,
+          <div className="section-card">
+            <span className="section-card-title">Cursors (event region)</span>
+            <div className="num" style={{
+              color: CURSOR_COLOR,
               fontSize: 'var(--font-size-label)',
             }}>
               {cursors.baselineStart.toFixed(4)} → {cursors.baselineEnd.toFixed(4)} s
@@ -459,27 +449,27 @@ export function EventsTemplateGeneratorWindow({
               borderTop: '1px solid var(--border)',
               display: 'flex', flexDirection: 'column', gap: 4,
             }}>
-              <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>
-                Trim Left Edge
+              <span style={{ color: 'var(--text-muted)', fontWeight: 600, fontSize: 'var(--font-size-xs)' }}>
+                Trim left edge
               </span>
               <div style={{ display: 'flex', gap: 3 }}>
                 <button className="btn" onClick={() => trimLeftEdge(-1)}
-                  style={{ flex: 1, padding: '2px 0', fontSize: 11 }}
+                  style={{ flex: 1, padding: '2px 0', fontSize: 'var(--font-size-xs)' }}
                   title="Shift region start 1 ms earlier">
                   ← 1 ms
                 </button>
                 <button className="btn" onClick={() => trimLeftEdge(-0.1)}
-                  style={{ flex: 1, padding: '2px 0', fontSize: 11 }}
+                  style={{ flex: 1, padding: '2px 0', fontSize: 'var(--font-size-xs)' }}
                   title="Shift region start 0.1 ms earlier">
                   ← 0.1
                 </button>
                 <button className="btn" onClick={() => trimLeftEdge(0.1)}
-                  style={{ flex: 1, padding: '2px 0', fontSize: 11 }}
+                  style={{ flex: 1, padding: '2px 0', fontSize: 'var(--font-size-xs)' }}
                   title="Shift region start 0.1 ms later">
                   0.1 →
                 </button>
                 <button className="btn" onClick={() => trimLeftEdge(1)}
-                  style={{ flex: 1, padding: '2px 0', fontSize: 11 }}
+                  style={{ flex: 1, padding: '2px 0', fontSize: 'var(--font-size-xs)' }}
                   title="Shift region start 1 ms later">
                   1 ms →
                 </button>
@@ -492,19 +482,12 @@ export function EventsTemplateGeneratorWindow({
               user can edit BEFORE or AFTER fitting. Values outside
               the slider range can still be typed into the input. */}
           {activeTemplate && preview && (
-            <div style={{
-              padding: 8, border: '1px solid var(--border)', borderRadius: 4,
-              background: 'var(--bg-primary)', display: 'flex', flexDirection: 'column', gap: 8,
-              fontSize: 'var(--font-size-label)',
-            }}>
-              <span style={{
-                fontWeight: 600, color: 'var(--text-muted)',
-                display: 'flex', alignItems: 'center', gap: 6,
-              }}>
+            <div className="section-card" style={{ gap: 8 }}>
+              <span className="section-card-title">
                 Coefficients
                 {isDirty && (
                   <span style={{
-                    fontSize: 10, color: '#ffb74d',
+                    fontSize: 'var(--font-size-xs)', color: 'var(--warning)',
                     fontStyle: 'italic', fontWeight: 400,
                   }}>· modified</span>
                 )}
@@ -563,12 +546,8 @@ export function EventsTemplateGeneratorWindow({
             </div>
           )}
 
-          <div style={{
-            padding: 8, border: '1px solid var(--border)', borderRadius: 4,
-            background: 'var(--bg-primary)', display: 'flex', flexDirection: 'column', gap: 6,
-            fontSize: 'var(--font-size-label)',
-          }}>
-            <span style={{ fontWeight: 600, color: 'var(--text-muted)' }}>Fit</span>
+          <div className="section-card">
+            <span className="section-card-title">Fit</span>
             <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={{ color: 'var(--text-muted)', flex: 1 }}>Direction</span>
               <select value={direction}
@@ -618,9 +597,8 @@ export function EventsTemplateGeneratorWindow({
             {lastFitR2 != null && (
               <span style={{
                 fontSize: 'var(--font-size-label)', color: 'var(--text-muted)',
-                fontFamily: 'var(--font-mono)',
               }}>
-                Last fit R² = {lastFitR2.toFixed(3)}
+                Last fit R² = <span className="num">{lastFitR2.toFixed(3)}</span>
               </span>
             )}
           </div>
@@ -629,20 +607,14 @@ export function EventsTemplateGeneratorWindow({
               entry in the library. User can keep iterating on the
               current template and occasionally freeze a snapshot. */}
           {activeTemplate && (
-            <div style={{
-              padding: 8, border: '1px solid var(--border)', borderRadius: 4,
-              background: 'var(--bg-primary)', display: 'flex', flexDirection: 'column', gap: 6,
-              fontSize: 'var(--font-size-label)',
-            }}>
-              <span style={{ fontWeight: 600, color: 'var(--text-muted)' }}>
-                Save as new
-              </span>
+            <div className="section-card">
+              <span className="section-card-title">Save as new</span>
               <div style={{ display: 'flex', gap: 4 }}>
-                <input type="text" placeholder="template name"
+                <input type="text" placeholder="Template name"
                   value={saveName}
                   onChange={(e) => setSaveName(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') onSaveAs(saveName) }}
-                  style={{ flex: 1, fontSize: 'var(--font-size-label)' }} />
+                  style={{ flex: 1 }} />
                 <button className="btn" disabled={!saveName.trim()}
                   onClick={() => onSaveAs(saveName)}
                   style={{ padding: '2px 10px' }}>
@@ -650,33 +622,26 @@ export function EventsTemplateGeneratorWindow({
                 </button>
               </div>
               {Object.keys(eventsTemplates.entries).length > 1 && (
-                <button className="btn"
+                <button className="btn btn-sm"
                   onClick={() => {
                     if (!activeTemplate) return
                     if (confirm(`Delete template "${activeTemplate.name}"?`)) {
                       useAppStore.getState().deleteEventsTemplate(activeTemplate.id)
                     }
                   }}
-                  style={{ padding: '1px 8px',
-                    fontSize: 'var(--font-size-label)',
-                    alignSelf: 'flex-start' }}>
+                  style={{ alignSelf: 'flex-start' }}>
                   Delete current
                 </button>
               )}
             </div>
           )}
           {err && (
-            <div style={{
-              padding: '6px 10px',
-              background: 'var(--bg-error, #5c1b1b)',
-              color: '#fff', borderRadius: 3,
-              fontSize: 'var(--font-size-xs)',
+            <div className="notice notice-error" style={{
               display: 'flex', alignItems: 'center', gap: 8,
             }}>
               <span style={{ flex: 1 }}>⚠ {err}</span>
-              <button className="btn" onClick={() => setErr(null)}
-                style={{ padding: '1px 6px', fontSize: 'var(--font-size-label)' }}>
-                dismiss
+              <button className="btn btn-sm" onClick={() => setErr(null)}>
+                Dismiss
               </button>
             </div>
           )}
@@ -697,7 +662,7 @@ export function EventsTemplateGeneratorWindow({
             shiftViewport={shiftViewport} goHome={goHome} goEnd={goEnd}
             filterEnabled={filterEnabled} filterType={filterType}
             filterLow={filterLow} filterHigh={filterHigh} filterOrder={filterOrder}
-            // Black curve on the viewer renders from PREVIEW
+            // Template curve on the viewer renders from PREVIEW
             // coefficients so slider tweaks update in real time
             // without committing to the library until the user
             // presses Apply / Save As.
@@ -754,6 +719,7 @@ function TemplateGeneratorViewer({
   activeTemplate: EventsTemplate | null
   theme: string; fontSize: number
 }) {
+  const themeKey = useThemeKey()
   void theme; void fontSize
   const containerRef = useRef<HTMLDivElement>(null)
   const plotRef = useRef<uPlot | null>(null)
@@ -818,12 +784,13 @@ function TemplateGeneratorViewer({
     const a = u.valToPos(c.baselineStart, 'x', true)
     const b = u.valToPos(c.baselineEnd, 'x', true)
     if (isFinite(a) && isFinite(b)) {
+      const cursorColor = cssVar('--cursor-baseline')
       ctx.save()
       ctx.globalAlpha = 0.14
-      ctx.fillStyle = CURSOR_COLOR
+      ctx.fillStyle = cursorColor
       ctx.fillRect(Math.min(a, b), u.bbox.top, Math.abs(b - a), u.bbox.height)
       ctx.globalAlpha = 0.85
-      ctx.strokeStyle = CURSOR_COLOR
+      ctx.strokeStyle = cursorColor
       ctx.lineWidth = 1.5 * dpr
       ctx.beginPath()
       ctx.moveTo(a, u.bbox.top); ctx.lineTo(a, u.bbox.top + u.bbox.height)
@@ -836,7 +803,8 @@ function TemplateGeneratorViewer({
     // coefficients starting at the cursor region's left edge. Updates
     // instantly when the user drags the coefficient sliders, so they
     // can see whether the template matches the selected event before
-    // committing to a new fit. Uses black to match EE's convention.
+    // committing to a new fit. Drawn in the primary text colour (black
+    // in the light theme, matching EE's convention).
     const tpl = templateRef.current
     if (tpl) {
       const tStart = c.baselineStart
@@ -844,7 +812,7 @@ function TemplateGeneratorViewer({
       const width = Math.max(0.001, tEnd - tStart)
       const nSamples = Math.max(16, Math.floor(width * 5000))
       ctx.save()
-      ctx.strokeStyle = '#000'
+      ctx.strokeStyle = cssVar('--text-primary')
       ctx.lineWidth = 1.5 * dpr
       ctx.setLineDash([])
       ctx.beginPath()
@@ -865,7 +833,7 @@ function TemplateGeneratorViewer({
 
     // (No separate "fit overlay" curve — when the user clicks "Fit
     // biexponential", the active template's coefficients update
-    // directly, so the black template curve above IS the fit result.
+    // directly, so the template curve above IS the fit result.
     // This removes the two-curves confusion from earlier versions.)
   }, [])
 
@@ -917,13 +885,13 @@ function TemplateGeneratorViewer({
             grid: { stroke: cssVar('--chart-grid'), width: 1 },
             ticks: { stroke: cssVar('--chart-tick'), width: 1 },
             label: 'Time (s)', labelSize: 14,
-            font: `${cssVar('--font-size-xs')} ${cssVar('--font-mono')}`,
+            font: `${cssVar('--font-size-xs')} ${cssVar('--font-ui')}`,
           },
           { stroke: cssVar('--chart-axis'),
             grid: { stroke: cssVar('--chart-grid'), width: 1 },
             ticks: { stroke: cssVar('--chart-tick'), width: 1 },
             size: 55,
-            font: `${cssVar('--font-size-xs')} ${cssVar('--font-mono')}`,
+            font: `${cssVar('--font-size-xs')} ${cssVar('--font-ui')}`,
           },
         ],
         cursor: { drag: { x: false, y: false } },
@@ -1079,7 +1047,7 @@ function TemplateGeneratorViewer({
       }
     })
     return () => cancelAnimationFrame(frame)
-  }, [data, drawOverlays, updateCursors, setViewport])
+  }, [data, drawOverlays, updateCursors, setViewport, themeKey])
 
   useEffect(() => {
     const el = containerRef.current
@@ -1111,14 +1079,11 @@ function TemplateGeneratorViewer({
         shiftViewport={shiftViewport}
         goHome={goHome} goEnd={goEnd}
       />
-      <div style={{
-        padding: '3px 8px', fontSize: 'var(--font-size-xs)',
-        color: 'var(--text-muted)', background: 'var(--bg-secondary)',
-        flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8,
-        borderBottom: '1px solid var(--border)',
+      <div className="viewer-header" style={{
+        color: 'var(--text-muted)', flexShrink: 0,
       }}>
         <span style={{ fontStyle: 'italic' }}>
-          Drag the blue cursor band over a clean event, then click "Fit biexponential".
+          Drag the cursor band over a clean event, then click "Fit biexponential".
         </span>
       </div>
       <div
@@ -1130,11 +1095,9 @@ function TemplateGeneratorViewer({
       </div>
       <ViewportSlider viewport={viewport} sweepDuration={sweepDurationS} setViewport={setViewport} />
       {err && (
-        <div style={{
+        <div className="notice notice-error" style={{
           position: 'absolute', top: 30, left: 10,
-          padding: '4px 8px', background: 'rgba(92, 27, 27, 0.9)',
-          color: '#fff', borderRadius: 3,
-          fontSize: 'var(--font-size-xs)',
+          background: 'color-mix(in oklab, var(--error) 12%, var(--bg-field))',
         }}>⚠ {err}</div>
       )}
     </div>

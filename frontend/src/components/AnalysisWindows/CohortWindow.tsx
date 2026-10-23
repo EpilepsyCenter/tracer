@@ -1519,17 +1519,15 @@ export function CohortWindow({ backendUrl }: { backendUrl: string }) {
         <button
           className="btn"
           onClick={pickFolder}
-          style={{ padding: '4px 10px' }}
         >Pick…</button>
         <span style={{
           flex: 1, minWidth: 200,
-          fontFamily: 'var(--font-mono)',
           fontSize: 'var(--font-size-sm)',
           color: folder ? 'var(--text-primary)' : 'var(--text-muted)',
           fontStyle: folder ? 'normal' : 'italic',
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         }} title={folder ?? ''}>
-          {folder ?? 'no folder picked'}
+          {folder ?? 'No folder picked'}
         </span>
 
         <span style={{ fontWeight: 600, marginLeft: 12 }}>Analysis:</span>
@@ -1537,15 +1535,7 @@ export function CohortWindow({ backendUrl }: { backendUrl: string }) {
           value={analysisType}
           onChange={(e) => setAnalysisType(e.target.value)}
           disabled={!analyses || analyses.analyses.length === 0}
-          style={{
-            padding: '4px 8px',
-            background: 'var(--bg-primary)',
-            color: 'var(--text-primary)',
-            border: '1px solid var(--border)',
-            borderRadius: 3,
-            fontSize: 'var(--font-size-base)',
-            minWidth: 200,
-          }}
+          style={{ minWidth: 200 }}
         >
           {analyses?.analyses.map((a) => (
             <option key={a} value={a}>
@@ -1555,15 +1545,10 @@ export function CohortWindow({ backendUrl }: { backendUrl: string }) {
         </select>
 
         <button
-          className="btn"
+          className="btn btn-primary"
           onClick={runAggregate}
           disabled={!folder || aggLoading}
-          style={{
-            padding: '4px 16px', fontWeight: 600,
-            background: 'var(--accent, #3b82f6)', color: '#fff',
-            border: 'none',
-            opacity: !folder || aggLoading ? 0.6 : 1,
-          }}
+          style={{ padding: '0 16px' }}
         >{aggLoading ? 'Aggregating…' : 'Aggregate'}</button>
 
         {/* Session file — Save / Save As / Open. Sits at the
@@ -1576,20 +1561,17 @@ export function CohortWindow({ backendUrl }: { backendUrl: string }) {
           marginLeft: 'auto',
           display: 'flex', gap: 6, alignItems: 'center',
           fontSize: 'var(--font-size-xs)',
-          fontFamily: 'var(--font-mono)',
         }}>
           <button
             className="btn"
             onClick={openSession}
             disabled={sessionLoading}
-            style={{ padding: '4px 10px' }}
             title="Open a saved cohort session (.tracer_cohort) — restores folder, wizard state, selected metrics, stats, and graph styling."
           >Open…</button>
           <button
             className="btn"
             onClick={() => { void saveSession() }}
             disabled={sessionLoading}
-            style={{ padding: '4px 10px' }}
             title={sessionPath
               ? `Save changes to ${sessionPath.split(/[/\\]/).pop()}`
               : 'Save the current session as a .tracer_cohort file.'}
@@ -1601,8 +1583,7 @@ export function CohortWindow({ backendUrl }: { backendUrl: string }) {
               className="btn"
               onClick={() => { void saveSession(null) }}
               disabled={sessionLoading}
-              style={{ padding: '4px 10px' }}
-              title="Save the current session to a new file."
+                title="Save the current session to a new file."
             >Save As…</button>
           )}
           {sessionPath && (
@@ -1615,7 +1596,7 @@ export function CohortWindow({ backendUrl }: { backendUrl: string }) {
             </span>
           )}
           {sessionError && (
-            <span style={{ color: '#ef4444' }}>{sessionError}</span>
+            <span style={{ color: 'var(--error)' }}>{sessionError}</span>
           )}
         </div>
       </div>
@@ -1630,15 +1611,7 @@ export function CohortWindow({ backendUrl }: { backendUrl: string }) {
       )}
       {aggError && (
         <div style={{ padding: '12px 14px', flexShrink: 0 }}>
-          <div style={{
-            padding: '10px 14px',
-            background: 'rgba(239, 68, 68, 0.12)',
-            border: '1px solid #ef4444',
-            borderRadius: 4,
-            color: '#ef4444',
-            fontFamily: 'var(--font-mono)',
-            fontSize: 'var(--font-size-sm)',
-          }}>{aggError}</div>
+          <div className="notice notice-error">{aggError}</div>
         </div>
       )}
 
@@ -1823,7 +1796,7 @@ function Wizard(props: {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {/* Step 1: comparison shape */}
       <Section title="1. Comparison shape" hint={
         comparisonShape === 'within'
@@ -1885,16 +1858,7 @@ function Wizard(props: {
             <select
               value={seriesRole}
               onChange={(e) => setSeriesRole(e.target.value)}
-              style={{
-                padding: '4px 8px',
-                background: 'var(--bg-primary)',
-                color: 'var(--text-primary)',
-                border: '1px solid var(--border)',
-                borderRadius: 3,
-                fontSize: 'var(--font-size-base)',
-                fontFamily: 'var(--font-mono)',
-                width: '100%',
-              }}
+              style={{ width: '100%' }}
             >
               <option value="">{'<any> — average across all series in each file'}</option>
               {seriesTagPool.map((t) => (
@@ -1936,15 +1900,7 @@ function Wizard(props: {
         <select
           value={nUnit}
           onChange={(e) => setNUnit(e.target.value as NUnit)}
-          style={{
-            padding: '4px 8px',
-            background: 'var(--bg-primary)',
-            color: 'var(--text-primary)',
-            border: '1px solid var(--border)',
-            borderRadius: 3,
-            fontSize: 'var(--font-size-base)',
-            width: '100%',
-          }}
+          style={{ width: '100%' }}
         >
           {(Object.keys(N_UNIT_LABELS) as NUnit[]).map((u) => (
             <option key={u} value={u}>{N_UNIT_LABELS[u]}</option>
@@ -1989,16 +1945,13 @@ function Section({ title, hint, children }: {
   title: string; hint?: string; children: React.ReactNode
 }) {
   return (
-    <div>
-      <div style={{
-        fontSize: 'var(--font-size-base)', fontWeight: 600,
-        marginBottom: 4,
-      }}>{title}</div>
+    <div className="section-card">
+      <div className="section-card-title">{title}</div>
       {hint && (
         <div style={{
           fontSize: 'var(--font-size-xs)',
           color: 'var(--text-muted)',
-          marginBottom: 8,
+          marginBottom: 2,
           lineHeight: 1.4,
         }}>{hint}</div>
       )}
@@ -2020,7 +1973,6 @@ function RadioRow<T extends string>(props: {
           key={o.value}
           style={{
             display: 'flex', alignItems: 'center', gap: 6,
-            cursor: 'pointer',
             fontSize: 'var(--font-size-sm)',
           }}
         >
@@ -2053,14 +2005,12 @@ function TagToggleList({ pool, selected, onToggle }: {
             style={{
               padding: '3px 9px',
               borderRadius: 12,
-              border: `1px solid ${active ? 'var(--accent, #3b82f6)' : 'var(--border)'}`,
+              border: `1px solid ${active ? 'var(--accent)' : 'var(--border-control)'}`,
               background: active
-                ? 'var(--accent-dim, rgba(100,150,200,0.25))'
-                : 'var(--bg-primary)',
+                ? 'var(--accent-muted)'
+                : 'var(--bg-field)',
               color: 'var(--text-primary)',
-              cursor: 'pointer',
               fontSize: 'var(--font-size-sm)',
-              fontFamily: 'var(--font-mono)',
               fontWeight: active ? 600 : 400,
             }}
           >{t}</button>
@@ -2114,8 +2064,8 @@ function DesignPreview({
 }) {
   return (
     <div style={{
-      border: '1px solid var(--border)', borderRadius: 4,
-      background: 'var(--bg-primary)',
+      border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
+      background: 'var(--bg-field)',
       padding: 10,
       fontSize: 'var(--font-size-sm)',
     }}>
@@ -2132,15 +2082,14 @@ function DesignPreview({
           display: 'grid',
           gridTemplateColumns: '1fr auto',
           gap: '2px 12px',
-          fontFamily: 'var(--font-mono)',
           fontSize: 'var(--font-size-xs)',
           marginBottom: 8,
         }}>
           {design.groups.map((g) => (
             <React.Fragment key={g.tag}>
               <span>{g.tag}</span>
-              <span style={{
-                color: g.n < 2 ? '#ef4444' : 'var(--text-primary)',
+              <span className="num" style={{
+                color: g.n < 2 ? 'var(--error)' : 'var(--text-primary)',
                 fontWeight: g.n < 2 ? 700 : 400,
               }}>n = {g.n}</span>
             </React.Fragment>
@@ -2155,8 +2104,8 @@ function DesignPreview({
       {design.ready && (
         <div style={{
           padding: '6px 8px',
-          background: 'var(--bg-tertiary, rgba(120,120,120,0.10))',
-          borderRadius: 3,
+          background: 'var(--bg-tertiary)',
+          borderRadius: 'var(--radius-md)',
           fontSize: 'var(--font-size-xs)',
           marginBottom: 6,
         }}>
@@ -2164,11 +2113,11 @@ function DesignPreview({
             <>
               <div style={{ marginBottom: 2 }}>
                 <span style={{ color: 'var(--text-muted)' }}>If normal: </span>
-                <span style={{ fontFamily: 'var(--font-mono)' }}>{design.test_normal}</span>
+                <span>{design.test_normal}</span>
               </div>
               <div>
                 <span style={{ color: 'var(--text-muted)' }}>If non-normal: </span>
-                <span style={{ fontFamily: 'var(--font-mono)' }}>{design.test_nonparam}</span>
+                <span>{design.test_nonparam}</span>
               </div>
               <div style={{
                 color: 'var(--text-muted)',
@@ -2182,7 +2131,7 @@ function DesignPreview({
             <>
               <div>
                 <span style={{ color: 'var(--text-muted)' }}>Forced: </span>
-                <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
+                <span style={{ fontWeight: 600 }}>
                   {design.test_chosen ?? '—'}
                 </span>
               </div>
@@ -2223,7 +2172,6 @@ function DesignPreview({
                 key={value}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 6,
-                  cursor: 'pointer',
                   fontSize: 'var(--font-size-xs)',
                 }}
               >
@@ -2268,7 +2216,6 @@ function DesignPreview({
                 key={value}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 6,
-                  cursor: 'pointer',
                   fontSize: 'var(--font-size-xs)',
                 }}
               >
@@ -2287,7 +2234,6 @@ function DesignPreview({
             {distMode === 'pooled_ks' && design.groups.length > 2 && (
               <label style={{
                 display: 'flex', alignItems: 'center', gap: 6,
-                cursor: 'pointer',
                 fontSize: 'var(--font-size-xs)',
                 marginTop: 4,
                 marginLeft: 16,
@@ -2314,10 +2260,7 @@ function DesignPreview({
                 <select
                   value={distReferenceTag || design.groups[0].tag}
                   onChange={(e) => setDistReferenceTag(e.target.value)}
-                  style={{
-                    fontSize: 'var(--font-size-xs)',
-                    fontFamily: 'var(--font-mono)',
-                  }}
+                  style={{ fontSize: 'var(--font-size-xs)' }}
                 >
                   {design.groups.map((g) => (
                     <option key={g.tag} value={g.tag}>{g.tag}</option>
@@ -2331,14 +2274,9 @@ function DesignPreview({
 
       {/* Unassigned cells warning */}
       {design.unassigned.length > 0 && (
-        <div style={{
-          padding: '6px 8px',
-          background: 'rgba(234, 179, 8, 0.12)',
-          border: '1px solid rgba(234, 179, 8, 0.4)',
-          borderRadius: 3,
+        <div className="notice notice-warning" style={{
           fontSize: 'var(--font-size-xs)',
           marginBottom: 6,
-          color: '#a16207',
         }}>
           <div style={{ fontWeight: 600 }}>
             {design.unassigned.length} cell{design.unassigned.length === 1 ? '' : 's'} excluded
@@ -2355,14 +2293,10 @@ function DesignPreview({
       {design.missingAnimalId.length > 0 && (
         <div
           title={design.missingAnimalId.map((c) => c.file_name).join('\n')}
+          className="notice notice-error"
           style={{
-            padding: '6px 8px',
-            background: 'rgba(239, 68, 68, 0.12)',
-            border: '1px solid rgba(239, 68, 68, 0.4)',
-            borderRadius: 3,
             fontSize: 'var(--font-size-xs)',
             marginBottom: 6,
-            color: '#b91c1c',
             cursor: 'help',
           }}
         >
@@ -2401,30 +2335,19 @@ function DesignPreview({
           marginTop: 8,
           padding: '6px 8px',
           border: '1px solid var(--border)',
-          borderRadius: 3,
-          background: 'var(--bg-tertiary, rgba(60,90,130,0.06))',
+          borderRadius: 'var(--radius-md)',
+          background: 'var(--bg-secondary)',
         }}>
           <div style={{
             fontSize: 'var(--font-size-xs)',
             fontWeight: 600,
             color: 'var(--text-muted)',
             marginBottom: 4,
-            textTransform: 'uppercase',
-            letterSpacing: '0.04em',
           }}>Events per cell</div>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
             <select
               value={subsampleMode}
               onChange={(e) => setSubsampleMode(e.target.value as SubsampleMode)}
-              style={{
-                padding: '2px 6px',
-                fontSize: 'var(--font-size-xs)',
-                fontFamily: 'var(--font-mono)',
-                background: 'var(--bg-primary)',
-                color: 'var(--text-primary)',
-                border: '1px solid var(--border)',
-                borderRadius: 2,
-              }}
             >
               <option value="all">All events</option>
               <option value="first">First N</option>
@@ -2441,23 +2364,13 @@ function DesignPreview({
                   const v = parseInt(e.target.value, 10)
                   if (Number.isFinite(v) && v > 0) setSubsampleN(v)
                 }}
-                style={{
-                  width: 70,
-                  padding: '2px 6px',
-                  fontSize: 'var(--font-size-xs)',
-                  fontFamily: 'var(--font-mono)',
-                  background: 'var(--bg-primary)',
-                  color: 'var(--text-primary)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 2,
-                }}
+                style={{ width: 70 }}
                 title="N events to keep per cell"
               />
             )}
             <span style={{
               color: 'var(--text-muted)',
               fontSize: 'var(--font-size-xs)',
-              fontFamily: 'var(--font-mono)',
             }}>
               {subsampleMode === 'auto' && `auto = ${autoNHint} (smallest cell's count)`}
               {subsampleMode === 'all' && 'all events kept'}
@@ -2472,7 +2385,7 @@ function DesignPreview({
       {/* Run-stats button. Live-wired to /api/cohort/run_stats —
           one POST per selected metric, in parallel. */}
       <button
-        className="btn"
+        className={design.ready ? 'btn btn-primary btn-lg' : 'btn btn-lg'}
         onClick={onRunStats}
         disabled={!design.ready || statsLoading || selectedMetrics.length === 0}
         title={!design.ready
@@ -2482,40 +2395,23 @@ function DesignPreview({
           : `Run the inferred test on ${selectedMetrics.length} metric${selectedMetrics.length === 1 ? '' : 's'}.`}
         style={{
           width: '100%', marginTop: 8,
-          padding: '6px 0',
           fontSize: 'var(--font-size-sm)', fontWeight: 600,
-          background: design.ready ? 'var(--accent, #3b82f6)' : undefined,
-          color: design.ready ? '#fff' : undefined,
-          border: design.ready ? 'none' : undefined,
-          opacity: design.ready && !statsLoading && selectedMetrics.length > 0 ? 1 : 0.55,
-          cursor: design.ready && !statsLoading && selectedMetrics.length > 0 ? 'pointer' : 'not-allowed',
         }}
       >{statsLoading
           ? `Running… (${selectedMetrics.length})`
           : `Run stats on ${selectedMetrics.length} metric${selectedMetrics.length === 1 ? '' : 's'}`}</button>
 
       {statsError && (
-        <div style={{
+        <div className="notice notice-error" style={{
           marginTop: 8,
-          padding: '6px 8px',
-          background: 'rgba(239, 68, 68, 0.12)',
-          border: '1px solid #ef4444',
-          borderRadius: 3,
-          color: '#ef4444',
           fontSize: 'var(--font-size-xs)',
-          fontFamily: 'var(--font-mono)',
         }}>{statsError}</div>
       )}
 
       {hasResults && (
-        <div style={{
+        <div className="notice notice-info" style={{
           marginTop: 8,
-          padding: '6px 8px',
-          background: 'var(--bg-tertiary, rgba(60,90,130,0.10))',
-          border: '1px solid var(--border)',
-          borderRadius: 3,
           fontSize: 'var(--font-size-xs)',
-          color: 'var(--text-muted)',
           fontStyle: 'italic',
         }}>
           Results panel on the right. Edit the design or metrics above
@@ -2562,29 +2458,26 @@ function MetricMultiSelect({
           fontWeight: 600, flex: 1,
         }}>Metrics to test ({selected.length}/{options.length}):</span>
         <button
-          className="btn"
+          className="btn btn-sm"
           onClick={() => setSelected(options)}
           disabled={disabled || selected.length === options.length}
-          style={{ padding: '1px 6px', fontSize: 10 }}
         >All</button>
         <button
-          className="btn"
+          className="btn btn-sm"
           onClick={() => setSelected([])}
           disabled={disabled || selected.length === 0}
-          style={{ padding: '1px 6px', fontSize: 10 }}
         >None</button>
         <button
-          className="btn"
+          className="btn btn-sm"
           onClick={() => setSelected(defaults.filter((m) => options.includes(m)))}
           disabled={disabled}
           title="Re-check the curated default metrics for this analysis type"
-          style={{ padding: '1px 6px', fontSize: 10 }}
         >Defaults</button>
       </div>
       <div style={{
-        border: '1px solid var(--border)',
-        borderRadius: 3,
-        background: 'var(--bg-primary)',
+        border: '1px solid var(--border-control)',
+        borderRadius: 'var(--radius)',
+        background: 'var(--bg-field)',
         maxHeight: 180,
         overflowY: 'auto',
       }}>
@@ -2597,8 +2490,6 @@ function MetricMultiSelect({
               style={{
                 display: 'flex', alignItems: 'center', gap: 6,
                 padding: '3px 6px',
-                cursor: disabled ? 'default' : 'pointer',
-                fontFamily: 'var(--font-mono)',
                 fontSize: 'var(--font-size-xs)',
                 opacity: disabled ? 0.6 : 1,
               }}
@@ -2615,8 +2506,7 @@ function MetricMultiSelect({
               }}>{m}</span>
               {isDefault && (
                 <span style={{
-                  color: 'var(--text-muted)', fontSize: '0.85em',
-                  fontFamily: 'var(--font-sans, inherit)',
+                  color: 'var(--text-muted)', fontSize: 'var(--font-size-xs)',
                   fontStyle: 'italic',
                 }}>default</span>
               )}
@@ -2665,29 +2555,12 @@ function StatsResultsPanel({
             graphs and stats — best for visual exploration. ``table``
             is a compact tabular summary — best for scanning many
             metrics at once and copy-paste into a manuscript. */}
-        <div style={{
-          display: 'inline-flex',
-          marginLeft: 12,
-          border: '1px solid var(--border)',
-          borderRadius: 3,
-          overflow: 'hidden',
-          fontSize: 'var(--font-size-xs)',
-          fontFamily: 'var(--font-mono)',
-        }}>
+        <div className="segmented" style={{ marginLeft: 12 }}>
           {(['cards', 'table'] as const).map((m) => (
             <button
               key={m}
               onClick={() => setViewMode(m)}
-              className="btn"
-              style={{
-                padding: '2px 10px',
-                borderRadius: 0,
-                border: 'none',
-                background: viewMode === m
-                  ? 'var(--accent, #3b82f6)'
-                  : 'transparent',
-                color: viewMode === m ? '#fff' : 'var(--text-primary)',
-              }}
+              className={viewMode === m ? 'active' : undefined}
               title={m === 'cards'
                 ? 'Visual cards with inline graphs (default)'
                 : 'Compact summary table — sortable, copyable'}
@@ -2697,11 +2570,7 @@ function StatsResultsPanel({
         <button
           className="btn"
           onClick={onClear}
-          style={{
-            marginLeft: 'auto',
-            padding: '2px 8px',
-            fontSize: 'var(--font-size-xs)',
-          }}
+          style={{ marginLeft: 'auto' }}
         >Clear</button>
       </div>
       {viewMode === 'cards' ? (
@@ -2836,9 +2705,9 @@ function StatsResult({ metric, kind, result, graph, backendUrl, themeName,
   return (
     <div style={{
       padding: '8px 10px',
-      border: `1px solid ${statsError || graphError ? '#ef4444' : 'var(--accent, #3b82f6)'}`,
-      borderRadius: 3,
-      background: 'var(--bg-tertiary, rgba(60,90,130,0.10))',
+      border: `1px solid ${statsError || graphError ? 'var(--error)' : 'var(--border)'}`,
+      borderRadius: 'var(--radius-lg)',
+      background: 'var(--bg-secondary)',
       fontSize: 'var(--font-size-xs)',
     }}>
       {/* Metric name as the card title; kind tag in muted small. */}
@@ -2848,29 +2717,22 @@ function StatsResult({ metric, kind, result, graph, backendUrl, themeName,
         borderBottom: '1px solid var(--border)',
       }}>
         <span style={{
-          fontWeight: 700,
-          fontFamily: 'var(--font-mono)',
+          fontWeight: 600,
           fontSize: 'var(--font-size-sm)',
           color: 'var(--text-primary)',
         }}>{metric}</span>
         {kind && (
           <span style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: '0.85em',
+            fontSize: 'var(--font-size-xs)',
             color: 'var(--text-muted)',
           }}>· {kind}</span>
         )}
         {canOpenModal && (
           <button
-            className="btn"
+            className="btn btn-sm"
             onClick={() => setModalOpen(true)}
             title="Open in fullscreen modal — adjust axes, labels, colours, and export."
-            style={{
-              marginLeft: 'auto',
-              padding: '1px 6px',
-              fontSize: '0.85em',
-              fontFamily: 'var(--font-mono)',
-            }}
+            style={{ marginLeft: 'auto' }}
           >Expand</button>
         )}
       </div>
@@ -2906,8 +2768,7 @@ function StatsResult({ metric, kind, result, graph, backendUrl, themeName,
       {graphError && (
         <div style={{
           marginBottom: 6,
-          color: '#ef4444',
-          fontFamily: 'var(--font-mono)',
+          color: 'var(--error)',
         }}>Graph: {graphError}</div>
       )}
 
@@ -2915,39 +2776,37 @@ function StatsResult({ metric, kind, result, graph, backendUrl, themeName,
           timeseries metrics show graph-only cards. */}
       {statsError ? (
         <div style={{
-          color: '#ef4444',
-          fontFamily: 'var(--font-mono)',
+          color: 'var(--error)',
         }}>{statsError}</div>
       ) : result?.test ? (
         <>
           <div style={{
             fontWeight: 600,
-            fontFamily: 'var(--font-mono)',
             marginBottom: 4,
             color: 'var(--text-muted)',
           }}>{result.test}</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '2px 10px', fontFamily: 'var(--font-mono)' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '2px 10px' }}>
             {result.statistic != null && (
               <>
                 <span style={{ color: 'var(--text-muted)' }}>{result.statistic_label}:</span>
-                <span>{Number(result.statistic).toFixed(3)}{result.df != null ? ` (df=${Number(result.df).toFixed(1)})` : ''}</span>
+                <span className="num">{Number(result.statistic).toFixed(3)}{result.df != null ? ` (df=${Number(result.df).toFixed(1)})` : ''}</span>
               </>
             )}
             <span style={{ color: 'var(--text-muted)' }}>p:</span>
-            <span style={{ fontWeight: 700, color: result.p < 0.05 ? '#22c55e' : 'var(--text-primary)' }}>
+            <span className="num" style={{ fontWeight: 700, color: result.p < 0.05 ? 'var(--success)' : 'var(--text-primary)' }}>
               {pStr}
             </span>
             {result.effect_size != null && (
               <>
                 <span style={{ color: 'var(--text-muted)' }}>{result.effect_size_label}:</span>
-                <span>{Number(result.effect_size).toFixed(3)}</span>
+                <span className="num">{Number(result.effect_size).toFixed(3)}</span>
               </>
             )}
           </div>
           {/* Per-group descriptives + Shapiro-Wilk normality. Shown
               unconditionally so users overriding to parametric still
               see the verdict. n<3 → 'no Shapiro'. */}
-          <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 3, fontFamily: 'var(--font-mono)' }}>
+          <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 3 }}>
             {Object.entries(result.descriptives ?? {}).map(([tag, d]: [string, any]) => {
               const norm = result.normality?.[tag]
               const shapiroLabel = norm
@@ -2959,7 +2818,7 @@ function StatsResult({ metric, kind, result, graph, backendUrl, themeName,
                 <div key={tag}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                     <span>{tag}</span>
-                    <span style={{ color: 'var(--text-muted)' }}>
+                    <span className="num" style={{ color: 'var(--text-muted)' }}>
                       n={d.n}{d.mean != null ? ` · ${Number(d.mean).toPrecision(3)}` : ''}
                       {d.sd != null ? ` ± ${Number(d.sd).toPrecision(3)}` : ''}
                     </span>
@@ -2967,8 +2826,8 @@ function StatsResult({ metric, kind, result, graph, backendUrl, themeName,
                   {shapiroLabel && (
                     <div style={{
                       display: 'flex', justifyContent: 'flex-end',
-                      fontSize: '0.9em',
-                      color: norm?.verdict === 'non-normal' ? '#a16207' : 'var(--text-muted)',
+                      fontSize: 'var(--font-size-xs)',
+                      color: norm?.verdict === 'non-normal' ? 'var(--warning)' : 'var(--text-muted)',
                     }}>{shapiroLabel}</div>
                   )}
                 </div>
@@ -2980,13 +2839,13 @@ function StatsResult({ metric, kind, result, graph, backendUrl, themeName,
               <div style={{ color: 'var(--text-muted)', marginBottom: 2 }}>
                 Post-hoc ({result.posthoc[0]?.method}):
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 1, fontFamily: 'var(--font-mono)' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                 {result.posthoc.map((ph: any, i: number) => (
                   <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                     <span>{ph.a} vs {ph.b}</span>
-                    <span style={{
+                    <span className="num" style={{
                       fontWeight: ph.p < 0.05 ? 700 : 400,
-                      color: ph.p < 0.05 ? '#22c55e' : 'var(--text-primary)',
+                      color: ph.p < 0.05 ? 'var(--success)' : 'var(--text-primary)',
                     }}>
                       p={formatP(ph.p)}
                     </span>
@@ -3004,7 +2863,7 @@ function StatsResult({ metric, kind, result, graph, backendUrl, themeName,
             marginTop: 6,
             color: 'var(--text-muted)',
             fontStyle: 'italic',
-            fontSize: '0.95em',
+            fontSize: 'var(--font-size-xs)',
           }}>
             {result.override
               ? (result.override === 'auto'
@@ -3021,7 +2880,7 @@ function StatsResult({ metric, kind, result, graph, backendUrl, themeName,
         <div style={{
           color: 'var(--text-muted)',
           fontStyle: 'italic',
-          fontSize: '0.95em',
+          fontSize: 'var(--font-size-xs)',
         }}>
           {kind === 'distribution'
             ? 'Distribution stats turned off in the wizard. The graph above shows the per-cell ECDFs.'
@@ -3469,8 +3328,8 @@ function GraphModal({
           margin: 24,
           flex: 1,
           background: 'var(--bg-primary)',
-          border: '1px solid var(--border)',
-          borderRadius: 4,
+          borderRadius: 'var(--radius-lg)',
+          boxShadow: 'var(--shadow-popover)',
           display: 'grid',
           gridTemplateColumns: '1fr 320px',
           gridTemplateRows: 'auto 1fr',
@@ -3481,53 +3340,47 @@ function GraphModal({
           gridColumn: '1 / span 2',
           padding: '8px 12px',
           borderBottom: '1px solid var(--border)',
+          background: 'var(--bg-secondary)',
           display: 'flex', alignItems: 'center', gap: 10,
         }}>
           <button
             className="btn"
             onClick={onClose}
             title="Close (Esc)"
-            style={{ padding: '2px 10px' }}
           >×</button>
           <span style={{
-            fontFamily: 'var(--font-mono)',
-            fontWeight: 700,
+            fontWeight: 600,
             fontSize: 'var(--font-size-sm)',
           }}>{metric}</span>
           {kind && (
             <span style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: '0.85em',
+              fontSize: 'var(--font-size-xs)',
               color: 'var(--text-muted)',
             }}>· {kind}</span>
           )}
           {rendering && (
             <span style={{
-              fontFamily: 'var(--font-mono)',
               fontSize: 'var(--font-size-xs)',
               color: 'var(--text-muted)',
-            }}>rendering…</span>
+            }}>Rendering…</span>
           )}
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
             <button
               className="btn"
               onClick={() => exportFormat('svg')}
               disabled={savingFmt !== null}
-              style={{ padding: '2px 10px' }}
               title="Export as SVG (vector, JetBrains Mono preserved as font reference, editable in Illustrator/Inkscape)"
             >{savingFmt === 'svg' ? 'Saving…' : 'Save SVG'}</button>
             <button
               className="btn"
               onClick={() => exportFormat('png')}
               disabled={savingFmt !== null}
-              style={{ padding: '2px 10px' }}
               title="Export as PNG (raster, 300 dpi, JetBrains Mono baked in as glyphs)"
             >{savingFmt === 'png' ? 'Saving…' : 'Save PNG'}</button>
             <button
               className="btn"
               onClick={() => exportFormat('pdf')}
               disabled={savingFmt !== null}
-              style={{ padding: '2px 10px' }}
               title="Export as PDF (vector, JetBrains Mono subset embedded — fully portable)"
             >{savingFmt === 'pdf' ? 'Saving…' : 'Save PDF'}</button>
           </div>
@@ -3540,22 +3393,17 @@ function GraphModal({
           borderLeft: '1px solid var(--border)',
           padding: 12,
           overflowY: 'auto',
-          display: 'flex', flexDirection: 'column', gap: 12,
+          display: 'flex', flexDirection: 'column', gap: 10,
           fontSize: 'var(--font-size-xs)',
-          fontFamily: 'var(--font-mono)',
         }}>
           {renderErr && (
-            <div style={{
-              padding: '4px 6px',
-              border: '1px solid #ef4444',
-              borderRadius: 3,
-              color: '#ef4444',
-              background: 'rgba(239,68,68,0.08)',
+            <div className="notice notice-error" style={{
+              fontSize: 'var(--font-size-xs)',
               wordBreak: 'break-word',
             }}>{renderErr}</div>
           )}
 
-          <ModalSection title="Title & Labels">
+          <ModalSection title="Title & labels">
             <ModalTextRow
               label="Title"
               placeholder={request?.title ?? ''}
@@ -3847,8 +3695,8 @@ function GraphModal({
                     value={graphPrefs.groupColors[tag] || '#888888'}
                     onChange={(e) => patchGroupColor(tag, e.target.value)}
                     style={{
-                      width: 36, height: 22, padding: 0, border: '1px solid var(--border)',
-                      borderRadius: 2, background: 'transparent', cursor: 'pointer',
+                      width: 36, height: 22, padding: 0, border: '1px solid var(--border-control)',
+                      borderRadius: 'var(--radius-sm)', background: 'transparent',
                     }}
                     title={`Colour for ${tag} (cohort-wide — applies to every chart in this cohort)`}
                   />
@@ -3869,13 +3717,11 @@ function GraphModal({
             <button
               className="btn"
               onClick={reset}
-              style={{ padding: '4px 8px' }}
               title={`Clear per-metric overrides for "${metric}" only. Group colours / labels (cohort-wide) are kept.`}
             >Reset this graph</button>
             <button
               className="btn"
               onClick={resetGroupStyling}
-              style={{ padding: '4px 8px' }}
               title="Clear all cohort-wide group colours and display names so every chart falls back to the default palette + canonical tags."
             >Reset all groups</button>
           </div>
@@ -3887,13 +3733,6 @@ function GraphModal({
 
 const modalInputStyle: React.CSSProperties = {
   width: '100%',
-  padding: '2px 6px',
-  fontFamily: 'var(--font-mono)',
-  fontSize: 'var(--font-size-xs)',
-  background: 'var(--bg-tertiary, rgba(60,90,130,0.10))',
-  color: 'var(--text-primary)',
-  border: '1px solid var(--border)',
-  borderRadius: 2,
 }
 
 /**
@@ -3968,15 +3807,8 @@ function CohortGraphModalView({ svg, metric }: { svg: string; metric: string }) 
 
 function ModalSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div>
-      <div style={{
-        fontWeight: 700,
-        marginBottom: 4,
-        color: 'var(--text-muted)',
-        textTransform: 'uppercase',
-        fontSize: 'calc(var(--font-size-xs) * 0.92)',
-        letterSpacing: '0.04em',
-      }}>{title}</div>
+    <div className="section-card" style={{ fontSize: 'var(--font-size-xs)' }}>
+      <div className="section-card-title">{title}</div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         {children}
       </div>
@@ -4210,10 +4042,9 @@ function StatsTable({ metrics, results, metricKindOf }: {
       <div style={{
         padding: 12,
         border: '1px dashed var(--border)',
-        borderRadius: 3,
+        borderRadius: 'var(--radius-md)',
         color: 'var(--text-muted)',
         fontSize: 'var(--font-size-xs)',
-        fontFamily: 'var(--font-mono)',
       }}>
         No scalar-metric stats results yet. Distribution / time-series
         metrics are graph-only and don't appear here.
@@ -4225,34 +4056,32 @@ function StatsTable({ metrics, results, metricKindOf }: {
     <div>
       <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
         <button
-          className="btn"
+          className="btn btn-sm"
           onClick={copyTSV}
-          style={{ padding: '2px 10px', fontSize: 'var(--font-size-xs)' }}
           title="Copy the table to the clipboard as tab-separated values. Paste straight into Excel / Numbers / Prism / a manuscript."
         >{copyState === 'copied' ? 'Copied ✓' : copyState === 'failed' ? 'Copy failed' : 'Copy as TSV'}</button>
         <button
-          className="btn"
+          className="btn btn-sm"
           onClick={exportCSV}
-          style={{ padding: '2px 10px', fontSize: 'var(--font-size-xs)' }}
           title="Save the table as a CSV file."
         >Export CSV</button>
       </div>
       <div style={{
         border: '1px solid var(--border)',
-        borderRadius: 3,
+        borderRadius: 'var(--radius-md)',
+        background: 'var(--bg-field)',
         overflow: 'auto',
         maxHeight: '60vh',
       }}>
         <table style={{
           width: '100%',
           borderCollapse: 'collapse',
-          fontFamily: 'var(--font-mono)',
           fontSize: 'var(--font-size-xs)',
         }}>
           <thead style={{
             position: 'sticky',
             top: 0,
-            background: 'var(--bg-tertiary, rgba(60,90,130,0.10))',
+            background: 'var(--bg-secondary)',
             borderBottom: '1px solid var(--border)',
           }}>
             <tr>
@@ -4271,23 +4100,23 @@ function StatsTable({ metrics, results, metricKindOf }: {
             {sortedRows.map((r) => {
               const stars = pStars(r.p)
               const sigColor =
-                r.isError ? '#ef4444'
-                : (r.p != null && r.p < 0.05) ? '#22c55e'
+                r.isError ? 'var(--error)'
+                : (r.p != null && r.p < 0.05) ? 'var(--success)'
                 : 'var(--text-primary)'
               return (
                 <tr key={r.metric} style={{
-                  borderBottom: '1px solid var(--border)',
-                  background: r.isError ? 'rgba(239,68,68,0.06)' : 'transparent',
+                  borderBottom: '1px solid var(--border-subtle)',
+                  background: r.isError ? 'color-mix(in oklab, var(--error) 6%, transparent)' : 'transparent',
                 }}>
-                  <StTd><span style={{ fontWeight: 700 }}>{r.metric}</span></StTd>
-                  <StTd>{r.n}</StTd>
+                  <StTd><span style={{ fontWeight: 600 }}>{r.metric}</span></StTd>
+                  <StTd num>{r.n}</StTd>
                   <StTd title={r.test}>{r.test}</StTd>
-                  <StTd>{r.stat}</StTd>
-                  <StTd><span style={{ color: sigColor, fontWeight: 700 }}>
+                  <StTd num>{r.stat}</StTd>
+                  <StTd num><span style={{ color: sigColor, fontWeight: 700 }}>
                     {r.p != null ? formatP(r.p) : '—'}
                   </span></StTd>
-                  <StTd>{stars}</StTd>
-                  <StTd>{r.effectStr}</StTd>
+                  <StTd num>{stars}</StTd>
+                  <StTd num>{r.effectStr}</StTd>
                   <StTd>{r.normality}</StTd>
                   <StTd>{r.posthoc}</StTd>
                 </tr>
@@ -4300,7 +4129,6 @@ function StatsTable({ metrics, results, metricKindOf }: {
         marginTop: 4,
         color: 'var(--text-muted)',
         fontSize: 'var(--font-size-xs)',
-        fontFamily: 'var(--font-mono)',
       }}>
         Sig. legend: *** p&lt;0.001, ** p&lt;0.01, * p&lt;0.05, ns p≥0.05.
         Click column headers to sort.
@@ -4427,35 +4255,31 @@ function ExportButtons({
       marginBottom: 8,
       padding: '6px 8px',
       border: '1px solid var(--border)',
-      borderRadius: 3,
-      background: 'var(--bg-tertiary, rgba(60,90,130,0.06))',
+      borderRadius: 'var(--radius-md)',
+      background: 'var(--bg-secondary)',
       fontSize: 'var(--font-size-xs)',
-      fontFamily: 'var(--font-mono)',
     }}>
       <span style={{ color: 'var(--text-muted)', marginRight: 4 }}>Export:</span>
       <button
-        className="btn"
+        className="btn btn-sm"
         onClick={() => doExport('excel_summary')}
         disabled={disabled}
-        style={{ padding: '2px 10px' }}
         title={"Multi-sheet Excel workbook: cohort metadata, stats summary "
              + "(if stats run), cells (wide + long), one sheet per "
              + "distribution metric. The full archive of this run."}
       >{busy === 'excel_summary' ? 'Saving…' : 'Excel (full)'}</button>
       <button
-        className="btn"
+        className="btn btn-sm"
         onClick={() => doExport('excel_cells')}
         disabled={disabled}
-        style={{ padding: '2px 10px' }}
         title={"Single-sheet Excel: one row per cell, every scalar metric "
              + "as a column, plus meta fields. The shape stats packages "
              + "(R, Python, JMP, etc.) expect on import."}
       >{busy === 'excel_cells' ? 'Saving…' : 'Per-cell Excel'}</button>
       <button
-        className="btn"
+        className="btn btn-sm"
         onClick={() => doExport('prism')}
         disabled={disabled}
-        style={{ padding: '2px 10px' }}
         title={"GraphPad Prism project (.pzfx). One Grouped data table per "
              + "scalar metric, one Column table per distribution metric × "
              + "group. Open in Prism to continue your figure work."}
@@ -4471,7 +4295,7 @@ function ExportButtons({
         </span>
       )}
       {error && (
-        <span style={{ color: '#ef4444', marginLeft: 4 }}>{error}</span>
+        <span style={{ color: 'var(--error)', marginLeft: 4 }}>{error}</span>
       )}
     </div>
   )
@@ -4493,12 +4317,13 @@ function StTh({ children }: { children: React.ReactNode }) {
   )
 }
 
-function StTd({ children, title }: { children: React.ReactNode; title?: string }) {
+function StTd({ children, title, num }: { children: React.ReactNode; title?: string; num?: boolean }) {
   return (
     <td title={title} style={{
       padding: '5px 10px',
       verticalAlign: 'top',
       whiteSpace: 'nowrap',
+      fontFamily: num ? 'var(--font-mono)' : 'var(--font-ui)',
     }}>{children}</td>
   )
 }
@@ -4519,7 +4344,6 @@ function SortableHeader({ col, label, sortCol, sortDir, onSort }: {
       fontWeight: 600,
       color: active ? 'var(--text-primary)' : 'var(--text-muted)',
       whiteSpace: 'nowrap',
-      cursor: 'pointer',
       userSelect: 'none',
     }} onClick={() => onSort(col)} title={`Sort by ${label.toLowerCase()}`}>
       {label}{arrow}
@@ -4588,14 +4412,14 @@ function ResultSummary({ result }: { result: AggregateResponse }) {
       padding: '8px 12px',
       background: 'var(--bg-secondary)',
       border: '1px solid var(--border)',
-      borderRadius: 4,
+      borderRadius: 'var(--radius-lg)',
       marginBottom: 12,
       fontSize: 'var(--font-size-sm)',
       flexWrap: 'wrap',
     }}>
       <Pill
         label={`${cells.length} cell${cells.length === 1 ? '' : 's'}`}
-        color="#22c55e"
+        color="var(--success)"
       />
       <Pill
         label={`${summary.n_files_scanned} scanned`}
@@ -4604,21 +4428,21 @@ function ResultSummary({ result }: { result: AggregateResponse }) {
       {skipped_no_meta.length > 0 && (
         <Pill
           label={`${skipped_no_meta.length} no tags`}
-          color="#ef4444"
+          color="var(--error)"
           tooltip="These files have no file-level tags. Open them in the metadata window and add at least one tag."
         />
       )}
       {skipped_no_analysis.length > 0 && (
         <Pill
           label={`${skipped_no_analysis.length} no analysis`}
-          color="#eab308"
+          color="var(--warning)"
           tooltip={`These files don't carry results for ${result.analysis_type}.`}
         />
       )}
       {errors.length > 0 && (
         <Pill
           label={`${errors.length} error${errors.length === 1 ? '' : 's'}`}
-          color="#ef4444"
+          color="var(--error)"
           tooltip="Click to inspect — see the section below."
         />
       )}
@@ -4633,10 +4457,9 @@ function Pill({ label, color, tooltip }: { label: string; color: string; tooltip
       style={{
         padding: '2px 8px',
         borderRadius: 10,
-        background: 'var(--bg-tertiary, rgba(120,120,120,0.15))',
+        background: 'var(--bg-tertiary)',
         color, fontWeight: 600,
         cursor: tooltip ? 'help' : 'default',
-        fontFamily: 'var(--font-mono)',
       }}
     >{label}</span>
   )
@@ -4661,7 +4484,8 @@ function CellTable({ cells, columns }: { cells: Cell[]; columns: string[] }) {
   return (
     <div style={{
       border: '1px solid var(--border)',
-      borderRadius: 4,
+      borderRadius: 'var(--radius-md)',
+      background: 'var(--bg-field)',
       overflow: 'auto',
       maxHeight: '60vh',
     }}>
@@ -4669,7 +4493,6 @@ function CellTable({ cells, columns }: { cells: Cell[]; columns: string[] }) {
         borderCollapse: 'collapse',
         width: '100%',
         fontSize: 'var(--font-size-sm)',
-        fontFamily: 'var(--font-mono)',
       }}>
         <thead style={{
           position: 'sticky', top: 0, zIndex: 1,
@@ -4690,7 +4513,7 @@ function CellTable({ cells, columns }: { cells: Cell[]; columns: string[] }) {
             <tr key={`${cell.file_path}::${cell.series_key}`}
                 style={{
                   background: i % 2 === 0 ? 'transparent'
-                    : 'var(--bg-tertiary, rgba(120,120,120,0.06))',
+                    : 'var(--bg-hover)',
                 }}>
               <Td title={cell.file_path}>{cell.file_name}</Td>
               <Td>{cell.cell_id ?? '—'}</Td>
@@ -4717,6 +4540,7 @@ function Th({ children }: { children: React.ReactNode }) {
       padding: '6px 8px',
       borderBottom: '1px solid var(--border)',
       fontWeight: 600,
+      color: 'var(--text-muted)',
       whiteSpace: 'nowrap',
     }}>{children}</th>
   )
@@ -4729,8 +4553,9 @@ function Td({ children, title, numeric }: {
     <td title={title}
         style={{
           padding: '4px 8px',
-          borderBottom: '1px solid var(--border-subtle, var(--border))',
+          borderBottom: '1px solid var(--border-subtle)',
           textAlign: numeric ? 'right' : 'left',
+          fontFamily: numeric ? 'var(--font-mono)' : 'var(--font-ui)',
           maxWidth: 220,
           overflow: 'hidden', textOverflow: 'ellipsis',
           whiteSpace: 'nowrap',
@@ -4772,7 +4597,7 @@ function SkippedSection({ result }: { result: AggregateResponse }) {
       <button
         onClick={() => setExpanded((x) => !x)}
         style={{
-          background: 'transparent', border: 'none', cursor: 'pointer',
+          background: 'transparent', border: 'none',
           padding: 0, marginBottom: 6,
           color: 'var(--text-muted)',
           fontSize: 'var(--font-size-sm)',
@@ -4785,9 +4610,8 @@ function SkippedSection({ result }: { result: AggregateResponse }) {
           padding: '8px 12px',
           background: 'var(--bg-secondary)',
           border: '1px solid var(--border)',
-          borderRadius: 4,
+          borderRadius: 'var(--radius-lg)',
           fontSize: 'var(--font-size-sm)',
-          fontFamily: 'var(--font-mono)',
         }}>
           {skipped_no_meta.length > 0 && (
             <SkipList
@@ -4828,16 +4652,14 @@ function SkipList({ title, hint, items, error }: {
     <div style={{ marginBottom: 10 }}>
       <div style={{
         fontWeight: 600,
-        color: error ? '#ef4444' : 'var(--text-primary)',
+        color: error ? 'var(--error)' : 'var(--text-primary)',
         marginBottom: 2,
-        fontFamily: 'var(--font-sans, inherit)',
         fontSize: 'var(--font-size-sm)',
       }}>{title} ({items.length})</div>
       <div style={{
         color: 'var(--text-muted)',
         fontSize: 'var(--font-size-xs)',
         marginBottom: 4,
-        fontFamily: 'var(--font-sans, inherit)',
       }}>{hint}</div>
       <ul style={{ margin: 0, paddingLeft: 18 }}>
         {items.map((it, i) => <li key={i}>{it}</li>)}
@@ -4848,7 +4670,7 @@ function SkipList({ title, hint, items, error }: {
 
 const mono: React.CSSProperties = {
   fontFamily: 'var(--font-mono)',
-  background: 'var(--bg-tertiary, rgba(120,120,120,0.15))',
+  background: 'var(--bg-tertiary)',
   padding: '0 4px',
-  borderRadius: 2,
+  borderRadius: 'var(--radius-sm)',
 }

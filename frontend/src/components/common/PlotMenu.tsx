@@ -202,11 +202,11 @@ function PlotContextMenu({ x, y, sources, onClose }: PlotContextMenuProps) {
       style={{
         position: 'fixed', left, top, zIndex: 200,
         minWidth: W,
-        background: 'var(--bg-primary)',
-        border: '1px solid var(--border)',
-        borderRadius: 4,
-        boxShadow: '0 6px 20px rgba(0,0,0,0.22)',
-        fontSize: 'var(--font-size-sm)',
+        padding: 5,
+        background: 'var(--bg-field)',
+        borderRadius: 'var(--radius-md)',
+        boxShadow: 'var(--shadow-popover)',
+        fontSize: 'var(--font-size-base)',
         fontFamily: 'var(--font-ui)',
         overflow: 'hidden',
       }}
@@ -244,11 +244,14 @@ function PlotContextMenu({ x, y, sources, onClose }: PlotContextMenuProps) {
       )}
       {toast && (
         <div style={{
+          marginTop: 4,
           padding: '4px 8px',
-          fontSize: 11,
-          borderTop: '1px solid var(--border)',
-          background: toast.kind === 'err' ? 'rgba(200,80,80,0.18)' : 'rgba(80,180,120,0.18)',
-          color: 'var(--text-primary)',
+          fontSize: 'var(--font-size-xs)',
+          borderRadius: 'var(--radius-sm)',
+          background: toast.kind === 'err'
+            ? 'color-mix(in oklab, var(--error) 14%, transparent)'
+            : 'color-mix(in oklab, var(--success) 14%, transparent)',
+          color: toast.kind === 'err' ? 'var(--error)' : 'var(--text-primary)',
         }}>{toast.text}</div>
       )}
     </div>
@@ -260,26 +263,26 @@ function Item({ label, hint, onClick, busy, disabled }: {
 }) {
   return (
     <button
+      className={disabled || busy ? undefined : 'analysis-menu-item'}
       onClick={onClick}
       disabled={busy || disabled}
       style={{
         display: 'block', width: '100%', textAlign: 'left',
-        padding: '6px 10px',
+        padding: '4px 8px',
         background: 'transparent',
         border: 'none',
+        borderRadius: 'var(--radius-sm)',
         color: 'var(--text-primary)',
-        cursor: disabled ? 'default' : busy ? 'wait' : 'pointer',
-        fontSize: 'var(--font-size-sm)',
+        cursor: busy ? 'wait' : 'default',
+        fontSize: 'var(--font-size-base)',
         fontFamily: 'var(--font-ui)',
         opacity: disabled ? 0.5 : 1,
       }}
-      onMouseEnter={(e) => { if (!disabled && !busy) e.currentTarget.style.background = 'var(--bg-active)' }}
-      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
     >
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-        <span style={{ fontWeight: 500 }}>{busy ? `${label}…` : label}</span>
+        <span>{busy ? `${label}…` : label}</span>
         {hint && (
-          <span style={{ color: 'var(--text-muted)', fontSize: 11, marginLeft: 'auto' }}>{hint}</span>
+          <span style={{ color: 'inherit', opacity: 0.6, fontSize: 'var(--font-size-xs)', marginLeft: 'auto' }}>{hint}</span>
         )}
       </div>
     </button>
@@ -287,7 +290,7 @@ function Item({ label, hint, onClick, busy, disabled }: {
 }
 
 function Divider() {
-  return <div style={{ height: 1, background: 'var(--border)' }} />
+  return <div style={{ height: 1, margin: '4px 6px', background: 'var(--border)' }} />
 }
 
 // ---------------------------------------------------------------------------

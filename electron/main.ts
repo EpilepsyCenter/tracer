@@ -1,4 +1,5 @@
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, shell, Menu, nativeTheme } from 'electron'
+import type { MenuItemConstructorOptions } from 'electron'
 import { spawn, ChildProcess } from 'child_process'
 import { join, dirname, basename } from 'path'
 import { createServer } from 'net'
@@ -53,6 +54,204 @@ let backendPort: number = 0
 
 // Track open analysis windows by type
 const analysisWindows: Map<string, BrowserWindow> = new Map()
+
+// -----------------------------------------------------------------
+// Theme — native menus, dialogs and window backgrounds follow the
+// renderer's System / Light / Dark choice (themeStore).
+// -----------------------------------------------------------------
+type ThemePref = 'system' | 'light' | 'dark'
+let themePref: ThemePref = 'system'
+
+function readStoredThemePref(): ThemePref {
+  try {
+    const path = join(app.getPath('userData'), 'preferences.json')
+    if (!existsSync(path)) return 'system'
+    const prefs = JSON.parse(readFileSync(path, 'utf-8'))
+    const p = prefs.themePref
+    if (p === 'system' || p === 'light' || p === 'dark') return p
+    // Written before the System option existed: keep only an
+    // explicit dark choice (light used to be the default).
+    return prefs.theme === 'dark' ? 'dark' : 'system'
+  } catch {
+    return 'system'
+  }
+}
+
+/** Window background matching the page canvas, so there is no white
+ *  flash before the first paint or while resizing. */
+function windowBackground(): string {
+  return nativeTheme.shouldUseDarkColors ? '#0e1114' : '#f3f2ee'
+}
+
+function applyThemePref(pref: ThemePref) {
+  themePref = pref
+  nativeTheme.themeSource = pref
+  const bg = windowBackground()
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed() && win !== splashWindow) win.setBackgroundColor(bg)
+  }
+}
+
+// -----------------------------------------------------------------
+// Native menu bar. Commands are sent to the main window's renderer
+// as ``menu-action`` messages (see App.tsx), except the ones the main
+// process can do itself (opening tool windows, links, roles).
+// -----------------------------------------------------------------
+const MENU_ANALYSES: Array<[string, string]> = [
+  ['cursors', 'Cursor Measurements'],
+  ['resistance', 'Rs / Rin / Cm'],
+  ['iv', 'I-V Curve'],
+  ['action_potential', 'Action Potentials'],
+  ['paired', 'Paired Recording'],
+  ['events', 'Event Detection'],
+  ['bursts', 'Burst Detection'],
+  ['field_potential', 'Field Potential'],
+  ['spectral', 'Spectral Analysis'],
+]
+const MENU_TOOLS: Array<[string, string]> = [
+  ['metadata', 'Tags…'],
+  ['batch_analysis', 'Batch…'],
+  ['cohort_analysis', 'Cohort…'],
+  ['trace_export', 'Export Traces…'],
+]
+
+let menuHasRecording = false
+
+function sendMenuAction(action: string, arg?: string, focusMain = true) {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  if (focusMain) {
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    mainWindow.focus()
+  }
+  mainWindow.webContents.send('menu-action', action, arg)
+}
+
+function buildAppMenu() {
+  const isMac = process.platform === 'darwin'
+  const template: MenuItemConstructorOptions[] = []
+
+  if (isMac) {
+    template.push({
+      label: app.name,
+      submenu: [
+        { role: 'about' },
+        { type: 'separator' },
+        { label: 'Settings…', accelerator: 'CmdOrCtrl+,', click: () => sendMenuAction('open-settings') },
+        { type: 'separator' },
+        { role: 'services' },
+        { type: 'separator' },
+        { role: 'hide' },
+        { role: 'hideOthers' },
+        { role: 'unhide' },
+        { type: 'separator' },
+        { role: 'quit' },
+      ],
+    })
+  }
+
+  template.push({
+    label: 'File',
+    submenu: [
+      { label: 'Open…', accelerator: 'CmdOrCtrl+O', click: () => sendMenuAction('open-file') },
+      { type: 'separator' },
+      {
+        label: 'Channel Scaling…',
+        enabled: menuHasRecording,
+        click: () => sendMenuAction('open-scaling'),
+      },
+      { type: 'separator' },
+      ...(isMac ? [] : [
+        { label: 'Settings…', accelerator: 'Ctrl+,', click: () => sendMenuAction('open-settings') },
+        { type: 'separator' as const },
+      ]),
+      isMac ? { role: 'close' } : { role: 'quit' },
+    ],
+  })
+
+  template.push({ role: 'editMenu' })
+
+  template.push({
+    label: 'View',
+    submenu: [
+      // Single-key shortcuts are handled by the renderer; show them
+      // here without registering, so typing in fields still works.
+      { label: 'Recording Navigator', accelerator: 'F1', registerAccelerator: false, click: () => sendMenuAction('toggle-left') },
+      { label: 'Inspector', accelerator: 'F2', registerAccelerator: false, click: () => sendMenuAction('toggle-right') },
+      { label: 'Focus Mode', accelerator: 'F', registerAccelerator: false, click: () => sendMenuAction('toggle-focus') },
+      { type: 'separator' },
+      { label: 'Command Palette…', accelerator: 'CmdOrCtrl+K', registerAccelerator: false, click: () => sendMenuAction('command-palette') },
+      { type: 'separator' },
+      {
+        label: 'Appearance',
+        submenu: (['system', 'light', 'dark'] as ThemePref[]).map((p) => ({
+          label: p === 'system' ? 'Use System Setting' : p === 'light' ? 'Light' : 'Dark',
+          type: 'radio' as const,
+          checked: themePref === p,
+          click: () => sendMenuAction('set-theme', p, false),
+        })),
+      },
+      { type: 'separator' },
+      { role: 'resetZoom' },
+      { role: 'zoomIn' },
+      { role: 'zoomOut' },
+      { type: 'separator' },
+      { role: 'togglefullscreen' },
+      { type: 'separator' },
+      { role: 'reload' },
+      { role: 'toggleDevTools' },
+    ],
+  })
+
+  template.push({
+    label: 'Analysis',
+    submenu: MENU_ANALYSES.map(([type, label]) => ({
+      label,
+      enabled: menuHasRecording,
+      click: () => openAnalysisWindow(type),
+    })),
+  })
+
+  template.push({
+    label: 'Tools',
+    submenu: MENU_TOOLS.map(([type, label]) => ({
+      label,
+      click: () => openAnalysisWindow(type),
+    })),
+  })
+
+  template.push({ role: 'windowMenu' })
+
+  template.push({
+    role: 'help',
+    submenu: [
+      { label: 'TRACER Manual', click: () => openAnalysisWindow('manual') },
+      { label: 'Keyboard Shortcuts', accelerator: '?', registerAccelerator: false, click: () => sendMenuAction('open-help') },
+      { type: 'separator' },
+      { label: 'Report a Bug…', click: () => sendMenuAction('open-bug-report') },
+      { label: 'TRACER on GitHub', click: () => { void shell.openExternal('https://github.com/EpilepsyCenter/tracer') } },
+      ...(isMac ? [] : [
+        { type: 'separator' as const },
+        { role: 'about' as const },
+      ]),
+    ],
+  })
+
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template))
+}
+
+ipcMain.on('set-theme-source', (_event, pref: ThemePref) => {
+  if (pref !== 'system' && pref !== 'light' && pref !== 'dark') return
+  if (pref === themePref && nativeTheme.themeSource === pref) return
+  applyThemePref(pref)
+  buildAppMenu()
+})
+
+ipcMain.on('set-menu-state', (_event, state: { hasRecording?: boolean }) => {
+  const has = !!state?.hasRecording
+  if (has === menuHasRecording) return
+  menuHasRecording = has
+  buildAppMenu()
+})
 
 function findFreePort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -186,9 +385,9 @@ function buildSplashHtml(lockupDataUri: string): string {
 <style>
   html, body {
     margin: 0; padding: 0; height: 100%;
-    background: #f7f8fa;
-    color: #2b3a4a;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "IBM Plex Sans", Helvetica, Arial, sans-serif;
+    background: #f3f2ee;
+    color: #15171b;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
     -webkit-user-select: none;
     overflow: hidden;
   }
@@ -197,7 +396,7 @@ function buildSplashHtml(lockupDataUri: string): string {
     display: flex; flex-direction: column;
     align-items: center; justify-content: center;
     gap: 22px;
-    border: 1px solid #d6dbe2;
+    border: 1px solid rgba(20, 22, 28, 0.12);
     border-radius: 10px;
     box-sizing: border-box;
     padding: 0 32px;
@@ -212,16 +411,15 @@ function buildSplashHtml(lockupDataUri: string): string {
   .wordmark .t { color: #0f1722; font-weight: 500; }
   .wordmark .rest { color: #2b3a4a; font-weight: 300; }
   .status {
-    font-size: 11px; color: #6b7280; letter-spacing: 0.06em;
-    text-transform: uppercase;
+    font-size: 12px; color: #5f636b;
   }
   .bar {
-    width: 240px; height: 3px; background: #e5e9ef;
+    width: 240px; height: 3px; background: rgba(20, 22, 28, 0.08);
     border-radius: 999px; overflow: hidden;
   }
   .bar::after {
     content: ""; display: block; width: 40%; height: 100%;
-    background: #2b3a4a; border-radius: 999px;
+    background: #007d93; border-radius: 999px;
     animation: slide 1.2s ease-in-out infinite;
   }
   @keyframes slide {
@@ -252,7 +450,7 @@ function createSplashWindow() {
     skipTaskbar: true,
     show: false,
     transparent: false,
-    backgroundColor: '#f7f8fa',
+    backgroundColor: '#f3f2ee',
     icon: ICON_PATH,
     webPreferences: {
       contextIsolation: true,
@@ -297,12 +495,11 @@ function createWindow() {
     // and the UI showing. Paired with the splash window's destroy()
     // in the ``ready-to-show`` handler below.
     show: false,
-    backgroundColor: '#f7f8fa',
-    // macOS: tuck the traffic-light controls into the toolbar by
-    // hiding the native title bar but keeping the OS buttons inset
-    // at the top-left. The renderer adds left padding to ``.toolbar``
-    // (via the ``[data-platform="mac"]`` body attribute) so buttons
-    // never sit underneath the controls.
+    backgroundColor: windowBackground(),
+    // macOS: hide the native title bar and keep the traffic lights
+    // inset at the top-left, over the recording sidebar's header (the
+    // renderer leaves room for them via ``[data-platform="mac"]``).
+    // Windows / Linux keep the native title bar and menu bar.
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     trafficLightPosition: process.platform === 'darwin' ? { x: 14, y: 14 } : undefined,
     webPreferences: {
@@ -762,7 +959,7 @@ function saveAnalysisWindowBounds(analysisType: string) {
   } catch { /* ignore */ }
 }
 
-ipcMain.handle('open-analysis-window', (_event, analysisType: string) => {
+function openAnalysisWindow(analysisType: string): boolean {
   // If already open, focus it
   const existing = analysisWindows.get(analysisType)
   if (existing && !existing.isDestroyed()) {
@@ -782,6 +979,7 @@ ipcMain.handle('open-analysis-window', (_event, analysisType: string) => {
     minHeight: 400,
     title: `TRACER — ${title}`,
     icon: ICON_PATH,
+    backgroundColor: windowBackground(),
     webPreferences: {
       preload: join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -812,7 +1010,9 @@ ipcMain.handle('open-analysis-window', (_event, analysisType: string) => {
   })
 
   return true
-})
+}
+
+ipcMain.handle('open-analysis-window', (_event, analysisType: string) => openAnalysisWindow(analysisType))
 
 ipcMain.handle('close-analysis-window', (_event, analysisType: string) => {
   const win = analysisWindows.get(analysisType)
@@ -855,6 +1055,11 @@ ipcMain.handle('get-platform', () => process.platform)
 // App lifecycle
 // -----------------------------------------------------------------
 app.whenReady().then(async () => {
+  // Theme + menu first, so the splash, dialogs and menus already
+  // match the user's light / dark choice.
+  applyThemePref(readStoredThemePref())
+  buildAppMenu()
+
   // Show the splash immediately so the user has visual feedback
   // during backend cold-start. ``createWindow`` will destroy it once
   // the main window's first paint is ready.

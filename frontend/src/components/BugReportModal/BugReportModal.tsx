@@ -85,7 +85,7 @@ export function BugReportModal({
       onClick={onClose}
       style={{
         position: 'fixed', inset: 0, zIndex: 9000,
-        background: 'rgba(0,0,0,0.55)',
+        background: 'rgba(0,0,0,0.18)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         padding: 24,
       }}
@@ -95,8 +95,9 @@ export function BugReportModal({
         style={{
           width: 'min(720px, 100%)', maxHeight: '92vh',
           display: 'flex', flexDirection: 'column',
-          background: 'var(--bg-primary)',
-          border: '1px solid var(--border)', borderRadius: 6,
+          background: 'var(--bg-secondary)',
+          borderRadius: 'var(--radius-lg)',
+          boxShadow: 'var(--shadow-popover), 0 24px 60px rgba(0,0,0,0.25)',
           overflow: 'hidden',
         }}
       >
@@ -104,23 +105,22 @@ export function BugReportModal({
         <div style={{
           flexShrink: 0,
           display: 'flex', alignItems: 'center', gap: 10,
-          padding: '10px 14px',
+          padding: '10px 12px 10px 16px',
           borderBottom: '1px solid var(--border)',
-          background: 'var(--bg-secondary)',
         }}>
-          <strong style={{ fontSize: 'var(--font-size-base)' }}>
+          <span style={{ fontSize: 'var(--font-size-base)', fontWeight: 600 }}>
             Report a bug
-          </strong>
+          </span>
           <span style={{
             color: 'var(--text-muted)',
             fontSize: 'var(--font-size-xs)',
           }}>
-            no account needed · stays inside the app
+            No account needed · stays inside the app
           </span>
           <button
             className="btn"
             onClick={onClose}
-            style={{ marginLeft: 'auto', padding: '2px 10px' }}
+            style={{ marginLeft: 'auto' }}
             aria-label="Close"
           >Close</button>
         </div>
@@ -148,7 +148,7 @@ export function BugReportModal({
             <button
               className="btn btn-primary"
               onClick={onClose}
-              style={{ alignSelf: 'center', marginTop: 6, padding: '4px 18px' }}
+              style={{ alignSelf: 'center', marginTop: 6, padding: '0 18px' }}
             >Close</button>
           </div>
         ) : (
@@ -175,9 +175,8 @@ export function BugReportModal({
             {diagnostics && (
               <div style={{
                 flexShrink: 0,
-                padding: '8px 14px',
+                padding: '8px 16px',
                 borderTop: '1px solid var(--border)',
-                background: 'var(--bg-secondary)',
                 fontSize: 'var(--font-size-xs)',
                 color: 'var(--text-muted)',
               }}>
@@ -185,9 +184,8 @@ export function BugReportModal({
                   onClick={() => setShowDiag((v) => !v)}
                   style={{
                     background: 'transparent', border: 'none',
-                    color: 'var(--text-muted)', cursor: 'pointer',
+                    color: 'var(--text-muted)',
                     padding: 0, fontSize: 'inherit',
-                    textDecoration: 'underline',
                   }}
                   type="button"
                 >
@@ -197,10 +195,10 @@ export function BugReportModal({
                   <pre style={{
                     margin: '6px 0 0',
                     padding: 8,
-                    background: 'var(--bg-primary)',
+                    background: 'var(--bg-field)',
                     border: '1px solid var(--border)',
-                    borderRadius: 3,
-                    fontSize: '0.95em',
+                    borderRadius: 'var(--radius)',
+                    fontSize: 'var(--font-size-xs)',
                     fontFamily: 'var(--font-mono)',
                     whiteSpace: 'pre-wrap',
                     wordBreak: 'break-word',

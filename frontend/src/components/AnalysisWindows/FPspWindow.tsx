@@ -10,7 +10,7 @@ import {
   FPspPeakDirection,
   FPspTimeAxis,
 } from '../../stores/appStore'
-import { useThemeStore } from '../../stores/themeStore'
+import { useThemeStore, useThemeKey } from '../../stores/themeStore'
 import { NumInput } from '../common/NumInput'
 import { ChannelsOverlaySelect, STIMULUS_OVERLAY_KEY } from '../common/ChannelsOverlaySelect'
 import { OverlayTraceViewer, OverlayChannel } from '../common/OverlayTraceViewer'
@@ -21,9 +21,9 @@ import { attachHoverCoords } from '../../utils/hoverCoords'
 
 // FPsp cursor→band mapping: baseline cursor pair → Baseline,
 // fit cursor pair → Volley, peak cursor pair → fEPSP.
-const FPSP_BASELINE_COLOR = '#9e9e9e'
-const FPSP_VOLLEY_COLOR = '#64b5f6'
-const FPSP_FEPSP_COLOR = '#e57373'
+const FPSP_BASELINE_COLOR = '--text-muted'
+const FPSP_VOLLEY_COLOR = '--marker-bounds'
+const FPSP_FEPSP_COLOR = '--marker-detected'
 
 interface FileInfo {
   fileName: string | null
@@ -40,12 +40,14 @@ function channelsForSeries(fileInfo: FileInfo | null, group: number, series: num
   return fileInfo?.groups?.[group]?.series?.[series]?.channels ?? []
 }
 
+// Marker colours as theme-token names: canvas code resolves them with
+// cssVar() at draw time, DOM code wraps them in var().
 const MARKER = {
-  baseline: '#9e9e9e',
-  volley: '#64b5f6',
-  fepsp: '#e57373',
-  slopeLo: '#ffb74d',
-  slopeHi: '#ffb74d',
+  baseline: '--text-muted',
+  volley: '--marker-bounds',
+  fepsp: '--marker-detected',
+  slopeLo: '--marker-manual',
+  slopeHi: '--marker-manual',
 }
 
 export function FPspWindow({
@@ -675,7 +677,7 @@ export function FPspWindow({
     onEnd: (v: number) => void,
   ) => (
     <div style={{ display: 'flex', alignItems: 'center', gap: 4, width: '100%' }}>
-      <span style={{ color, fontWeight: 600, width: 56, flexShrink: 0 }}>{label}</span>
+      <span style={{ color: `var(${color})`, fontWeight: 600, width: 56, flexShrink: 0 }}>{label}</span>
       <NumInput value={start} min={0} decimals={4} onChange={onStart} style={{ width: 72 }} />
       <span style={{ color: 'var(--text-muted)' }}>→</span>
       <NumInput value={end} min={0} decimals={4} onChange={onEnd} style={{ width: 72 }} />
@@ -751,16 +753,14 @@ export function FPspWindow({
         <Field label="Sweep (preview)">
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
             {seriesB != null && (
-              <span style={{ display: 'inline-flex', gap: 2, marginRight: 4 }}>
+              <span className="segmented" style={{ display: 'inline-flex', marginRight: 4 }}>
                 <button
-                  className={`btn${viewerSource === 'A' ? ' btn-primary' : ''}`}
-                  style={{ padding: '1px 6px', fontSize: 'var(--font-size-label)' }}
+                  className={viewerSource === 'A' ? 'active' : undefined}
                   title="Show a sweep from the baseline series"
                   onClick={() => setViewerSource('A')}
                 >BL</button>
                 <button
-                  className={`btn${viewerSource === 'B' ? ' btn-primary' : ''}`}
-                  style={{ padding: '1px 6px', fontSize: 'var(--font-size-label)' }}
+                  className={viewerSource === 'B' ? 'active' : undefined}
                   title="Show a sweep from the LTP / post-tetanus series"
                   onClick={() => setViewerSource('B')}
                 >LTP</button>
@@ -770,7 +770,7 @@ export function FPspWindow({
               onClick={() => setPreviewSweep((s) => Math.max(0, s - 1))}
               disabled={previewSweep <= 0 || viewerSweepCount === 0}
               title="Previous sweep">←</button>
-            <span style={{ minWidth: 58, textAlign: 'center', fontSize: 'var(--font-size-label)', color: 'var(--text-muted)' }}>
+            <span className="num" style={{ minWidth: 58, textAlign: 'center', fontSize: 'var(--font-size-label)', color: 'var(--text-muted)' }}>
               {viewerSweepCount > 0 ? `${previewSweep + 1} / ${viewerSweepCount}` : '— / —'}
             </span>
             <button className="btn" style={{ padding: '2px 8px' }}
@@ -781,14 +781,11 @@ export function FPspWindow({
         </Field>
       </div>
 
-      {/* Tab bar — I-O · PPR · LTP. Spans the full window width above
-          the two-column body so the choice visibly scopes both the
-          LEFT params column and the RIGHT results panel. Same
-          prominent style as APWindow (3px underline, 14px font) for
-          cross-window consistency. */}
-      <div style={{
-        display: 'flex', gap: 2, borderBottom: '1px solid var(--border)',
-        alignItems: 'flex-end', flexShrink: 0,
+      {/* Mode switch — I-O · PPR · LTP. Sits above the two-column
+          body so the choice visibly scopes both the LEFT params column
+          and the RIGHT results panel. */}
+      <div className="segmented" style={{
+        alignSelf: 'flex-start', flexShrink: 0,
       }}>
         {(['io', 'ppr', 'ltp'] as FPspMode[]).map((m) => {
           const label = m === 'io' ? 'I-O curve'
@@ -798,20 +795,9 @@ export function FPspWindow({
           return (
             <button
               key={m}
-              className="btn"
+              className={active ? 'active' : undefined}
               onClick={() => setMode(m)}
-              style={{
-                padding: '8px 22px',
-                borderBottomLeftRadius: 0,
-                borderBottomRightRadius: 0,
-                borderBottom: active ? '3px solid var(--accent, #4a90e2)' : '3px solid transparent',
-                marginBottom: -1,
-                background: active ? 'var(--bg-primary)' : 'transparent',
-                color: active ? 'var(--accent, #4a90e2)' : 'var(--text-muted)',
-                fontWeight: active ? 700 : 500,
-                fontSize: 'var(--font-size-sm)',
-                fontFamily: 'var(--font-ui)',
-              }}
+              style={{ flex: 'none', padding: '0 18px', whiteSpace: 'nowrap' }}
               title={
                 m === 'io' ? 'Stimulus intensity vs fEPSP slope/amplitude'
                 : m === 'ppr' ? 'Paired-pulse ratio (amp/slope of response 2 ÷ response 1)'
@@ -856,7 +842,6 @@ export function FPspWindow({
               borderRadius: 4,
               background: 'var(--bg-primary)',
               fontSize: 'var(--font-size-label)',
-              fontFamily: 'var(--font-mono)',
             }}>
               {cursorTimeRow(
                 'Baseline', MARKER.baseline,
@@ -923,7 +908,7 @@ export function FPspWindow({
                   </select>
                   {(filterType === 'highpass' || filterType === 'bandpass') && (
                     <label style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 'var(--font-size-label)' }}>
-                      <span style={{ color: 'var(--text-muted)' }}>low</span>
+                      <span style={{ color: 'var(--text-muted)' }}>Low</span>
                       <NumInput value={filterLow} step={0.1} min={0}
                         onChange={setFilterLow} style={{ width: 64 }} />
                       <span style={{ color: 'var(--text-muted)' }}>Hz</span>
@@ -931,14 +916,14 @@ export function FPspWindow({
                   )}
                   {(filterType === 'lowpass' || filterType === 'bandpass') && (
                     <label style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 'var(--font-size-label)' }}>
-                      <span style={{ color: 'var(--text-muted)' }}>high</span>
+                      <span style={{ color: 'var(--text-muted)' }}>High</span>
                       <NumInput value={filterHigh} step={10} min={1}
                         onChange={setFilterHigh} style={{ width: 70 }} />
                       <span style={{ color: 'var(--text-muted)' }}>Hz</span>
                     </label>
                   )}
                   <label style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 'var(--font-size-label)' }}>
-                    <span style={{ color: 'var(--text-muted)' }}>order</span>
+                    <span style={{ color: 'var(--text-muted)' }}>Order</span>
                     <NumInput value={filterOrder} step={1} min={1} max={8}
                       onChange={(v) => setFilterOrder(Math.max(1, Math.min(8, Math.round(v))))}
                       style={{ width: 42 }} />
@@ -947,7 +932,7 @@ export function FPspWindow({
               )}
               {!filterEnabled && (
                 <span style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-label)', fontStyle: 'italic' }}>
-                  off — try 2 kHz lowpass order 1 to clean HF noise
+                  Off — try 2 kHz lowpass order 1 to clean HF noise
                 </span>
               )}
             </div>
@@ -1070,7 +1055,7 @@ export function FPspWindow({
             {runMode === 'range' && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 6,
                 fontSize: 'var(--font-size-label)', color: 'var(--text-muted)' }}>
-                <span>from</span>
+                <span>From</span>
                 <NumInput value={sweepFrom} step={1} min={1} max={Math.max(1, totalSweeps)}
                   onChange={(v) => setSweepFrom(Math.max(1, Math.round(v)))} style={{ width: 60 }} />
                 <span>to</span>
@@ -1082,7 +1067,7 @@ export function FPspWindow({
             {runMode === 'one' && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 6,
                 fontSize: 'var(--font-size-label)', color: 'var(--text-muted)' }}>
-                <span>sweep</span>
+                <span>Sweep</span>
                 <NumInput value={sweepOne} step={1} min={1} max={Math.max(1, totalSweeps)}
                   onChange={(v) => setSweepOne(Math.max(1, Math.round(v)))} style={{ width: 60 }} />
                 <span style={{ marginLeft: 'auto' }}>/ {totalSweeps || '—'} · appends</span>
@@ -1107,17 +1092,12 @@ export function FPspWindow({
             </div>
           </div>
           {error && (
-            <div style={{
+            <div className="notice notice-error" style={{
               flexShrink: 0,
-              padding: '6px 10px',
-              background: 'var(--bg-error, #5c1b1b)',
-              color: '#fff', borderRadius: 3,
               display: 'flex', alignItems: 'center', gap: 8,
-              fontSize: 'var(--font-size-xs)',
             }}>
               <span style={{ flex: 1 }}>⚠ {error}</span>
-              <button className="btn" onClick={() => setError(null)}
-                style={{ padding: '1px 6px', fontSize: 'var(--font-size-label)' }}>dismiss</button>
+              <button className="btn btn-sm" onClick={() => setError(null)}>Dismiss</button>
             </div>
           )}
         </div>{/* close LEFT panel */}
@@ -1286,7 +1266,7 @@ export function FPspWindow({
                     flexShrink: 0,
                     fontSize: 'var(--font-size-label)',
                     color: 'var(--text-muted)',
-                    fontFamily: 'var(--font-mono)',
+                    fontVariantNumeric: 'tabular-nums',
                     background: 'var(--bg-primary)',
                     padding: '4px 8px',
                     borderRadius: 3,
@@ -1298,26 +1278,26 @@ export function FPspWindow({
                       avg N {ltpEntry.avgN} · unit {ltpEntry.responseUnit || '—'}
                     </span>
                     {flaggedCount > 0 && (
-                      <span style={{ color: '#e57373' }}>
+                      <span style={{ color: 'var(--error)' }}>
                         ⚠ {flaggedCount} ratio {'<'} 3
                       </span>
                     )}
-                    <span style={{ marginLeft: 'auto', display: 'flex', gap: 10, alignItems: 'center', fontFamily: 'var(--font-ui)' }}>
+                    <span style={{ marginLeft: 'auto', display: 'flex', gap: 10, alignItems: 'center' }}>
                       <label style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
                         <input type="radio" checked={ltpEntry.timeAxis === 'timestamp'}
                           onChange={() => setFPspTimeAxis('ltp', group, series, 'timestamp')} />
-                        time
+                        Time
                       </label>
                       <label style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
                         <input type="radio" checked={ltpEntry.timeAxis === 'index'}
                           onChange={() => setFPspTimeAxis('ltp', group, series, 'index')} />
-                        index
+                        Index
                       </label>
                       <span style={{ color: 'var(--border)' }}>|</span>
                       <label style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
                         <input type="checkbox" checked={ltpEntry.normalize}
                           onChange={(e) => setFPspNormalize('ltp', group, series, e.target.checked)} />
-                        normalize
+                        Normalize
                       </label>
                     </span>
                   </div>
@@ -1340,7 +1320,7 @@ export function FPspWindow({
                     flexShrink: 0,
                     fontSize: 'var(--font-size-label)',
                     color: 'var(--text-muted)',
-                    fontFamily: 'var(--font-mono)',
+                    fontVariantNumeric: 'tabular-nums',
                     background: 'var(--bg-primary)',
                     padding: '4px 8px',
                     borderRadius: 3,
@@ -1354,17 +1334,17 @@ export function FPspWindow({
                         + Math.max(0, ioEntry.points.length - 1) * (ioEntry.ioIntensityStep ?? 0)
                       ).toFixed(0)} {ioEntry.ioUnit ?? 'µA'}
                     </span>
-                    <span style={{ marginLeft: 'auto', display: 'flex', gap: 10, alignItems: 'center', fontFamily: 'var(--font-ui)' }}>
-                      <span style={{ color: 'var(--text-muted)' }}>y-axis:</span>
+                    <span style={{ marginLeft: 'auto', display: 'flex', gap: 10, alignItems: 'center' }}>
+                      <span style={{ color: 'var(--text-muted)' }}>Y axis:</span>
                       <label style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
                         <input type="radio" checked={ioMetric === 'slope'}
                           onChange={() => setIoMetric('slope')} />
-                        slope
+                        Slope
                       </label>
                       <label style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
                         <input type="radio" checked={ioMetric === 'amplitude'}
                           onChange={() => setIoMetric('amplitude')} />
-                        amplitude
+                        Amplitude
                       </label>
                     </span>
                   </div>
@@ -1394,7 +1374,7 @@ export function FPspWindow({
                       flexShrink: 0,
                       fontSize: 'var(--font-size-label)',
                       color: 'var(--text-muted)',
-                      fontFamily: 'var(--font-mono)',
+                      fontVariantNumeric: 'tabular-nums',
                       background: 'var(--bg-primary)',
                       padding: '4px 8px',
                       borderRadius: 3,
@@ -1406,17 +1386,17 @@ export function FPspWindow({
                         ISI {(pprEntry.pprIsiMs ?? 0).toFixed(1)} ms ·
                         amp {meanAmp != null ? meanAmp.toFixed(2) : '—'} · slope {meanSlope != null ? meanSlope.toFixed(2) : '—'}
                       </span>
-                      <span style={{ marginLeft: 'auto', display: 'flex', gap: 10, alignItems: 'center', fontFamily: 'var(--font-ui)' }}>
-                        <span style={{ color: 'var(--text-muted)' }}>y:</span>
+                      <span style={{ marginLeft: 'auto', display: 'flex', gap: 10, alignItems: 'center' }}>
+                        <span style={{ color: 'var(--text-muted)' }}>Y:</span>
                         <label style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
                           <input type="radio" checked={pprMetric === 'amp'}
                             onChange={() => setPprMetric('amp')} />
-                          amp
+                          Amp
                         </label>
                         <label style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
                           <input type="radio" checked={pprMetric === 'slope'}
                             onChange={() => setPprMetric('slope')} />
-                          slope
+                          Slope
                         </label>
                       </span>
                     </div>
@@ -1470,6 +1450,7 @@ function FPspMiniViewer({
   group: number; series: number; channel: number
   heightSignal: number
 }) {
+  const themeKey = useThemeKey()
   const containerRef = useRef<HTMLDivElement>(null)
   const plotRef = useRef<uPlot | null>(null)
   const overlayRef = useRef<HTMLCanvasElement>(null)
@@ -1609,13 +1590,13 @@ function FPspMiniViewer({
           stroke: cssVar('--chart-axis'),
           grid: { stroke: cssVar('--chart-grid'), width: 1 },
           ticks: { stroke: cssVar('--chart-tick'), width: 1 },
-          font: `${cssVar('--font-size-label')} ${cssVar('--font-mono')}`,
+          font: `${cssVar('--font-size-label')} ${cssVar('--font-ui')}`,
         },
         {
           stroke: cssVar('--chart-axis'),
           grid: { stroke: cssVar('--chart-grid'), width: 1 },
           ticks: { stroke: cssVar('--chart-tick'), width: 1 },
-          font: `${cssVar('--font-size-label')} ${cssVar('--font-mono')}`,
+          font: `${cssVar('--font-size-label')} ${cssVar('--font-ui')}`,
         },
       ],
       cursor: { drag: { x: false, y: false } },
@@ -1710,7 +1691,7 @@ function FPspMiniViewer({
     over.addEventListener('pointermove', onMove)
     over.addEventListener('pointerup', onUp)
     // Cleanup happens automatically on next destroy (next rebuild).
-  }, [data, entry, selected])
+  }, [data, entry, selected, themeKey])
 
   // Reset-zoom helper used by the header button. Clears the user
   // range refs and re-applies the tuned range via setScale so we
@@ -1774,21 +1755,21 @@ function FPspMiniViewer({
         <>
           <div style={{
             padding: '3px 8px', fontSize: 'var(--font-size-label)',
-            color: 'var(--text-muted)', fontFamily: 'var(--font-mono)',
+            color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums',
             borderBottom: '1px solid var(--border)',
             display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center',
           }}>
-            <span>bin #{(entry?.selectedIdx ?? 0) + 1}</span>
-            <span>sweeps {selected.sweepIndices.map((s) => s + 1).join(',')}</span>
-            <span>volley {selected.volleyAmp.toFixed(3)}</span>
+            <span>Bin #{(entry?.selectedIdx ?? 0) + 1}</span>
+            <span>Sweeps {selected.sweepIndices.map((s) => s + 1).join(',')}</span>
+            <span>Volley {selected.volleyAmp.toFixed(3)}</span>
             <span>fEPSP {selected.fepspAmp.toFixed(3)}</span>
             {selected.ratio != null && (
-              <span style={{ color: selected.flagged ? '#e57373' : undefined }}>
-                ratio {selected.ratio.toFixed(2)}
+              <span style={{ color: selected.flagged ? 'var(--error)' : undefined }}>
+                Ratio {selected.ratio.toFixed(2)}
                 {selected.flagged && ' ⚠'}
               </span>
             )}
-            {selected.slope != null && <span>slope {selected.slope.toFixed(3)}</span>}
+            {selected.slope != null && <span>Slope {selected.slope.toFixed(3)}</span>}
             <span style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
               <button
                 className="btn"
@@ -1799,11 +1780,11 @@ function FPspMiniViewer({
                 Reset zoom
               </button>
               <span style={{ width: 1, height: 14, background: 'var(--border)' }} />
-              <LegendDot color={MARKER.baseline} label="baseline" />
-              <LegendDot color={MARKER.volley} label="volley" />
-              <LegendDot color={MARKER.fepsp} label="fEPSP" />
+              <LegendDot color={`var(${MARKER.baseline})`} label="Baseline" />
+              <LegendDot color={`var(${MARKER.volley})`} label="Volley" />
+              <LegendDot color={`var(${MARKER.fepsp})`} label="fEPSP" />
               {entry?.measurementMethod !== 'amplitude' && (
-                <LegendDot color={MARKER.slopeLo} label="slope %" />
+                <LegendDot color={`var(${MARKER.slopeLo})`} label="Slope %" />
               )}
             </span>
           </div>
@@ -1822,10 +1803,10 @@ function FPspMiniViewer({
             background: 'var(--bg-secondary)',
             borderTop: '1px solid var(--border)',
           }}>
-            scroll = zoom X · ⌥ scroll = zoom Y · drag = pan
+            Scroll = zoom X · ⌥ scroll = zoom Y · drag = pan
           </div>
           {err && (
-            <div style={{ position: 'absolute', top: 30, left: 10, color: '#f44336', fontSize: 'var(--font-size-label)' }}>
+            <div style={{ position: 'absolute', top: 30, left: 10, color: 'var(--error)', fontSize: 'var(--font-size-label)' }}>
               fetch: {err}
             </div>
           )}
@@ -1840,7 +1821,7 @@ function LegendDot({ color, label }: { color: string; label: string }) {
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
       <span style={{
         width: 8, height: 8, borderRadius: '50%',
-        background: color, border: '1px solid rgba(255,255,255,0.6)',
+        background: color, border: '1px solid var(--marker-outline)',
       }} />
       {label}
     </span>
@@ -1874,8 +1855,8 @@ function drawMiniOverlay(
     if (!isFinite(px) || !isFinite(py)) return
     ctx.beginPath()
     ctx.arc(px, py, 5, 0, Math.PI * 2)
-    ctx.fillStyle = color; ctx.fill()
-    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.2; ctx.stroke()
+    ctx.fillStyle = cssVar(color); ctx.fill()
+    ctx.strokeStyle = cssVar('--marker-outline'); ctx.lineWidth = 1.2; ctx.stroke()
   }
 
   // Baseline level marker — midpoint of the baseline cursor window.
@@ -1936,6 +1917,7 @@ function FPspOverTimeGraph({
   onSelectIdx: (idx: number) => void
   heightSignal: number
 }) {
+  const themeKey = useThemeKey()
   const containerRef = useRef<HTMLDivElement>(null)
   const plotRef = useRef<uPlot | null>(null)
   const { onContextMenu, menu } = usePlotMenu({
@@ -2066,16 +2048,16 @@ function FPspOverTimeGraph({
           grid: { stroke: cssVar('--chart-grid'), width: 1 },
           ticks: { stroke: cssVar('--chart-tick'), width: 1 },
           label: xLabel, labelSize: 14,
-          font: `${cssVar('--font-size-label')} ${cssVar('--font-mono')}`,
-          labelFont: `${cssVar('--font-size-sm')} ${cssVar('--font-mono')}`,
+          font: `${cssVar('--font-size-label')} ${cssVar('--font-ui')}`,
+          labelFont: `${cssVar('--font-size-sm')} ${cssVar('--font-ui')}`,
         },
         {
           stroke: cssVar('--chart-axis'),
           grid: { stroke: cssVar('--chart-grid'), width: 1 },
           ticks: { stroke: cssVar('--chart-tick'), width: 1 },
           label: metricLabel, labelSize: 14,
-          font: `${cssVar('--font-size-label')} ${cssVar('--font-mono')}`,
-          labelFont: `${cssVar('--font-size-sm')} ${cssVar('--font-mono')}`,
+          font: `${cssVar('--font-size-label')} ${cssVar('--font-ui')}`,
+          labelFont: `${cssVar('--font-size-sm')} ${cssVar('--font-ui')}`,
         },
       ],
       cursor: { drag: { x: false, y: false } },
@@ -2102,7 +2084,7 @@ function FPspOverTimeGraph({
     }
     plotRef.current = new uPlot(opts, [xs, ys], el)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [xs, ys, splitX, metricLabel, xLabel])
+  }, [xs, ys, splitX, metricLabel, xLabel, themeKey])
 
   useEffect(() => {
     const el = containerRef.current
@@ -2191,7 +2173,8 @@ function drawSeriesSplit(u: uPlot, splitX: number | null) {
   const bottom = (u.bbox.top + u.bbox.height) / dpr
   ctx.save()
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-  ctx.strokeStyle = 'rgba(229,115,115,0.6)'
+  ctx.strokeStyle = cssVar('--stimulus-color')
+  ctx.globalAlpha = 0.6
   ctx.lineWidth = 1.5
   ctx.setLineDash([6, 4])
   ctx.beginPath()
@@ -2199,9 +2182,10 @@ function drawSeriesSplit(u: uPlot, splitX: number | null) {
   ctx.lineTo(px, bottom)
   ctx.stroke()
   ctx.setLineDash([])
-  ctx.fillStyle = 'rgba(229,115,115,0.85)'
-  ctx.font = `${cssVar('--font-size-label')} ${cssVar('--font-mono')}`
-  ctx.fillText('tetanus', px + 4, top + 12)
+  ctx.fillStyle = cssVar('--stimulus-color')
+  ctx.globalAlpha = 0.85
+  ctx.font = `${cssVar('--font-size-label')} ${cssVar('--font-ui')}`
+  ctx.fillText('Tetanus', px + 4, top + 12)
   ctx.restore()
 }
 
@@ -2221,7 +2205,7 @@ function drawGraphSelected(u: uPlot, selectedIdx: number | null) {
   ctx.beginPath()
   ctx.arc(px, py, 7, 0, Math.PI * 2)
   ctx.fillStyle = cssVar('--accent')
-  ctx.strokeStyle = '#fff'
+  ctx.strokeStyle = cssVar('--marker-outline')
   ctx.lineWidth = 2
   ctx.fill(); ctx.stroke()
   ctx.restore()
@@ -2282,7 +2266,7 @@ function FPspTable({
     }}>
       <table style={{
         width: '100%', borderCollapse: 'collapse',
-        fontSize: 'var(--font-size-label)', fontFamily: 'var(--font-mono)',
+        fontSize: 'var(--font-size-label)',
       }}>
         <thead>
           <tr style={{ background: 'var(--bg-secondary)', textAlign: 'left', position: 'sticky', top: 0 }}>
@@ -2300,12 +2284,12 @@ function FPspTable({
           {entry.points.map((p, i) => {
             const isLtp = entry.seriesB != null && p.sourceSeries === entry.seriesB
             const selectedBg = i === entry.selectedIdx
-              ? 'var(--bg-selected, rgba(100,181,246,0.2))'
+              ? 'var(--bg-selected)'
               : undefined
-            const flaggedBg = p.flagged ? 'rgba(229,115,115,0.12)' : undefined
-            const ltpBg = isLtp ? 'rgba(255,183,77,0.08)' : undefined
+            const flaggedBg = p.flagged ? 'color-mix(in oklab, var(--error) 12%, transparent)' : undefined
+            const ltpBg = isLtp ? 'color-mix(in oklab, var(--warning) 8%, transparent)' : undefined
             const multiBg = sel.isSelected(i)
-              ? 'var(--accent-muted, rgba(100,181,246,0.30))' : undefined
+              ? 'var(--accent-muted)' : undefined
             return (
               <tr
                 key={i}
@@ -2318,19 +2302,18 @@ function FPspTable({
                 })}
                 style={{
                   background: multiBg ?? selectedBg ?? flaggedBg ?? ltpBg ?? 'transparent',
-                  cursor: 'pointer',
                   borderTop: '1px solid var(--border)',
                 }}
               >
                 <Td>{i + 1}</Td>
-                <Td style={{ color: isLtp ? '#ffb74d' : 'var(--text-muted)' }}>
+                <Td style={{ color: isLtp ? 'var(--warning)' : 'var(--text-muted)' }}>
                   {isLtp ? 'LTP' : 'BL'} ({p.sourceSeries + 1})
                 </Td>
                 <Td>{p.sweepIndices.map((s) => s + 1).join(',')}</Td>
                 <Td>{p.baseline.toFixed(3)}</Td>
                 <Td>{p.volleyAmp.toFixed(3)}</Td>
                 <Td>{p.fepspAmp.toFixed(3)}</Td>
-                <Td style={p.flagged ? { color: '#e57373', fontWeight: 600 } : undefined}>
+                <Td style={p.flagged ? { color: 'var(--error)', fontWeight: 600 } : undefined}>
                   {p.ratio != null ? p.ratio.toFixed(2) : '—'}
                   {p.flagged && ' ⚠'}
                 </Td>
@@ -2412,6 +2395,7 @@ function FPspSweepViewer({
    *  overlay viewers can mirror the x range. Same pattern as AP/IV. */
   onXRangeChange?: (xMin: number, xMax: number) => void
 }) {
+  const themeKey = useThemeKey()
   const containerRef = useRef<HTMLDivElement>(null)
   const plotRef = useRef<uPlot | null>(null)
   const { onContextMenu, menu } = usePlotMenu({
@@ -2503,10 +2487,10 @@ function FPspSweepViewer({
       const px1 = u.valToPos(xe, 'x', true)
       ctx.save()
       ctx.globalAlpha = 0.18
-      ctx.fillStyle = color
+      ctx.fillStyle = cssVar(color)
       ctx.fillRect(Math.min(px0, px1), yTop, Math.abs(px1 - px0), yBot - yTop)
       ctx.globalAlpha = 1
-      ctx.fillStyle = color
+      ctx.fillStyle = cssVar(color)
       const dpr = devicePixelRatio || 1
       ctx.font = `bold ${10 * dpr}px ${cssVar('--font-mono')}`
       ctx.fillText(label, Math.min(px0, px1) + 2 * dpr, yTop + 12 * dpr)
@@ -2526,7 +2510,7 @@ function FPspSweepViewer({
 
     // Detection markers for the selected-row sweep. Same dot style
     // as the LTP right-side bin viewer — single circle per quantity,
-    // thin white outline so they sit cleanly on the trace. Drawn in
+    // thin outline so they sit cleanly on the trace. Drawn in
     // canvas pixels (not CSS pixels) so we scale by dpr inline.
     const point = markerPointRef.current
     const markEntry = markerEntryRef.current
@@ -2546,9 +2530,9 @@ function FPspSweepViewer({
         ctx.save()
         ctx.beginPath()
         ctx.arc(px, py, 5 * dpr, 0, Math.PI * 2)
-        ctx.fillStyle = color
+        ctx.fillStyle = cssVar(color)
         ctx.fill()
-        ctx.strokeStyle = '#ffffff'
+        ctx.strokeStyle = cssVar('--marker-outline')
         ctx.lineWidth = 1.2 * dpr
         ctx.stroke()
         ctx.restore()
@@ -2645,13 +2629,13 @@ function FPspSweepViewer({
           { stroke: cssVar('--chart-axis'), grid: { stroke: cssVar('--chart-grid'), width: 1 },
             ticks: { stroke: cssVar('--chart-tick'), width: 1 },
             label: 'Time (s)', labelSize: 14,
-            font: `${cssVar('--font-size-xs')} ${cssVar('--font-mono')}`,
-            labelFont: `${cssVar('--font-size-sm')} ${cssVar('--font-mono')}` },
+            font: `${cssVar('--font-size-xs')} ${cssVar('--font-ui')}`,
+            labelFont: `${cssVar('--font-size-sm')} ${cssVar('--font-ui')}` },
           { stroke: cssVar('--chart-axis'), grid: { stroke: cssVar('--chart-grid'), width: 1 },
             ticks: { stroke: cssVar('--chart-tick'), width: 1 },
             label: traceUnits || '', labelSize: 14,
-            font: `${cssVar('--font-size-xs')} ${cssVar('--font-mono')}`,
-            labelFont: `${cssVar('--font-size-sm')} ${cssVar('--font-mono')}` },
+            font: `${cssVar('--font-size-xs')} ${cssVar('--font-ui')}`,
+            labelFont: `${cssVar('--font-size-sm')} ${cssVar('--font-ui')}` },
         ],
         cursor: { drag: { x: false, y: false } },
         series: [
@@ -2857,7 +2841,7 @@ function FPspSweepViewer({
       plotRef.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [traceTime, traceValues])
+  }, [traceTime, traceValues, themeKey])
 
   useEffect(() => { plotRef.current?.redraw() }, [cursors])
   useEffect(() => { plotRef.current?.redraw() }, [theme, fontSize])
@@ -2900,10 +2884,9 @@ function FPspSweepViewer({
           Sweep {totalSweeps > 0 ? previewSweep + 1 : '—'}
         </span>
         {isExcluded && (
-          <span style={{
-            fontSize: 'var(--font-size-label)', fontWeight: 600,
-            color: '#fff', background: '#e65100',
-            padding: '1px 6px', borderRadius: 3,
+          <span className="notice notice-warning" style={{
+            fontSize: 'var(--font-size-xs)', fontWeight: 600,
+            padding: '1px 8px', borderRadius: 'var(--radius-sm)', lineHeight: 1.4,
           }}>⊘ Excluded</span>
         )}
         <label style={{
@@ -2939,7 +2922,7 @@ function FPspSweepViewer({
         borderTop: '1px solid var(--border)',
         flexShrink: 0,
       }}>
-        scroll = zoom X · ⌥ scroll = zoom Y · drag empty = pan · drag band = move · drag edge = resize
+        Scroll = zoom X · ⌥ scroll = zoom Y · drag empty = pan · drag band = move · drag edge = resize
       </div>
     </div>
   )
@@ -3104,7 +3087,7 @@ function IOTable({
     }}>
       <table style={{
         width: '100%', borderCollapse: 'collapse',
-        fontSize: 'var(--font-size-label)', fontFamily: 'var(--font-mono)',
+        fontSize: 'var(--font-size-label)',
       }}>
         <thead>
           <tr style={{ background: 'var(--bg-secondary)', textAlign: 'left', position: 'sticky', top: 0 }}>
@@ -3122,10 +3105,10 @@ function IOTable({
             const sweepIdx = p.sweepIndices[0] ?? p.meanSweepIndex
             const intensity = i0 + sweepIdx * step
             const selectedBg = i === entry.selectedIdx
-              ? 'var(--bg-selected, rgba(100,181,246,0.2))'
+              ? 'var(--bg-selected)'
               : undefined
             const multiBg = sel.isSelected(i)
-              ? 'var(--accent-muted, rgba(100,181,246,0.30))' : undefined
+              ? 'var(--accent-muted)' : undefined
             return (
               <tr
                 key={i}
@@ -3138,7 +3121,6 @@ function IOTable({
                 })}
                 style={{
                   background: multiBg ?? selectedBg ?? 'transparent',
-                  cursor: 'pointer',
                   borderTop: '1px solid var(--border)',
                 }}
               >
@@ -3175,6 +3157,7 @@ function IOScatter({
    *  it in while the panel was hidden. */
   visibilitySignal?: number
 }) {
+  const themeKey = useThemeKey()
   const containerRef = useRef<HTMLDivElement>(null)
   const plotRef = useRef<uPlot | null>(null)
   const { onContextMenu, menu } = usePlotMenu({
@@ -3242,7 +3225,7 @@ function IOScatter({
           stroke: cssVar('--chart-axis'),
           grid: { stroke: cssVar('--chart-grid'), width: 1 },
           ticks: { stroke: cssVar('--chart-tick'), width: 1 },
-          font: `${cssVar('--font-size-label')} ${cssVar('--font-mono')}`,
+          font: `${cssVar('--font-size-label')} ${cssVar('--font-ui')}`,
           label: xLabel,
           labelSize: 22,
           labelFont: `${cssVar('--font-size-label')} ${cssVar('--font-ui')}`,
@@ -3251,7 +3234,7 @@ function IOScatter({
           stroke: cssVar('--chart-axis'),
           grid: { stroke: cssVar('--chart-grid'), width: 1 },
           ticks: { stroke: cssVar('--chart-tick'), width: 1 },
-          font: `${cssVar('--font-size-label')} ${cssVar('--font-mono')}`,
+          font: `${cssVar('--font-size-label')} ${cssVar('--font-ui')}`,
           label: yLabel,
           labelSize: 22,
           labelFont: `${cssVar('--font-size-label')} ${cssVar('--font-ui')}`,
@@ -3299,7 +3282,7 @@ function IOScatter({
     // changes produce a new entry ref, but the memoized xs/ys remain
     // stable (field-scoped deps above), so the plot keeps its instance.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [xs, ys, metric, entry?.responseUnit, entry?.ioUnit])
+  }, [xs, ys, metric, entry?.responseUnit, entry?.ioUnit, themeKey])
 
   useEffect(() => { plotRef.current?.redraw() }, [entry?.selectedIdx])
 
@@ -3459,7 +3442,7 @@ function PPRTable({
     )
   }
   const highlight = (which: 'amp' | 'slope') =>
-    metric === which ? { background: 'rgba(100,181,246,0.12)' } : undefined
+    metric === which ? { background: 'color-mix(in oklab, var(--accent) 12%, transparent)' } : undefined
 
   return (
     <div style={{
@@ -3468,7 +3451,7 @@ function PPRTable({
     }}>
       <table style={{
         width: '100%', borderCollapse: 'collapse',
-        fontSize: 'var(--font-size-label)', fontFamily: 'var(--font-mono)',
+        fontSize: 'var(--font-size-label)',
       }}>
         <thead>
           <tr style={{ background: 'var(--bg-secondary)', textAlign: 'left', position: 'sticky', top: 0 }}>
@@ -3490,10 +3473,10 @@ function PPRTable({
           {entry.points.map((p, i) => {
             const sweepIdx = p.sweepIndices[0] ?? p.meanSweepIndex
             const selectedBg = i === entry.selectedIdx
-              ? 'var(--bg-selected, rgba(100,181,246,0.2))'
+              ? 'var(--bg-selected)'
               : undefined
             const multiBg = sel.isSelected(i)
-              ? 'var(--accent-muted, rgba(100,181,246,0.30))' : undefined
+              ? 'var(--accent-muted)' : undefined
             return (
               <tr
                 key={i}
@@ -3506,7 +3489,6 @@ function PPRTable({
                 })}
                 style={{
                   background: multiBg ?? selectedBg ?? 'transparent',
-                  cursor: 'pointer',
                   borderTop: '1px solid var(--border)',
                 }}
               >
@@ -3543,6 +3525,7 @@ function PPRScatter({
   onSelectIdx: (idx: number) => void
   visibilitySignal?: number
 }) {
+  const themeKey = useThemeKey()
   const containerRef = useRef<HTMLDivElement>(null)
   const plotRef = useRef<uPlot | null>(null)
   const { onContextMenu, menu } = usePlotMenu({
@@ -3585,7 +3568,7 @@ function PPRScatter({
           stroke: cssVar('--chart-axis'),
           grid: { stroke: cssVar('--chart-grid'), width: 1 },
           ticks: { stroke: cssVar('--chart-tick'), width: 1 },
-          font: `${cssVar('--font-size-label')} ${cssVar('--font-mono')}`,
+          font: `${cssVar('--font-size-label')} ${cssVar('--font-ui')}`,
           label: xLabel,
           labelSize: 22,
           labelFont: `${cssVar('--font-size-label')} ${cssVar('--font-ui')}`,
@@ -3594,7 +3577,7 @@ function PPRScatter({
           stroke: cssVar('--chart-axis'),
           grid: { stroke: cssVar('--chart-grid'), width: 1 },
           ticks: { stroke: cssVar('--chart-tick'), width: 1 },
-          font: `${cssVar('--font-size-label')} ${cssVar('--font-mono')}`,
+          font: `${cssVar('--font-size-label')} ${cssVar('--font-ui')}`,
           label: yLabel,
           labelSize: 22,
           labelFont: `${cssVar('--font-size-label')} ${cssVar('--font-ui')}`,
@@ -3622,7 +3605,8 @@ function PPRScatter({
             if (!isFinite(py)) return
             ctx.save()
             ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-            ctx.strokeStyle = 'rgba(158,158,158,0.7)'
+            ctx.strokeStyle = cssVar('--text-muted')
+            ctx.globalAlpha = 0.7
             ctx.lineWidth = 1
             ctx.setLineDash([5, 4])
             ctx.beginPath()
@@ -3630,8 +3614,9 @@ function PPRScatter({
             ctx.lineTo(px2, py)
             ctx.stroke()
             ctx.setLineDash([])
-            ctx.fillStyle = 'rgba(158,158,158,0.9)'
-            ctx.font = `${cssVar('--font-size-label')} ${cssVar('--font-mono')}`
+            ctx.fillStyle = cssVar('--text-muted')
+            ctx.globalAlpha = 0.9
+            ctx.font = `${cssVar('--font-size-label')} ${cssVar('--font-ui')}`
             ctx.fillText('PPR = 1', px1 + 4, py - 3)
             ctx.restore()
           },
@@ -3662,7 +3647,7 @@ function PPRScatter({
       over.addEventListener('click', onClick)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [xs, ys, metric, entry?.responseUnit])
+  }, [xs, ys, metric, entry?.responseUnit, themeKey])
 
   useEffect(() => { plotRef.current?.redraw() }, [entry?.selectedIdx])
 

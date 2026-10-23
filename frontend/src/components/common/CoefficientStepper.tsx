@@ -63,12 +63,12 @@ export function CoefficientStepper({
           {label}
         </span>
         <button className="btn" onClick={decrement}
-          style={{ padding: '0 6px', minWidth: 20, fontSize: 11 }}
+          style={{ padding: '0 6px', minWidth: 20, fontSize: 'var(--font-size-xs)' }}
           title={`−${step}`}>−</button>
         <NumInput value={value} step={step} min={min} max={max}
           onChange={onChange} style={{ width: 70 }} />
         <button className="btn" onClick={increment}
-          style={{ padding: '0 6px', minWidth: 20, fontSize: 11 }}
+          style={{ padding: '0 6px', minWidth: 20, fontSize: 'var(--font-size-xs)' }}
           title={`+${step}`}>+</button>
         {unit && <span style={{ color: 'var(--text-muted)', minWidth: 16 }}>{unit}</span>}
       </div>

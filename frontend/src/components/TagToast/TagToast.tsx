@@ -134,16 +134,13 @@ export function TagToast() {
       role="alert"
       style={{
         position: 'fixed',
-        top: 16, left: '50%',
-        transform: 'translateX(-50%)',
+        bottom: 40, right: 16,
         zIndex: 9999,
-        minWidth: 380, maxWidth: 480,
-        padding: '12px 16px',
-        background: 'var(--bg-secondary)',
-        border: '1px solid var(--border)',
-        borderLeft: '4px solid var(--accent, #3b82f6)',
-        borderRadius: 4,
-        boxShadow: '0 6px 24px rgba(0,0,0,0.45)',
+        width: 360,
+        padding: '12px 14px',
+        background: 'var(--bg-field)',
+        borderRadius: 10,
+        boxShadow: 'var(--shadow-popover)',
         fontSize: 'var(--font-size-base, 13px)',
         color: 'var(--text-primary)',
       }}
@@ -165,7 +162,7 @@ export function TagToast() {
           title="Dismiss"
           style={{
             background: 'transparent', border: 'none',
-            color: 'var(--text-muted)', cursor: 'pointer',
+            color: 'var(--text-muted)',
             padding: 0, fontSize: 18, lineHeight: 1,
           }}
         >×</button>
@@ -175,17 +172,11 @@ export function TagToast() {
           className="btn"
           onClick={suppressForever}
           title="Don't show this prompt for this file again"
-          style={{ fontSize: 'var(--font-size-sm, 12px)', padding: '5px 10px' }}
         >Don't ask for this file</button>
         <button
-          className="btn"
+          className="btn btn-primary"
           onClick={openMetadata}
-          style={{
-            fontSize: 'var(--font-size-sm, 12px)', padding: '5px 14px',
-            background: 'var(--accent, #3b82f6)', color: '#fff',
-            border: 'none',
-          }}
-        >Open metadata</button>
+        >Add tags…</button>
       </div>
     </div>
   )

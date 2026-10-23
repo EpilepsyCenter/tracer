@@ -674,10 +674,9 @@ export function PreviewPanel({ backendUrl }: Props) {
       fontFamily: 'var(--font-ui)',
     }}>
       {error && (
-        <div style={{
+        <div className="notice" style={{
           position: 'absolute', top: 8, left: 8, right: 8, zIndex: 5,
-          padding: '4px 8px', background: 'var(--accent)', color: 'white',
-          borderRadius: 3, fontSize: 'var(--font-size-sm)',
+          background: 'var(--bg-error)', color: '#fff',
         }}>{error}</div>
       )}
       {(!data || data.length === 0) && (
@@ -749,9 +748,9 @@ export function PreviewPanel({ backendUrl }: Props) {
           display: 'flex', gap: 4,
           background: 'var(--bg-secondary)',
           border: '1px solid var(--border)',
-          borderRadius: 4,
+          borderRadius: 'var(--radius-md)',
           padding: 2,
-          fontSize: 11,
+          fontSize: 'var(--font-size-xs)',
           fontFamily: 'var(--font-ui)',
         }}>
           <button className="btn" onClick={resetView} title="Reset zoom (Fit)" style={{ padding: '2px 8px' }}>

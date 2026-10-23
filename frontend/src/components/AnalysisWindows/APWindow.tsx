@@ -7,7 +7,7 @@ import {
   APThresholdMethod, APRampParams, APRheobaseMode, APManualEdits,
   APPoint, APPerSweep,
 } from '../../stores/appStore'
-import { useThemeStore } from '../../stores/themeStore'
+import { useThemeStore, useThemeKey } from '../../stores/themeStore'
 import { NumInput } from '../common/NumInput'
 import { ImSourceCard } from '../common/ImSourceCard'
 import { ChannelsOverlaySelect, STIMULUS_OVERLAY_KEY } from '../common/ChannelsOverlaySelect'
@@ -49,9 +49,22 @@ function cssVar(name: string): string {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim()
 }
 
-const BOUND_COLOR = '#64b5f6'    // analysis-bounds bands (blue)
-const SPIKE_COLOR = '#e57373'    // detected spike peak dots
-const MANUAL_COLOR = '#ffb74d'   // manually-added spike ring
+// Marker colours are theme tokens; canvas code resolves them with
+// ``cssVar`` at draw time so a theme switch is picked up on redraw.
+const BOUND_COLOR = '--marker-bounds'     // analysis-bounds bands
+const SPIKE_COLOR = '--marker-detected'   // detected spike peak dots
+const MANUAL_COLOR = '--marker-manual'    // manually-added spike ring
+
+/** Per-quantity kinetics marker tokens (peak / threshold / FWHM /
+ *  fAHP / mAHP). Shared by both viewers and the legend so the
+ *  colour → quantity mapping stays identical everywhere. */
+const AP_MARKER = {
+  peak: '--marker-detected',
+  threshold: '--text-muted',
+  fwhm: '--warning',
+  fahp: '--cursor-peak',
+  mahp: '--cursor-fit',
+} as const
 
 // Default detection params — match what `analysis/ap.py` falls back to
 // when fields are missing. Values picked to work on a typical 10 kHz
@@ -650,7 +663,7 @@ export function APWindow({
         // region distinct from the content (viewer + results).
         background: 'var(--bg-secondary)',
         padding: '6px 10px',
-        borderRadius: 4,
+        borderRadius: 'var(--radius-md)',
         border: '1px solid var(--border)',
       }}>
         <Field label="Group">
@@ -677,14 +690,14 @@ export function APWindow({
         />
         <Field label="Sweep (preview)">
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-            <button className="btn" style={{ padding: '2px 8px' }}
+            <button className="btn btn-compact"
               onClick={() => setPreviewSweep((s) => Math.max(0, s - 1))}
               disabled={previewSweep <= 0 || totalSweeps === 0}
               title="Previous sweep">←</button>
-            <span style={{ minWidth: 58, textAlign: 'center', fontSize: 'var(--font-size-label)', color: 'var(--text-muted)' }}>
+            <span className="num" style={{ minWidth: 58, textAlign: 'center', fontSize: 'var(--font-size-label)', color: 'var(--text-muted)' }}>
               {totalSweeps > 0 ? `${previewSweep + 1} / ${totalSweeps}` : '— / —'}
             </span>
-            <button className="btn" style={{ padding: '2px 8px' }}
+            <button className="btn btn-compact"
               onClick={() => setPreviewSweep((s) => Math.min(totalSweeps - 1, s + 1))}
               disabled={previewSweep >= totalSweeps - 1 || totalSweeps === 0}
               title="Next sweep">→</button>
@@ -698,30 +711,17 @@ export function APWindow({
           Kinetics) and which results show on the right; placing the
           bar inside the right column made it look like a local viewer
           toggle, which misread its actual scope. */}
-      <div style={{
-        display: 'flex', gap: 2, borderBottom: '1px solid var(--border)',
-        alignItems: 'flex-end', flexShrink: 0,
-      }}>
+      <div className="segmented" style={{ alignSelf: 'flex-start', flexShrink: 0 }}>
         {(['counting', 'kinetics'] as APTab[]).map((t) => {
           const label = t === 'counting' ? 'Counting' : 'Kinetics'
           const active = tab === t
           return (
             <button
               key={t}
-              className="btn"
+              className={active ? 'active' : undefined}
+              aria-selected={active}
               onClick={() => setTab(t)}
-              style={{
-                padding: '8px 22px',
-                borderBottomLeftRadius: 0,
-                borderBottomRightRadius: 0,
-                borderBottom: active ? '3px solid var(--accent, #4a90e2)' : '3px solid transparent',
-                marginBottom: -1,
-                background: active ? 'var(--bg-primary)' : 'transparent',
-                color: active ? 'var(--accent, #4a90e2)' : 'var(--text-muted)',
-                fontWeight: active ? 700 : 500,
-                fontSize: 'var(--font-size-sm)',
-                fontFamily: 'var(--font-ui)',
-              }}
+              style={{ minWidth: 110 }}
             >{label}</button>
           )
         })}
@@ -739,7 +739,7 @@ export function APWindow({
           display: 'flex', flexDirection: 'column', minHeight: 0, gap: 8,
           background: 'var(--bg-secondary)',
           padding: 8,
-          borderRadius: 4,
+          borderRadius: 'var(--radius-md)',
           border: '1px solid var(--border)',
         }}>
           {/* Scrollable param sections. Run controls + error banner
@@ -807,18 +807,10 @@ export function APWindow({
               Single reveal their inline input rows only when chosen.
               This replaces the earlier radios-on-one-row layout,
               which got cramped in a narrow left column. */}
-          <div style={{
-            flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 6,
-            padding: 8,
-            border: '1px solid var(--border)', borderRadius: 4,
-            background: 'var(--bg-primary)',
-          }}>
-            <button className="btn btn-primary" onClick={onRun}
+          <div className="section-card" style={{ flexShrink: 0 }}>
+            <button className="btn btn-primary btn-lg" onClick={onRun}
               disabled={loading || !fileInfo}
-              style={{
-                width: '100%', padding: '8px 0',
-                fontSize: 'var(--font-size-sm)', fontWeight: 600,
-              }}>
+              style={{ width: '100%' }}>
               {loading ? 'Running…' : 'Run'}
             </button>
             <div style={{
@@ -837,7 +829,7 @@ export function APWindow({
             {runMode === 'range' && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 6,
                 fontSize: 'var(--font-size-label)', color: 'var(--text-muted)' }}>
-                <span>from</span>
+                <span>From</span>
                 <NumInput value={sweepFrom} step={1} min={1} max={Math.max(1, totalSweeps)}
                   onChange={(v) => setSweepFrom(Math.max(1, Math.round(v)))} style={{ width: 60 }} />
                 <span>to</span>
@@ -849,7 +841,7 @@ export function APWindow({
             {runMode === 'one' && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 6,
                 fontSize: 'var(--font-size-label)', color: 'var(--text-muted)' }}>
-                <span>sweep</span>
+                <span>Sweep</span>
                 <NumInput value={sweepOne} step={1} min={1} max={Math.max(1, totalSweeps)}
                   onChange={(v) => setSweepOne(Math.max(1, Math.round(v)))} style={{ width: 60 }} />
                 <span style={{ marginLeft: 'auto' }}>/ {totalSweeps || '—'}</span>
@@ -891,17 +883,12 @@ export function APWindow({
             </div>
           </div>
           {error && (
-            <div style={{
+            <div className="notice notice-error" style={{
               flexShrink: 0,
-              padding: '6px 10px',
-              background: 'var(--bg-error, #5c1b1b)',
-              color: '#fff', borderRadius: 3,
               display: 'flex', alignItems: 'center', gap: 8,
-              fontSize: 'var(--font-size-xs)',
             }}>
               <span style={{ flex: 1 }}>⚠ {error}</span>
-              <button className="btn" onClick={() => setError(null)}
-                style={{ padding: '1px 6px', fontSize: 'var(--font-size-label)' }}>dismiss</button>
+              <button className="btn btn-sm" onClick={() => setError(null)}>Dismiss</button>
             </div>
           )}
         </div>{/* close LEFT panel */}
@@ -1150,10 +1137,8 @@ function APDetectionPanel({
   return (
     <>
       {/* Pre-detection filter */}
-      <div style={{
-        display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap',
-        padding: 8, border: '1px solid var(--border)', borderRadius: 4,
-        background: 'var(--bg-primary)',
+      <div className="section-card" style={{
+        flexDirection: 'row', gap: 8, alignItems: 'center', flexWrap: 'wrap',
       }}>
         <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 'var(--font-size-label)' }}>
           <input type="checkbox" checked={detection.filter_enabled}
@@ -1171,7 +1156,7 @@ function APDetectionPanel({
             </select>
             {(detection.filter_type === 'highpass' || detection.filter_type === 'bandpass') && (
               <label style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 'var(--font-size-label)' }}>
-                <span style={{ color: 'var(--text-muted)' }}>low</span>
+                <span style={{ color: 'var(--text-muted)' }}>Low</span>
                 <NumInput value={detection.filter_low} step={0.1} min={0}
                   onChange={(v) => set('filter_low', v)} style={{ width: 64 }} />
                 <span style={{ color: 'var(--text-muted)' }}>Hz</span>
@@ -1179,14 +1164,14 @@ function APDetectionPanel({
             )}
             {(detection.filter_type === 'lowpass' || detection.filter_type === 'bandpass') && (
               <label style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 'var(--font-size-label)' }}>
-                <span style={{ color: 'var(--text-muted)' }}>high</span>
+                <span style={{ color: 'var(--text-muted)' }}>High</span>
                 <NumInput value={detection.filter_high} step={50} min={1}
                   onChange={(v) => set('filter_high', v)} style={{ width: 70 }} />
                 <span style={{ color: 'var(--text-muted)' }}>Hz</span>
               </label>
             )}
             <label style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 'var(--font-size-label)' }}>
-              <span style={{ color: 'var(--text-muted)' }}>order</span>
+              <span style={{ color: 'var(--text-muted)' }}>Order</span>
               <NumInput value={detection.filter_order} step={1} min={1} max={8}
                 onChange={(v) => set('filter_order', Math.max(1, Math.min(8, Math.round(v))))}
                 style={{ width: 42 }} />
@@ -1199,12 +1184,10 @@ function APDetectionPanel({
           (dropdowns) spanning both columns via gridColumn '1 / -1'.
           Thin sub-header strips group related fields so the user can
           scan the panel quickly. */}
-      <div style={{
+      <div className="section-card" style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-        gap: 8, padding: 8,
-        border: '1px solid var(--border)', borderRadius: 4,
-        background: 'var(--bg-primary)',
+        gap: 8,
       }}>
         <div style={{ gridColumn: '1 / -1' }}>
           <Field label="Detection method">
@@ -1288,12 +1271,10 @@ function APKineticsPanel({
   const isSekerli = kinetics.threshold_method === 'sekerli_I'
     || kinetics.threshold_method === 'sekerli_II'
   return (
-    <div style={{
+    <div className="section-card" style={{
       display: 'grid',
       gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-      gap: 8, padding: 8,
-      border: '1px solid var(--border)', borderRadius: 4,
-      background: 'var(--bg-primary)',
+      gap: 8,
     }}>
       <div style={{ gridColumn: '1 / -1' }}>
         <Field label="Threshold method">
@@ -1337,8 +1318,8 @@ function APKineticsPanel({
         <Field label="Decay end">
           <select value={kinetics.decay_end}
             onChange={(e) => set('decay_end', e.target.value as 'to_threshold' | 'to_fahp')}>
-            <option value="to_threshold">to threshold</option>
-            <option value="to_fahp">to fAHP</option>
+            <option value="to_threshold">To threshold</option>
+            <option value="to_fahp">To fAHP</option>
           </select>
         </Field>
       </div>
@@ -1419,10 +1400,9 @@ function APRheobasePanel({
   }
 
   return (
-    <div style={{
-      display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap',
-      padding: '6px 8px', border: '1px solid var(--border)', borderRadius: 4,
-      background: 'var(--bg-primary)', fontSize: 'var(--font-size-label)',
+    <div className="section-card" style={{
+      flexDirection: 'row', gap: 10, alignItems: 'center', flexWrap: 'wrap',
+      fontSize: 'var(--font-size-label)',
     }}>
       <span style={{ color: 'var(--text-muted)' }}>Rheobase:</span>
       <label style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
@@ -1462,9 +1442,8 @@ function APRheobasePanel({
             <NumInput value={rampParams.im_end_pa} step={10}
               onChange={(v) => setRamp('im_end_pa', v)} style={{ width: 70 }} />
           </label>
-          <button className="btn" onClick={onAutoFill}
-            title="Try to fill from the stimulus protocol"
-            style={{ padding: '1px 8px' }}>
+          <button className="btn btn-sm" onClick={onAutoFill}
+            title="Try to fill from the stimulus protocol">
             Auto-fill from protocol
           </button>
         </span>
@@ -1530,24 +1509,13 @@ function APCountingPanel({
         display: 'flex', flexDirection: 'column', gap: 4, minHeight: 0,
       }}>
         {/* Sub-tab strip — Per sweep (default) or Trains. */}
-        <div style={{
-          display: 'flex', gap: 2,
-          borderBottom: '1px solid var(--border)',
-          flexShrink: 0,
-        }}>
+        <div className="segmented" style={{ alignSelf: 'flex-start', flexShrink: 0 }}>
           {(['sweeps', 'trains'] as const).map((k) => (
-            <button key={k} className="btn"
+            <button key={k}
+              className={resultTab === k ? 'active' : undefined}
+              aria-selected={resultTab === k}
               onClick={() => setResultTab(k)}
-              style={{
-                padding: '3px 12px',
-                fontSize: 'var(--font-size-label)',
-                background: resultTab === k
-                  ? 'var(--bg-primary)' : 'transparent',
-                borderBottom: resultTab === k
-                  ? '2px solid var(--accent, #64b5f6)' : '2px solid transparent',
-                borderRadius: '3px 3px 0 0',
-                fontWeight: resultTab === k ? 600 : 400,
-              }}>
+              style={{ minWidth: 80 }}>
               {k === 'sweeps' ? 'Per sweep'
                 : `Trains${trainsAvailable ? ` (${trains.length})` : ''}`}
             </button>
@@ -1648,30 +1616,20 @@ function APTrainsPanel({
         <span>
           <strong style={{ color: 'var(--text-primary)' }}>{trains.length}</strong> trains
         </span>
-        <button className="btn"
+        <button className="btn btn-sm"
           onClick={onExport}
-          style={{
-            marginLeft: 'auto',
-            fontSize: 'var(--font-size-label)',
-            padding: '2px 10px',
-          }}
+          style={{ marginLeft: 'auto' }}
           title="Export per-train summary to CSV">
           Export trains CSV
         </button>
       </div>
       <div style={{
-        flex: 1, border: '1px solid var(--border)', borderRadius: 4,
+        flex: 1, border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
         overflow: 'auto', minHeight: 0,
       }}>
-        <table style={{
-          width: '100%', borderCollapse: 'collapse',
-          fontSize: 'var(--font-size-label)', fontFamily: 'var(--font-mono)',
-        }}>
+        <table className="data-table">
           <thead>
-            <tr style={{
-              background: 'var(--bg-secondary)', textAlign: 'left',
-              position: 'sticky', top: 0,
-            }}>
+            <tr>
               {headers.map((h, i) => <Th key={i}>{h}</Th>)}
             </tr>
           </thead>
@@ -1684,12 +1642,10 @@ function APTrainsPanel({
                 })}
                 style={{
                   background: sel.isSelected(i)
-                    ? 'var(--accent-muted, rgba(100,181,246,0.30))'
+                    ? 'var(--accent-muted)'
                     : 'transparent',
-                  cursor: 'pointer',
-                  borderTop: '1px solid var(--border)',
                 }}>
-                <Td><span style={{ color: 'rgba(255,167,38,0.95)' }}>T{t.id + 1}</span></Td>
+                <Td><span style={{ color: 'var(--marker-manual)' }}>T{t.id + 1}</span></Td>
                 <Td>{t.sweep + 1}</Td>
                 <Td>{t.startS.toFixed(4)}</Td>
                 <Td>{t.endS.toFixed(4)}</Td>
@@ -1745,7 +1701,6 @@ function APExportDropdown({
         onClick={() => setOpen((o) => !o)}
         style={{
           fontSize: 'var(--font-size-label)',
-          padding: stretch ? undefined : '4px 12px',
           ...(stretch ? { flex: 1 } : null),
         }}
         title="Export per-sweep counts or per-spike kinetics to CSV">
@@ -1754,35 +1709,33 @@ function APExportDropdown({
       {open && (
         <div style={{
           position: 'absolute', ...popoverPosition, right: 0,
-          background: 'var(--bg-primary)',
-          border: '1px solid var(--border)', borderRadius: 4,
-          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          background: 'var(--bg-field)',
+          borderRadius: 'var(--radius-md)',
+          boxShadow: 'var(--shadow-popover)',
           minWidth: 200, zIndex: 10, padding: 4,
           display: 'flex', flexDirection: 'column', gap: 2,
         }}>
-          <button className="btn"
+          <button className="btn btn-ghost"
             onClick={() => { onCounting(); setOpen(false) }}
             disabled={countingCount === 0}
             style={{
-              textAlign: 'left', padding: '6px 10px',
-              fontSize: 'var(--font-size-label)',
+              textAlign: 'left',
               display: 'flex', justifyContent: 'space-between', gap: 12,
             }}
             title="Per-sweep spike counts, rate, ISI, SFA, LV, Im">
             <span>Counting (per sweep)</span>
-            <span style={{ color: 'var(--text-muted)' }}>{countingCount}</span>
+            <span className="num" style={{ color: 'var(--text-muted)' }}>{countingCount}</span>
           </button>
-          <button className="btn"
+          <button className="btn btn-ghost"
             onClick={() => { onKinetics(); setOpen(false) }}
             disabled={kineticsCount === 0}
             style={{
-              textAlign: 'left', padding: '6px 10px',
-              fontSize: 'var(--font-size-label)',
+              textAlign: 'left',
               display: 'flex', justifyContent: 'space-between', gap: 12,
             }}
             title="Per-spike threshold, peak, amplitude, rise/decay, half-width, AHP">
             <span>Kinetics (per spike)</span>
-            <span style={{ color: 'var(--text-muted)' }}>{kineticsCount}</span>
+            <span className="num" style={{ color: 'var(--text-muted)' }}>{kineticsCount}</span>
           </button>
         </div>
       )}
@@ -1910,16 +1863,16 @@ function APRheobaseBadge({ entry }: { entry: APData }) {
   const value = r.value != null ? `${r.value.toFixed(1)} pA` : '—'
   return (
     <div style={{
-      padding: '6px 10px', border: '1px solid var(--border)', borderRadius: 4,
-      background: 'var(--bg-primary)',
+      padding: '6px 10px', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
+      background: 'var(--bg-secondary)',
       display: 'flex', gap: 10, alignItems: 'center',
-      fontFamily: 'var(--font-mono)', fontSize: 'var(--font-size-label)',
+      fontSize: 'var(--font-size-label)',
     }}>
       <span style={{ color: 'var(--text-muted)' }}>Rheobase</span>
-      <strong style={{ color: 'var(--text-primary)', fontSize: 'var(--font-size-sm)' }}>{value}</strong>
+      <strong className="num" style={{ color: 'var(--text-primary)', fontSize: 'var(--font-size-sm)' }}>{value}</strong>
       <span style={{
-        padding: '1px 6px', borderRadius: 2,
-        background: 'var(--bg-secondary)', color: 'var(--text-muted)',
+        padding: '1px 6px', borderRadius: 'var(--radius-sm)',
+        background: 'var(--bg-hover)', color: 'var(--text-muted)',
         fontSize: 'var(--font-size-xs)',
       }}>{r.mode}</span>
     </div>
@@ -1951,15 +1904,12 @@ function APPerSweepTable({
   })
   return (
     <div style={{
-      border: '1px solid var(--border)', borderRadius: 4,
+      border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
       overflow: 'auto', height: '100%',
     }}>
-      <table style={{
-        width: '100%', borderCollapse: 'collapse',
-        fontSize: 'var(--font-size-label)', fontFamily: 'var(--font-mono)',
-      }}>
+      <table className="data-table">
         <thead>
-          <tr style={{ background: 'var(--bg-secondary)', textAlign: 'left', position: 'sticky', top: 0 }}>
+          <tr>
             {headers.map((h, i) => <Th key={i}>{h}</Th>)}
           </tr>
         </thead>
@@ -1980,12 +1930,10 @@ function APPerSweepTable({
                 })}
                 style={{
                   background: sel.isSelected(i)
-                    ? 'var(--accent-muted, rgba(100,181,246,0.30))'
+                    ? 'var(--accent-muted)'
                     : selected
-                      ? 'var(--bg-selected, rgba(100,181,246,0.2))'
+                      ? 'var(--bg-selected)'
                       : 'transparent',
-                  cursor: 'pointer',
-                  borderTop: '1px solid var(--border)',
                 }}
               >
                 <Td>{p.sweep + 1}</Td>
@@ -2015,6 +1963,7 @@ function APFICurve({
    *  ResizeObserver alone misses some flexbox-redistribute cases. */
   heightSignal?: number
 }) {
+  const themeKey = useThemeKey()
   const containerRef = useRef<HTMLDivElement>(null)
   const plotRef = useRef<uPlot | null>(null)
   const { onContextMenu, menu } = usePlotMenu({
@@ -2038,7 +1987,7 @@ function APFICurve({
           stroke: cssVar('--chart-axis'),
           grid: { stroke: cssVar('--chart-grid'), width: 1 },
           ticks: { stroke: cssVar('--chart-tick'), width: 1 },
-          font: `${cssVar('--font-size-label')} ${cssVar('--font-mono')}`,
+          font: `${cssVar('--font-size-label')} ${cssVar('--font-ui')}`,
           label: 'Im (pA)', labelSize: 22,
           labelFont: `${cssVar('--font-size-label')} ${cssVar('--font-ui')}`,
         },
@@ -2046,7 +1995,7 @@ function APFICurve({
           stroke: cssVar('--chart-axis'),
           grid: { stroke: cssVar('--chart-grid'), width: 1 },
           ticks: { stroke: cssVar('--chart-tick'), width: 1 },
-          font: `${cssVar('--font-size-label')} ${cssVar('--font-mono')}`,
+          font: `${cssVar('--font-size-label')} ${cssVar('--font-ui')}`,
           label: 'Rate (Hz)', labelSize: 22,
           labelFont: `${cssVar('--font-size-label')} ${cssVar('--font-ui')}`,
         },
@@ -2079,7 +2028,7 @@ function APFICurve({
       over.addEventListener('click', onClick)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fi])
+  }, [fi, themeKey])
 
   useEffect(() => {
     const el = containerRef.current
@@ -2123,7 +2072,7 @@ function APFICurve({
   if (!fi || fi.im.length === 0) {
     return (
       <div style={{
-        height: '100%', border: '1px solid var(--border)', borderRadius: 4,
+        height: '100%', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
         background: 'var(--bg-primary)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         color: 'var(--text-muted)', fontStyle: 'italic',
@@ -2137,7 +2086,7 @@ function APFICurve({
     <div
       onContextMenu={onContextMenu}
       style={{
-        height: '100%', border: '1px solid var(--border)', borderRadius: 4,
+        height: '100%', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
         background: 'var(--bg-primary)', position: 'relative',
       }}
     >
@@ -2215,15 +2164,12 @@ function APKineticsTable({
   }
   return (
     <div style={{
-      flex: 1, border: '1px solid var(--border)', borderRadius: 4,
+      flex: 1, border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
       overflow: 'auto', minHeight: 0,
     }}>
-      <table style={{
-        width: '100%', borderCollapse: 'collapse',
-        fontSize: 'var(--font-size-label)', fontFamily: 'var(--font-mono)',
-      }}>
+      <table className="data-table">
         <thead>
-          <tr style={{ background: 'var(--bg-secondary)', textAlign: 'left', position: 'sticky', top: 0 }}>
+          <tr>
             <Th>✓</Th>
             {headers.map((h, i) => <Th key={i}>{h}</Th>)}
           </tr>
@@ -2246,16 +2192,14 @@ function APKineticsTable({
                 })}
                 style={{
                   background: sel.isSelected(i)
-                    ? 'var(--accent-muted, rgba(100,181,246,0.30))'
+                    ? 'var(--accent-muted)'
                     : selected
-                      ? 'var(--bg-selected, rgba(100,181,246,0.2))'
+                      ? 'var(--bg-selected)'
                       : 'transparent',
-                  cursor: 'pointer',
-                  borderTop: '1px solid var(--border)',
                   fontStyle: sp.manual ? 'italic' : 'normal',
                 }}
               >
-                <td style={{ padding: '3px 8px' }}
+                <td
                   onClick={(e) => { e.stopPropagation(); onToggleSpike(i) }}>
                   <input type="checkbox" checked={checked}
                     onChange={() => onToggleSpike(i)}
@@ -2276,7 +2220,7 @@ function APKineticsTable({
                 {showTrainCol && (
                   <Td>
                     {trainIdByIdx?.[i] != null
-                      ? <span style={{ color: 'rgba(255,167,38,0.95)' }}>T{(trainIdByIdx![i] as number) + 1}</span>
+                      ? <span style={{ color: 'var(--marker-manual)' }}>T{(trainIdByIdx![i] as number) + 1}</span>
                       : <span style={{ color: 'var(--text-muted)' }}>—</span>}
                   </Td>
                 )}
@@ -2313,6 +2257,7 @@ function APPhasePlotPanel({
    *  loop. Useful when overlaying many spikes — markers stack. */
   hideMarkers: boolean
 }) {
+  const themeKey = useThemeKey()
   void hideMarkers  // not yet used inside the loop; reserved for future per-spike marker dots
   const containerRef = useRef<HTMLDivElement>(null)
   const plotRef = useRef<uPlot | null>(null)
@@ -2493,7 +2438,7 @@ function APPhasePlotPanel({
           stroke: cssVar('--chart-axis'),
           grid: { stroke: cssVar('--chart-grid'), width: 1 },
           ticks: { stroke: cssVar('--chart-tick'), width: 1 },
-          font: `${cssVar('--font-size-label')} ${cssVar('--font-mono')}`,
+          font: `${cssVar('--font-size-label')} ${cssVar('--font-ui')}`,
           label: 'Vm (mV)', labelSize: 22,
           labelFont: `${cssVar('--font-size-label')} ${cssVar('--font-ui')}`,
         },
@@ -2501,7 +2446,7 @@ function APPhasePlotPanel({
           stroke: cssVar('--chart-axis'),
           grid: { stroke: cssVar('--chart-grid'), width: 1 },
           ticks: { stroke: cssVar('--chart-tick'), width: 1 },
-          font: `${cssVar('--font-size-label')} ${cssVar('--font-mono')}`,
+          font: `${cssVar('--font-size-label')} ${cssVar('--font-ui')}`,
           label: 'dV/dt (mV/ms)', labelSize: 22,
           labelFont: `${cssVar('--font-size-label')} ${cssVar('--font-ui')}`,
         },
@@ -2511,7 +2456,7 @@ function APPhasePlotPanel({
     }
     const payload: uPlot.AlignedData = [xData, ...yArrays] as any
     plotRef.current = new uPlot(opts, payload, el)
-  }, [phaseSlices, spikesToPlot])
+  }, [phaseSlices, spikesToPlot, themeKey])
 
   useEffect(() => {
     const el = containerRef.current
@@ -2579,20 +2524,20 @@ function APPhasePlotPanel({
     // container, so flex: 1 here was a no-op and the panel sized to
     // its content. That made the splitter's height changes invisible.
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 6, minHeight: 0 }}>
-      <div style={{
-        display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap',
-        padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 4,
-        background: 'var(--bg-primary)', fontSize: 'var(--font-size-label)',
+      <div className="viewer-header" style={{
+        gap: 8,
+        border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
+        fontSize: 'var(--font-size-label)',
       }}>
         {/* Prev / next moved to the overlay viewer's header —
             they drive BOTH panels (zoomed spike + phase loop),
             so it made more sense to co-locate them with the
             primary viewer rather than embed them here. */}
-        <span style={{ marginRight: 4, color: 'var(--text-muted)' }}>window ±</span>
+        <span style={{ marginRight: 4, color: 'var(--text-muted)' }}>Window ±</span>
         <NumInput value={windowMs} step={1} min={1}
           onChange={(v) => setWindowMs(Math.max(1, v))} style={{ width: 56 }} />
         <span style={{ color: 'var(--text-muted)' }}>ms</span>
-        <span style={{ marginLeft: 16, color: 'var(--text-muted)' }}>interp</span>
+        <span style={{ marginLeft: 16, color: 'var(--text-muted)' }}>Interp</span>
         <select value={interp}
           onChange={(e) => setInterp(Number(e.target.value))}
           style={{ fontSize: 'var(--font-size-label)' }}>
@@ -2612,8 +2557,8 @@ function APPhasePlotPanel({
             if (data.dvdt[i] < mndv) mndv = data.dvdt[i]
           }
           return (
-            <span style={{ marginLeft: 'auto', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-              max Vm {mv.toFixed(1)} ·
+            <span className="num" style={{ marginLeft: 'auto', color: 'var(--text-muted)' }}>
+              Max Vm {mv.toFixed(1)} ·
               max dV/dt {mdv.toFixed(1)} ·
               min dV/dt {mndv.toFixed(1)}
             </span>
@@ -2623,7 +2568,7 @@ function APPhasePlotPanel({
       <div
         onContextMenu={onContextMenu}
         style={{ flex: 1, minHeight: 0, position: 'relative',
-          border: '1px solid var(--border)', borderRadius: 4,
+          border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
           background: 'var(--bg-primary)',
         }}
       >
@@ -2711,6 +2656,7 @@ function APSweepViewer({
    *  grouping is off or no clusters qualify. */
   trainsForSweep: TrainSummary[]
 }) {
+  const themeKey = useThemeKey()
   void previewSweep; void totalSweeps; void traceUnits
   const containerRef = useRef<HTMLDivElement>(null)
   const plotRef = useRef<uPlot | null>(null)
@@ -2779,11 +2725,9 @@ function APSweepViewer({
     // grouping of the spikes inside." Empty when grouping is off.
     const trains = trainsRef.current
     if (trains.length > 0) {
-      const trainColor = 'rgba(255,167,38,0.13)'
-      const edgeColor = 'rgba(255,167,38,0.45)'
-      const labelColor = 'rgba(255,167,38,0.95)'
+      const trainColor = cssVar('--marker-manual')
       ctx.save()
-      ctx.font = `bold ${10 * dpr}px ${cssVar('--font-mono')}`
+      ctx.font = `600 ${10 * dpr}px ${cssVar('--font-ui')}`
       for (const t of trains) {
         const a = u.valToPos(t.startS, 'x', true)
         const b = u.valToPos(t.endS, 'x', true)
@@ -2791,15 +2735,18 @@ function APSweepViewer({
         const lo = Math.min(a, b)
         const w = Math.max(1 * dpr, Math.abs(b - a))
         ctx.fillStyle = trainColor
+        ctx.globalAlpha = 0.13
         ctx.fillRect(lo, top, w, bottom - top)
-        ctx.strokeStyle = edgeColor
+        ctx.strokeStyle = trainColor
+        ctx.globalAlpha = 0.45
         ctx.lineWidth = 1 * dpr
         ctx.beginPath()
         ctx.moveTo(a, top); ctx.lineTo(a, bottom)
         ctx.moveTo(b, top); ctx.lineTo(b, bottom)
         ctx.stroke()
-        ctx.fillStyle = labelColor
+        ctx.globalAlpha = 0.95
         ctx.fillText(`T${t.id + 1}`, lo + 3 * dpr, top + 12 * dpr)
+        ctx.globalAlpha = 1
       }
       ctx.restore()
     }
@@ -2814,7 +2761,7 @@ function APSweepViewer({
       ctx.fillRect(Math.min(px0, px1), top, Math.abs(px1 - px0), bottom - top)
       ctx.globalAlpha = 1
       ctx.fillStyle = color
-      ctx.font = `bold ${10 * dpr}px ${cssVar('--font-mono')}`
+      ctx.font = `600 ${10 * dpr}px ${cssVar('--font-ui')}`
       ctx.fillText(label, Math.min(px0, px1) + 2 * dpr, top + 12 * dpr)
       ctx.restore()
     }
@@ -2827,7 +2774,7 @@ function APSweepViewer({
     // ``showBounds`` toggles the band visibility (and the hit-test
     // below). Bounds values are kept; the user just hides them.
     if (showBoundsRef.current) {
-      drawBand(b.start, effEnd, BOUND_COLOR, 'analysis bounds')
+      drawBand(b.start, effEnd, cssVar(BOUND_COLOR), 'Analysis bounds')
     }
 
     // Per-spike markers on the trace. Drawn on the overlay canvas
@@ -2849,6 +2796,12 @@ function APSweepViewer({
     oCtx.setTransform(dpr, 0, 0, dpr, 0, 0)
     oCtx.clearRect(0, 0, cssW, cssH)
     if (spikes.length === 0) return
+    const outlineColor = cssVar('--marker-outline')
+    const spikeColor = cssVar(SPIKE_COLOR)
+    const thresholdColor = cssVar(AP_MARKER.threshold)
+    const fwhmColor = cssVar(AP_MARKER.fwhm)
+    const fahpColor = cssVar(AP_MARKER.fahp)
+    const mahpColor = cssVar(AP_MARKER.mahp)
 
     // toPx variants. ``traceValues`` is already in display space (the
     // backend has applied zero-offset when on), so sampled values
@@ -2878,7 +2831,7 @@ function APSweepViewer({
       oCtx.beginPath()
       oCtx.arc(px, py, 5, 0, Math.PI * 2)
       oCtx.fillStyle = color; oCtx.fill()
-      oCtx.strokeStyle = '#ffffff'; oCtx.lineWidth = 1.2; oCtx.stroke()
+      oCtx.strokeStyle = outlineColor; oCtx.lineWidth = 1.2; oCtx.stroke()
       if (ring) {
         oCtx.beginPath()
         oCtx.arc(px, py, 9, 0, Math.PI * 2)
@@ -2912,20 +2865,20 @@ function APSweepViewer({
       // Peak — always present (manual flag rings it).
       if (sp.peakVm !== 0 || sp.thresholdVm !== 0) {
         peakXY = toPx(sp.peakT, sp.peakVm)
-        dot(peakXY[0], peakXY[1], SPIKE_COLOR, sp.manual)
+        dot(peakXY[0], peakXY[1], spikeColor, sp.manual)
       } else {
         // Fallback (no kinetics) — place peak at the nearest sample y.
         const y = nearestY(sp.peakT)
         if (y != null) {
           peakXY = toPx(sp.peakT, y)
-          dot(peakXY[0], peakXY[1], SPIKE_COLOR, sp.manual)
+          dot(peakXY[0], peakXY[1], spikeColor, sp.manual)
         }
       }
       if (peakXY && spi === primedIdx) primedPos = peakXY
       // Threshold dot (foot of the spike).
       if (sp.thresholdVm !== 0 || sp.thresholdT !== 0) {
         const [px, py] = toPx(sp.thresholdT, sp.thresholdVm)
-        dot(px, py, '#9e9e9e')
+        dot(px, py, thresholdColor)
       }
       // Half-width markers — find the actual times where the trace
       // crosses (threshold + amplitude/2) on the rising and falling
@@ -2978,7 +2931,7 @@ function APSweepViewer({
           const [pxR, pyR] = toPx(tRight, halfVRaw)
           if (isFinite(pxL) && isFinite(pyL) && isFinite(pxR) && isFinite(pyR)) {
             oCtx.save()
-            oCtx.strokeStyle = '#ffeb3b'
+            oCtx.strokeStyle = fwhmColor
             oCtx.lineWidth = 1
             oCtx.setLineDash([3, 3])
             oCtx.beginPath()
@@ -2986,28 +2939,28 @@ function APSweepViewer({
             oCtx.stroke()
             oCtx.setLineDash([])
             oCtx.restore()
-            dot(pxL, pyL, '#ffeb3b'); dot(pxR, pyR, '#ffeb3b')
+            dot(pxL, pyL, fwhmColor); dot(pxR, pyR, fwhmColor)
           }
         }
       }
       // fAHP marker (post-peak fast undershoot).
       if (sp.fahpVm != null && sp.fahpT != null) {
         const [px, py] = toPx(sp.fahpT, sp.fahpVm)
-        dot(px, py, '#ffb74d')
+        dot(px, py, fahpColor)
       }
       // mAHP marker (slower medium undershoot).
       if (sp.mahpVm != null && sp.mahpT != null) {
         const [px, py] = toPx(sp.mahpT, sp.mahpVm)
-        dot(px, py, '#ff7043')
+        dot(px, py, mahpColor)
       }
     }
     // Primed-remove confirmation ring — drawn LAST so it sits over
-    // any per-spike rings from manual / kinetics layers. Same hue as
-    // the Events window (``#64b5f6``) so the prime-then-confirm
-    // gesture is visually consistent across windows.
+    // any per-spike rings from manual / kinetics layers. Same
+    // text-primary ring as the Events / Burst windows so the
+    // prime-then-confirm gesture is consistent across windows.
     if (primedPos) {
       oCtx.save()
-      oCtx.strokeStyle = '#64b5f6'
+      oCtx.strokeStyle = cssVar('--text-primary')
       oCtx.lineWidth = 2
       oCtx.beginPath()
       oCtx.arc(primedPos[0], primedPos[1], 11, 0, Math.PI * 2)
@@ -3094,14 +3047,14 @@ function APSweepViewer({
             grid: { stroke: cssVar('--chart-grid'), width: 1 },
             ticks: { stroke: cssVar('--chart-tick'), width: 1 },
             label: 'Time (s)', labelSize: 14,
-            font: `${cssVar('--font-size-xs')} ${cssVar('--font-mono')}`,
-            labelFont: `${cssVar('--font-size-sm')} ${cssVar('--font-mono')}` },
+            font: `${cssVar('--font-size-xs')} ${cssVar('--font-ui')}`,
+            labelFont: `${cssVar('--font-size-sm')} ${cssVar('--font-ui')}` },
           { stroke: cssVar('--chart-axis'),
             grid: { stroke: cssVar('--chart-grid'), width: 1 },
             ticks: { stroke: cssVar('--chart-tick'), width: 1 },
             label: 'mV', labelSize: 14,
-            font: `${cssVar('--font-size-xs')} ${cssVar('--font-mono')}`,
-            labelFont: `${cssVar('--font-size-sm')} ${cssVar('--font-mono')}` },
+            font: `${cssVar('--font-size-xs')} ${cssVar('--font-ui')}`,
+            labelFont: `${cssVar('--font-size-sm')} ${cssVar('--font-ui')}` },
         ],
         cursor: { drag: { x: false, y: false } },
         series: [
@@ -3326,7 +3279,7 @@ function APSweepViewer({
     })
     return () => cancelAnimationFrame(frame)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [traceTime, traceValues, zeroOffsetApplied])
+  }, [traceTime, traceValues, zeroOffsetApplied, themeKey])
 
   useEffect(() => { plotRef.current?.redraw() }, [boundsStartS, boundsEndS])
   useEffect(() => { plotRef.current?.redraw() }, [previewSpikes, entry, theme, fontSize])
@@ -3394,17 +3347,16 @@ function APSweepViewer({
   return (
     <div style={{
       display: 'flex', flexDirection: 'column', height: '100%',
-      border: '1px solid var(--border)', borderRadius: 4,
+      border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
       background: 'var(--bg-primary)', position: 'relative',
     }}>
-      <div style={{
-        padding: '3px 8px', fontSize: 'var(--font-size-label)',
-        color: 'var(--text-muted)', fontFamily: 'var(--font-mono)',
-        borderBottom: '1px solid var(--border)',
-        display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center',
+      <div className="viewer-header" style={{
+        fontSize: 'var(--font-size-label)',
+        color: 'var(--text-muted)',
+        borderRadius: 'var(--radius) var(--radius) 0 0',
       }}>
-        <span>sweep {previewSweep + 1}</span>
-        <span>{previewSpikes.length} spike{previewSpikes.length === 1 ? '' : 's'}</span>
+        <span>Sweep <span className="num">{previewSweep + 1}</span></span>
+        <span><span className="num">{previewSpikes.length}</span> spike{previewSpikes.length === 1 ? '' : 's'}</span>
         <APMarkerLegend />
         <label style={{
           display: 'flex', alignItems: 'center', gap: 3, marginLeft: 'auto',
@@ -3413,8 +3365,7 @@ function APSweepViewer({
             onChange={(e) => onZeroOffsetChange(e.target.checked)} />
           Zero offset
         </label>
-        <button className="btn" onClick={resetZoom}
-          style={{ padding: '1px 8px', fontSize: 'var(--font-size-label)' }}
+        <button className="btn btn-sm" onClick={resetZoom}
           title="Reset X+Y to data bounds">Reset zoom</button>
       </div>
       <div
@@ -3431,8 +3382,9 @@ function APSweepViewer({
         color: 'var(--text-muted)', fontStyle: 'italic',
         background: 'var(--bg-secondary)',
         borderTop: '1px solid var(--border)',
+        borderRadius: '0 0 var(--radius) var(--radius)',
       }}>
-        scroll = zoom X · ⌥ scroll = zoom Y · drag = pan · drag bounds edge / band to move
+        Scroll = zoom X · ⌥ scroll = zoom Y · drag = pan · drag bounds edge / band to move
       </div>
     </div>
   )
@@ -3475,7 +3427,7 @@ function ParamRow({
 }
 
 /** Thin section divider inside a two-column param grid. Spans the
- *  full grid width via gridColumn. Small uppercase label + a hairline
+ *  full grid width via gridColumn. Small semibold label + a hairline
  *  top border gives the panel a scannable structure without stealing
  *  vertical space. */
 function SubHeader({ children }: { children: React.ReactNode }) {
@@ -3485,8 +3437,6 @@ function SubHeader({ children }: { children: React.ReactNode }) {
       fontSize: 'var(--font-size-xs)',
       color: 'var(--text-muted)',
       fontWeight: 600,
-      textTransform: 'uppercase',
-      letterSpacing: 0.4,
       paddingTop: 4,
       borderTop: '1px solid var(--border)',
       marginTop: 4,
@@ -3495,10 +3445,10 @@ function SubHeader({ children }: { children: React.ReactNode }) {
 }
 
 const Th = ({ children }: { children: React.ReactNode }) => (
-  <th style={{ padding: '4px 8px', fontWeight: 600, fontSize: 'var(--font-size-label)' }}>{children}</th>
+  <th>{children}</th>
 )
 const Td = ({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) => (
-  <td style={{ padding: '3px 8px', whiteSpace: 'nowrap', ...style }}>{children}</td>
+  <td style={style}>{children}</td>
 )
 
 // Shut up unused-import warnings until we add a manual-edit polish pass.
@@ -3551,6 +3501,7 @@ function APSpikesOverlayViewer({
   visibilitySignal?: number
   heightSignal?: number
 }) {
+  const themeKey = useThemeKey()
   const containerRef = useRef<HTMLDivElement>(null)
   const overlayRef = useRef<HTMLCanvasElement>(null)
   const plotRef = useRef<uPlot | null>(null)
@@ -3651,6 +3602,12 @@ function APSpikesOverlayViewer({
     // fAHP / mAHP) — same scheme on every viewer so users learn the
     // legend once. The trace LINES are colour-cycled per spike; only
     // the marker dots use these semantic colours.
+    const outlineColor = cssVar('--marker-outline')
+    const peakColor = cssVar(AP_MARKER.peak)
+    const thresholdColor = cssVar(AP_MARKER.threshold)
+    const fwhmColor = cssVar(AP_MARKER.fwhm)
+    const fahpColor = cssVar(AP_MARKER.fahp)
+    const mahpColor = cssVar(AP_MARKER.mahp)
     spikesToShow.forEach((sp) => {
       // Per-spike slice. ``slice.time`` is in ABSOLUTE seconds (what
       // the backend returned), while the overlay plot's x-axis is
@@ -3675,22 +3632,22 @@ function APSpikesOverlayViewer({
         ctx.arc(px, py, 4, 0, Math.PI * 2)
         ctx.fillStyle = colour
         ctx.fill()
-        ctx.strokeStyle = '#fff'; ctx.lineWidth = 1
+        ctx.strokeStyle = outlineColor; ctx.lineWidth = 1
         ctx.stroke()
       }
       // x is time-relative-to-peak (s).
-      dotAt(0, sliceY(0, sp.peakVm), '#e57373')                 // peak (red)
+      dotAt(0, sliceY(0, sp.peakVm), peakColor)                 // peak
       if (sp.thresholdT !== 0 || sp.thresholdVm !== 0) {
         const xR = sp.thresholdT - sp.peakT
-        dotAt(xR, sliceY(xR, sp.thresholdVm), '#9e9e9e')        // threshold
+        dotAt(xR, sliceY(xR, sp.thresholdVm), thresholdColor)   // threshold
       }
       if (sp.fahpT != null && sp.fahpVm != null) {
         const xR = sp.fahpT - sp.peakT
-        dotAt(xR, sliceY(xR, sp.fahpVm), '#ffb74d')             // fAHP
+        dotAt(xR, sliceY(xR, sp.fahpVm), fahpColor)             // fAHP
       }
       if (sp.mahpT != null && sp.mahpVm != null) {
         const xR = sp.mahpT - sp.peakT
-        dotAt(xR, sliceY(xR, sp.mahpVm), '#ff7043')             // mAHP
+        dotAt(xR, sliceY(xR, sp.mahpVm), mahpColor)             // mAHP
       }
       // FWHM crossings — walk the per-spike slice to find the two
       // times the trace actually crosses half-amplitude. Derive
@@ -3736,8 +3693,8 @@ function APSpikesOverlayViewer({
           const tRight = findCross(sp.peakT, tHi, false)
           if (tLeft != null && tRight != null) {
             // Rel-to-peak x for the overlay's time-aligned axis.
-            dotAt(tLeft - sp.peakT, halfV, '#ffeb3b')
-            dotAt(tRight - sp.peakT, halfV, '#ffeb3b')
+            dotAt(tLeft - sp.peakT, halfV, fwhmColor)
+            dotAt(tRight - sp.peakT, halfV, fwhmColor)
           }
         }
       }
@@ -3807,13 +3764,13 @@ function APSpikesOverlayViewer({
         { stroke: cssVar('--chart-axis'),
           grid: { stroke: cssVar('--chart-grid'), width: 1 },
           ticks: { stroke: cssVar('--chart-tick'), width: 1 },
-          font: `${cssVar('--font-size-label')} ${cssVar('--font-mono')}`,
+          font: `${cssVar('--font-size-label')} ${cssVar('--font-ui')}`,
           label: 'Time relative to peak (s)', labelSize: 22,
           labelFont: `${cssVar('--font-size-label')} ${cssVar('--font-ui')}` },
         { stroke: cssVar('--chart-axis'),
           grid: { stroke: cssVar('--chart-grid'), width: 1 },
           ticks: { stroke: cssVar('--chart-tick'), width: 1 },
-          font: `${cssVar('--font-size-label')} ${cssVar('--font-mono')}`,
+          font: `${cssVar('--font-size-label')} ${cssVar('--font-ui')}`,
           label: 'Vm (mV)', labelSize: 22,
           labelFont: `${cssVar('--font-size-label')} ${cssVar('--font-ui')}` },
       ],
@@ -3903,7 +3860,7 @@ function APSpikesOverlayViewer({
     over.addEventListener('pointermove', onMove)
     over.addEventListener('pointerup', onUp)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [slices, spikesToShow, hideMarkers])
+  }, [slices, spikesToShow, hideMarkers, themeKey])
 
   useEffect(() => { plotRef.current?.redraw() }, [hideMarkers])
 
@@ -3943,14 +3900,13 @@ function APSpikesOverlayViewer({
   return (
     <div style={{
       display: 'flex', flexDirection: 'column', height: '100%',
-      border: '1px solid var(--border)', borderRadius: 4,
+      border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
       background: 'var(--bg-primary)',
     }}>
-      <div style={{
-        padding: '3px 8px', fontSize: 'var(--font-size-label)',
-        color: 'var(--text-muted)', fontFamily: 'var(--font-mono)',
-        borderBottom: '1px solid var(--border)',
-        display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center',
+      <div className="viewer-header" style={{
+        gap: 8, fontSize: 'var(--font-size-label)',
+        color: 'var(--text-muted)',
+        borderRadius: 'var(--radius) var(--radius) 0 0',
       }}>
         {(() => {
           // Prev/next spike navigation — affects this viewer AND
@@ -3960,25 +3916,23 @@ function APSpikesOverlayViewer({
           const active = entry?.selectedSpikeIdx ?? 0
           return (
             <>
-              <button className="btn"
+              <button className="btn btn-sm"
                 onClick={() => onSelectSpike(Math.max(0, active - 1))}
                 disabled={total === 0 || active <= 0}
-                style={{ padding: '1px 8px' }}
-                title="Previous spike (also drives the phase plot)">← prev</button>
+                title="Previous spike (also drives the phase plot)">← Prev</button>
               <span>
-                spike {total > 0 ? active + 1 : '—'} / {total || '—'}
+                Spike <span className="num">{total > 0 ? active + 1 : '—'} / {total || '—'}</span>
               </span>
-              <button className="btn"
+              <button className="btn btn-sm"
                 onClick={() => onSelectSpike(Math.min(total - 1, active + 1))}
                 disabled={total === 0 || active >= total - 1}
-                style={{ padding: '1px 8px' }}
-                title="Next spike (also drives the phase plot)">next →</button>
+                title="Next spike (also drives the phase plot)">Next →</button>
               <span style={{ color: 'var(--text-muted)' }}>·</span>
             </>
           )
         })()}
-        <span>{spikesToShow.length} shown</span>
-        <span style={{ color: 'var(--text-muted)' }}>· window ±</span>
+        <span><span className="num">{spikesToShow.length}</span> shown</span>
+        <span style={{ color: 'var(--text-muted)' }}>· Window ±</span>
         <NumInput value={windowMs} step={1} min={1}
           onChange={(v) => setWindowMs(Math.max(1, v))} style={{ width: 56 }} />
         <span style={{ color: 'var(--text-muted)' }}>ms</span>
@@ -3988,13 +3942,11 @@ function APSpikesOverlayViewer({
           </span>
         )}
         <span style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
-          <button className="btn" onClick={onSelectAll}
-            style={{ padding: '1px 8px', fontSize: 'var(--font-size-label)' }}>
+          <button className="btn btn-sm" onClick={onSelectAll}>
             Select all
           </button>
-          <button className="btn" onClick={onClearSelection}
-            disabled={selectedSpikeIndices.size === 0}
-            style={{ padding: '1px 8px', fontSize: 'var(--font-size-label)' }}>
+          <button className="btn btn-sm" onClick={onClearSelection}
+            disabled={selectedSpikeIndices.size === 0}>
             Clear
           </button>
           <label style={{ display: 'flex', alignItems: 'center', gap: 3 }}
@@ -4019,8 +3971,9 @@ function APSpikesOverlayViewer({
         color: 'var(--text-muted)', fontStyle: 'italic',
         background: 'var(--bg-secondary)',
         borderTop: '1px solid var(--border)',
+        borderRadius: '0 0 var(--radius) var(--radius)',
       }}>
-        scroll = zoom X · ⌥ scroll = zoom Y · drag = pan
+        Scroll = zoom X · ⌥ scroll = zoom Y · drag = pan
       </div>
     </div>
   )
@@ -4032,11 +3985,11 @@ function APSpikesOverlayViewer({
  *  discoverable without a separate help popup. */
 function APMarkerLegend() {
   const items: { color: string; label: string }[] = [
-    { color: '#e57373', label: 'peak' },
-    { color: '#9e9e9e', label: 'threshold' },
-    { color: '#ffeb3b', label: 'FWHM' },
-    { color: '#ffb74d', label: 'fAHP' },
-    { color: '#ff7043', label: 'mAHP' },
+    { color: `var(${AP_MARKER.peak})`, label: 'Peak' },
+    { color: `var(${AP_MARKER.threshold})`, label: 'Threshold' },
+    { color: `var(${AP_MARKER.fwhm})`, label: 'FWHM' },
+    { color: `var(${AP_MARKER.fahp})`, label: 'fAHP' },
+    { color: `var(${AP_MARKER.mahp})`, label: 'mAHP' },
   ]
   return (
     <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
@@ -4044,9 +3997,9 @@ function APMarkerLegend() {
         <span key={it.label} style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
           <span style={{
             width: 8, height: 8, borderRadius: '50%',
-            background: it.color, border: '1px solid rgba(255,255,255,0.6)',
+            background: it.color, border: '1px solid var(--marker-outline)',
           }} />
-          <span style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-label)' }}>{it.label}</span>
+          <span style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-xs)' }}>{it.label}</span>
         </span>
       ))}
     </span>

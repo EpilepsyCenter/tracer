@@ -1278,7 +1278,7 @@ export function BatchWindow({ backendUrl }: Props) {
       }}>
         <span style={{ fontWeight: 600 }}>Template:</span>
         <span style={{
-          fontFamily: 'var(--font-mono)', flex: 1,
+          flex: 1,
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           color: templatePath ? 'var(--text-primary)' : 'var(--text-muted)',
         }} title={templatePath ?? undefined}>
@@ -1338,7 +1338,7 @@ export function BatchWindow({ backendUrl }: Props) {
             Reading template…
           </div>
         ) : loadError ? (
-          <div style={{ color: '#e57373' }}>⚠ {loadError}</div>
+          <div className="notice notice-error">⚠ {loadError}</div>
         ) : (
           <>
             <RecipeList
@@ -1483,7 +1483,6 @@ function RecipeList({
               border: '1px solid var(--border)',
               borderRadius: 10,
               background: 'var(--bg-secondary)',
-              fontFamily: 'var(--font-mono)',
             }}>{t}</span>
           ))}
         </div>
@@ -1492,13 +1491,13 @@ function RecipeList({
       {recipes.length === 0 && (
         <div style={{
           padding: '10px 12px',
-          border: '1px solid #e57373',
-          borderRadius: 4,
-          background: 'rgba(229,115,115,0.08)',
+          border: '1px solid color-mix(in oklab, var(--error) 45%, transparent)',
+          borderRadius: 'var(--radius-md)',
+          background: 'color-mix(in oklab, var(--error) 7%, transparent)',
           fontSize: 'var(--font-size-label)',
           lineHeight: 1.6,
         }}>
-          <div style={{ fontWeight: 600, marginBottom: 6, color: '#e57373' }}>
+          <div style={{ fontWeight: 600, marginBottom: 6, color: 'var(--error)' }}>
             No usable recipes derived from this template
           </div>
           <div style={{ marginBottom: 6 }}>
@@ -1560,8 +1559,8 @@ function RecipeList({
           Detected recipes ({groups.length})
         </div>
         <div style={{
-          border: '1px solid var(--border)', borderRadius: 4,
-          background: 'var(--bg-primary)',
+          border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
+          background: 'var(--bg-field)',
           overflow: 'hidden',
         }}>
           {/* Header */}
@@ -1586,7 +1585,7 @@ function RecipeList({
               gridTemplateColumns: '1.5fr 2fr 1fr',
               padding: '6px 10px',
               borderBottom: i < groups.length - 1
-                ? '1px solid var(--border-subtle, var(--border))' : 'none',
+                ? '1px solid var(--border-subtle)' : 'none',
               alignItems: 'center',
               fontSize: 'var(--font-size-label)',
             }}>
@@ -1602,7 +1601,6 @@ function RecipeList({
                     border: '1px solid var(--border)',
                     borderRadius: 8,
                     background: 'var(--bg-secondary)',
-                    fontFamily: 'var(--font-mono)',
                     fontSize: 'var(--font-size-xs)',
                     fontWeight: 500,
                     color: 'var(--text-muted)',
@@ -1620,12 +1618,11 @@ function RecipeList({
                   {g.primaryTags.map((t) => (
                     <span key={t} style={{
                       padding: '0 7px',
-                      border: '1px solid var(--accent, #64b5f6)',
+                      border: '1px solid var(--accent)',
                       borderRadius: 10,
                       background: 'var(--bg-secondary)',
-                      fontFamily: 'var(--font-mono)',
                       fontWeight: 600,
-                      color: 'var(--accent, #64b5f6)',
+                      color: 'var(--accent)',
                     }}>{t}</span>
                   ))}
                 </span>
@@ -1642,10 +1639,9 @@ function RecipeList({
                     {tags.map((t) => (
                       <span key={t} style={{
                         padding: '0 6px',
-                        border: '1px dashed var(--accent, #64b5f6)',
+                        border: '1px dashed var(--accent)',
                         borderRadius: 10,
-                        fontFamily: 'var(--font-mono)',
-                        color: 'var(--accent, #64b5f6)',
+                        color: 'var(--accent)',
                       }}>{t}</span>
                     ))}
                   </span>
@@ -1670,13 +1666,13 @@ function RecipeList({
       {warnings.length > 0 && (
         <div style={{
           padding: '8px 10px',
-          border: '1px solid #ffb74d',
-          borderRadius: 4,
-          background: 'rgba(255,183,77,0.08)',
+          border: '1px solid color-mix(in oklab, var(--warning) 50%, transparent)',
+          borderRadius: 'var(--radius-md)',
+          background: 'color-mix(in oklab, var(--warning) 8%, transparent)',
           fontSize: 'var(--font-size-label)',
         }}>
           <div style={{
-            fontWeight: 600, marginBottom: 4, color: '#ffb74d',
+            fontWeight: 600, marginBottom: 4, color: 'var(--warning)',
           }}>
             ⚠ {warnings.length} warning{warnings.length === 1 ? '' : 's'}
           </div>
@@ -1773,7 +1769,7 @@ function TargetSection({
       }}>
         <span style={{ fontWeight: 600 }}>Target folder:</span>
         <span style={{
-          fontFamily: 'var(--font-mono)', flex: 1,
+          flex: 1,
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           color: targetFolder ? 'var(--text-primary)' : 'var(--text-muted)',
         }} title={targetFolder ?? undefined}>
@@ -1781,7 +1777,6 @@ function TargetSection({
         </span>
         {targetFolder && (
           <button className="btn" onClick={rescan}
-            style={{ padding: '2px 8px', fontSize: 'var(--font-size-label)' }}
             title="Re-scan the folder for sidecar updates">
             Rescan
           </button>
@@ -1792,10 +1787,7 @@ function TargetSection({
       </div>
 
       {targetError && (
-        <div style={{
-          color: '#e57373', marginBottom: 8,
-          fontSize: 'var(--font-size-label)',
-        }}>⚠ {targetError}</div>
+        <div className="notice notice-error" style={{ marginBottom: 8 }}>⚠ {targetError}</div>
       )}
 
       {targetLoading ? (
@@ -1839,26 +1831,22 @@ function TargetSection({
               <span style={{ color: 'var(--text-muted)' }}>Select:</span>
               <button className="btn"
                 onClick={onSelectAllMatched}
-                style={{ padding: '2px 8px' }}
                 title="Check every cell where the recipe matches at least one series in the file">
                 All matched
               </button>
               <button className="btn"
                 onClick={onSelectNone}
-                style={{ padding: '2px 8px' }}
                 title="Uncheck every cell">
                 None
               </button>
               <button className="btn"
                 onClick={onResetDefaults}
-                style={{ padding: '2px 8px' }}
                 title="Drop manual overrides and use the default (matched + no existing results → on)">
                 Reset
               </button>
             </span>
             <label style={{
               display: 'inline-flex', alignItems: 'center', gap: 6,
-              cursor: 'pointer',
             }} title="Re-run analyses on files that already have results in their sidecar (otherwise those cells default to off).">
               <input type="checkbox" checked={overwriteAll}
                 onChange={(e) => setOverwriteAll(e.target.checked)} />
@@ -1867,7 +1855,8 @@ function TargetSection({
           </div>
 
           <div style={{
-            border: '1px solid var(--border)', borderRadius: 4,
+            border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
+            background: 'var(--bg-field)',
             overflow: 'auto',
             maxHeight: 480,
           }}>
@@ -1902,7 +1891,6 @@ function TargetSection({
                             border: '1px solid var(--border)',
                             borderRadius: 8,
                             background: 'var(--bg-primary)',
-                            fontFamily: 'var(--font-mono)',
                             fontSize: 'var(--font-size-xs)',
                             fontWeight: 500,
                             color: 'var(--text-muted)',
@@ -1912,8 +1900,7 @@ function TargetSection({
                       <div style={{
                         marginTop: 2,
                         fontSize: 'var(--font-size-xs)',
-                        color: 'var(--accent, #64b5f6)',
-                        fontFamily: 'var(--font-mono)',
+                        color: 'var(--accent)',
                       }}>
                         {r.tag}
                       </div>
@@ -1936,30 +1923,26 @@ function TargetSection({
                     || !hasAnyMatch
                   return (
                     <tr key={ent.filePath} style={{
-                      borderTop: '1px solid var(--border)',
+                      borderTop: '1px solid var(--border-subtle)',
                       opacity: hasAnyMatch ? 1 : 0.5,
                     }}>
                       <td style={tdStyle} title={ent.filePath}>
                         <div style={{
                           display: 'flex', alignItems: 'center', gap: 6,
                         }}>
-                          <span style={{ fontFamily: 'var(--font-mono)' }}>
+                          <span>
                             {ent.fileName}
                           </span>
                           {!ent.hasSidecar && (
                             <span style={{
-                              color: '#e57373',
+                              color: 'var(--error)',
                               fontSize: 'var(--font-size-xs)',
                             }}>· no sidecar</span>
                           )}
                           {needsTagging && (
-                            <button className="btn"
+                            <button className="btn btn-sm"
                               onClick={() => void openTagsForFile(ent.filePath)}
-                              style={{
-                                padding: '1px 8px',
-                                fontSize: 'var(--font-size-xs)',
-                                marginLeft: 'auto',
-                              }}
+                              style={{ marginLeft: 'auto' }}
                               title="Open this file in the Tags window so you can tag its series, then come back and rescan.">
                               Tag…
                             </button>
@@ -1976,7 +1959,6 @@ function TargetSection({
                                 border: '1px solid var(--border)',
                                 borderRadius: 8,
                                 background: 'var(--bg-secondary)',
-                                fontFamily: 'var(--font-mono)',
                                 fontSize: 'var(--font-size-xs)',
                               }}>{t}</span>
                             ))}
@@ -1994,13 +1976,12 @@ function TargetSection({
                           <div style={{
                             display: 'flex', flexDirection: 'column', gap: 1,
                             fontSize: 'var(--font-size-xs)',
-                            fontFamily: 'var(--font-mono)',
                           }}>
                             {Object.entries(ent.seriesTags)
                               .sort(([a], [b]) => a.localeCompare(b))
                               .map(([k, ts]) => (
                                 <div key={k}>
-                                  <span style={{
+                                  <span className="num" style={{
                                     color: 'var(--text-muted)',
                                   }}>{displayGroupSeries(k)}</span>
                                   : {ts.join(', ')}
@@ -2065,7 +2046,7 @@ function RecipeCell({
   return (
     <label style={{
       display: 'inline-flex', flexDirection: 'column', alignItems: 'center',
-      gap: 2, cursor: 'pointer',
+      gap: 2,
     }}>
       <input type="checkbox" checked={checked} onChange={onToggle} />
       <span style={{
@@ -2081,7 +2062,7 @@ function RecipeCell({
       {exists && (
         <span style={{
           fontSize: 'var(--font-size-xs)',
-          color: showOverwriteHint ? '#ffb74d' : 'var(--text-muted)',
+          color: showOverwriteHint ? 'var(--warning)' : 'var(--text-muted)',
           fontStyle: 'italic',
         }} title={recipe.analysisType + ' results already exist for this series'}>
           {showOverwriteHint ? 'has results · skip' : 'overwrite'}
@@ -2103,6 +2084,7 @@ const thStyle: React.CSSProperties = {
 const tdStyle: React.CSSProperties = {
   padding: '6px 10px',
   verticalAlign: 'middle',
+  fontFamily: 'var(--font-ui)',
 }
 
 // ---------------------------------------------------------------------------
@@ -2158,13 +2140,12 @@ function RunBar({
       flexShrink: 0,
     }}>
       <button
-        className="btn btn-primary"
+        className="btn btn-primary btn-lg"
         onClick={onRun}
         disabled={!canRun || running}
         style={{
-          minWidth: 120, padding: '6px 14px',
+          minWidth: 120,
           position: 'relative', overflow: 'hidden',
-          fontWeight: 600,
         }}
         title={runButtonTitle(canRun, conflictCount)}>
         {/* Progress overlay — covers the button left-to-right by
@@ -2173,7 +2154,7 @@ function RunBar({
           <span style={{
             position: 'absolute', left: 0, top: 0, bottom: 0,
             width: `${totalFrac * 100}%`,
-            background: 'rgba(255,255,255,0.25)',
+            background: 'color-mix(in oklab, var(--on-accent) 25%, transparent)',
             transition: 'width 120ms linear',
             pointerEvents: 'none',
           }} />
@@ -2187,8 +2168,7 @@ function RunBar({
         </span>
       </button>
       {running && (
-        <button className="btn" onClick={onCancel}
-          style={{ padding: '6px 14px' }}
+        <button className="btn btn-lg" onClick={onCancel}
           title="Stop after the current file finishes">
           Cancel
         </button>
@@ -2206,8 +2186,7 @@ function RunBar({
             : ''}
       </span>
       {runDone && (
-        <button className="btn" onClick={onOpenCohort}
-          style={{ padding: '6px 14px' }}
+        <button className="btn btn-lg" onClick={onOpenCohort}
           title="Aggregate the freshly-written results in the cohort window">
           Open in Cohort…
         </button>
@@ -2242,9 +2221,9 @@ function RunLogPanel({ entries }: { entries: RunLogEntry[] }) {
   }, [entries])
   return (
     <div style={{
-      border: '1px solid var(--border)', borderRadius: 4,
+      border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)',
       padding: '8px 12px',
-      background: 'var(--bg-primary)',
+      background: 'var(--bg-secondary)',
       fontSize: 'var(--font-size-label)',
     }}>
       <div style={{
@@ -2252,9 +2231,9 @@ function RunLogPanel({ entries }: { entries: RunLogEntry[] }) {
         marginBottom: 6, fontWeight: 600,
       }}>
         Run log
-        <span style={{ color: '#66bb6a' }}>{totals.ok} ok</span>
-        {totals.err > 0 && <span style={{ color: '#e57373' }}>· {totals.err} error</span>}
-        {totals.skip > 0 && <span style={{ color: '#ffb74d' }}>· {totals.skip} skipped</span>}
+        <span style={{ color: 'var(--success)' }}>{totals.ok} ok</span>
+        {totals.err > 0 && <span style={{ color: 'var(--error)' }}>· {totals.err} error</span>}
+        {totals.skip > 0 && <span style={{ color: 'var(--warning)' }}>· {totals.skip} skipped</span>}
       </div>
       <div style={{
         display: 'flex', flexDirection: 'column', gap: 6,
@@ -2262,16 +2241,16 @@ function RunLogPanel({ entries }: { entries: RunLogEntry[] }) {
       }}>
         {byFile.map(([fp, { fileName, lines }]) => (
           <div key={fp} style={{
-            paddingTop: 4, borderTop: '1px solid var(--border-subtle, var(--border))',
+            paddingTop: 4, borderTop: '1px solid var(--border-subtle)',
           }}>
             <div style={{
-              fontFamily: 'var(--font-mono)', color: 'var(--text-muted)',
+              color: 'var(--text-muted)',
             }} title={fp}>{fileName}</div>
             <ul style={{ margin: '2px 0 4px 0', paddingLeft: 16 }}>
               {lines.map((l, i) => (
                 <li key={i} style={{
-                  color: l.level === 'error' ? '#e57373'
-                       : l.level === 'skip' ? '#ffb74d'
+                  color: l.level === 'error' ? 'var(--error)'
+                       : l.level === 'skip' ? 'var(--warning)'
                        : 'var(--text-primary)',
                 }}>{l.message}</li>
               ))}
@@ -2308,11 +2287,10 @@ function ConfirmRunModal({
     }} onClick={onCancel}>
       <div style={{
         background: 'var(--bg-primary)',
-        border: '1px solid var(--border)',
-        borderRadius: 6,
+        borderRadius: 'var(--radius-lg)',
         padding: '18px 22px',
         maxWidth: 480, width: '90%',
-        boxShadow: '0 8px 28px rgba(0,0,0,0.35)',
+        boxShadow: 'var(--shadow-popover)',
         fontSize: 'var(--font-size-base)',
       }} onClick={(e) => e.stopPropagation()}>
         <div style={{
@@ -2329,13 +2307,13 @@ function ConfirmRunModal({
           <div style={{
             marginBottom: 12,
             padding: '8px 10px',
-            border: '1px solid #ffb74d',
-            borderRadius: 4,
-            background: 'rgba(255,183,77,0.08)',
+            border: '1px solid color-mix(in oklab, var(--warning) 50%, transparent)',
+            borderRadius: 'var(--radius-md)',
+            background: 'color-mix(in oklab, var(--warning) 8%, transparent)',
             fontSize: 'var(--font-size-label)',
             lineHeight: 1.5,
           }}>
-            <strong style={{ color: '#ffb74d' }}>
+            <strong style={{ color: 'var(--warning)' }}>
               {activeRecordingName} is currently open.
             </strong>{' '}
             It will be closed before the batch starts so other open
@@ -2349,12 +2327,11 @@ function ConfirmRunModal({
           display: 'flex', justifyContent: 'flex-end', gap: 8,
           marginTop: 6,
         }}>
-          <button className="btn" onClick={onCancel}
-            style={{ padding: '6px 14px' }}>
+          <button className="btn btn-lg" onClick={onCancel}>
             Cancel
           </button>
-          <button className="btn btn-primary" onClick={onConfirm}
-            style={{ padding: '6px 14px' }} autoFocus>
+          <button className="btn btn-primary btn-lg" onClick={onConfirm}
+            autoFocus>
             Continue
           </button>
         </div>
@@ -2400,14 +2377,14 @@ function ConflictPanel({
   }, [conflicts])
   return (
     <div style={{
-      border: '2px solid #e57373',
-      borderRadius: 4,
+      border: '1px solid color-mix(in oklab, var(--error) 55%, transparent)',
+      borderRadius: 'var(--radius-md)',
       padding: '10px 14px',
-      background: 'rgba(229,115,115,0.08)',
+      background: 'color-mix(in oklab, var(--error) 7%, transparent)',
       fontSize: 'var(--font-size-label)',
     }}>
       <div style={{
-        fontWeight: 600, marginBottom: 6, color: '#e57373',
+        fontWeight: 600, marginBottom: 6, color: 'var(--error)',
       }}>
         ⚠ {conflicts.length} multi-tag conflict{conflicts.length === 1 ? '' : 's'} — resolve before running
       </div>
@@ -2420,7 +2397,7 @@ function ConflictPanel({
       <ul style={{ margin: 0, paddingLeft: 18 }}>
         {byFile.map(([fp, { fileName, rows }]) => (
           <li key={fp} style={{ marginBottom: 4 }}>
-            <span style={{ fontFamily: 'var(--font-mono)' }} title={fp}>
+            <span title={fp}>
               {fileName}
             </span>
             <ul style={{
@@ -2439,10 +2416,9 @@ function ConflictPanel({
                     <span key={j} style={{
                       marginRight: 4,
                       padding: '0 5px',
-                      border: '1px solid var(--accent, #64b5f6)',
+                      border: '1px solid var(--accent)',
                       borderRadius: 8,
-                      fontFamily: 'var(--font-mono)',
-                      color: 'var(--accent, #64b5f6)',
+                      color: 'var(--accent)',
                     }}>{ANALYSIS_LABELS[rc.analysisType] ?? rc.analysisType}{rc.subtype ? ` [${rc.subtype}]` : ''} · {rc.tag}</span>
                   ))}
                 </li>

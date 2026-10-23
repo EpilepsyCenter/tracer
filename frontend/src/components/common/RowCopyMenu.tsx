@@ -94,35 +94,32 @@ export function useRowCopyMenu({ getTSV, selectionCount }: UseRowCopyMenuArgs) {
             top: Math.min(pos.y, window.innerHeight - 60),
             zIndex: 200,
             minWidth: 200,
-            background: 'var(--bg-primary)',
-            border: '1px solid var(--border)',
-            borderRadius: 4,
-            boxShadow: '0 6px 20px rgba(0,0,0,0.22)',
-            fontSize: 'var(--font-size-sm)',
+            padding: 5,
+            background: 'var(--bg-field)',
+            borderRadius: 'var(--radius-md)',
+            boxShadow: 'var(--shadow-popover)',
+            fontSize: 'var(--font-size-base)',
             fontFamily: 'var(--font-ui)',
             overflow: 'hidden',
           }}>
           <button
+            className={selectionCount === 0 ? undefined : 'analysis-menu-item'}
             onClick={onCopy}
             disabled={selectionCount === 0}
             style={{
               display: 'block', width: '100%', textAlign: 'left',
-              padding: '6px 10px',
+              padding: '4px 8px',
               background: 'transparent',
               border: 'none',
+              borderRadius: 'var(--radius-sm)',
               color: 'var(--text-primary)',
-              cursor: selectionCount === 0 ? 'default' : 'pointer',
-              fontSize: 'var(--font-size-sm)',
+              fontSize: 'var(--font-size-base)',
               fontFamily: 'var(--font-ui)',
               opacity: selectionCount === 0 ? 0.5 : 1,
-            }}
-            onMouseEnter={(e) => {
-              if (selectionCount > 0) e.currentTarget.style.background = 'var(--bg-active, var(--bg-secondary))'
-            }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}>
+            }}>
             Copy as TSV
             <span style={{
-              marginLeft: 8, color: 'var(--text-muted)', fontSize: 11,
+              marginLeft: 8, color: 'inherit', opacity: 0.6, fontSize: 'var(--font-size-xs)',
             }}>
               {selectionCount === 0
                 ? 'select rows first'
@@ -135,12 +132,11 @@ export function useRowCopyMenu({ getTSV, selectionCount }: UseRowCopyMenuArgs) {
         <div style={{
           position: 'fixed', bottom: 16, right: 16,
           padding: '6px 12px',
-          background: 'var(--bg-primary)',
-          border: '1px solid var(--border)',
-          borderRadius: 4,
+          background: 'var(--bg-field)',
+          borderRadius: 'var(--radius-md)',
           fontSize: 'var(--font-size-sm)',
           fontFamily: 'var(--font-ui)',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+          boxShadow: 'var(--shadow-popover)',
           zIndex: 200,
           color: 'var(--text-primary)',
         }}>{toast}</div>

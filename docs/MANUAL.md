@@ -48,7 +48,7 @@ a **welcome surface**: TRACER's lockup, a one-line summary of
 what the application does, and three ways of getting started.
 
 - **Open file…** — the large primary button opens the same file
-  picker as the toolbar's Open File button.
+  picker as the toolbar's **Open…** button and **File ▸ Open…**.
 - **Drag and drop** — drop any supported recording anywhere on the
   welcome surface to open it. Plain-text formats (`.csv`, `.tsv`,
   `.txt`, `.atf`) route through the **Text Import Wizard** for
@@ -68,11 +68,10 @@ you reach a state where no recording is loaded again.
 
 ### Opening a recording
 
-Click the **Open File** button at the left of the toolbar to pick a
-recording. TRACER does not install a separate menu bar of its
-own — every command lives on the toolbar (or in the **command
-palette**, see chapter 8) — so this is the single entry point for
-loading data. TRACER's primary, fully-tested formats are:
+Choose **File ▸ Open…** (`⌘O` on macOS, `Ctrl+O` on Windows and
+Linux) or click **Open…** in the toolbar to pick a recording. You
+can also drop a file onto the welcome surface. TRACER's primary,
+fully-tested formats are:
 
 | Format | Extension | Notes |
 |---|---|---|
@@ -105,7 +104,7 @@ command; closing the application window quits the program.
 
 ### Recent files
 
-The toolbar's **Open File** button has a small chevron (▾) next to
+The toolbar's **Open…** button has a small chevron (▾) next to
 it that opens a list of recently opened files, most recent first.
 Clicking an entry reopens that file directly. The list holds up to
 ten entries and survives between sessions; **Clear recent** at the
@@ -132,9 +131,8 @@ written the first time you change anything worth saving.
 
 ### Reporting bugs and sending feedback
 
-Click the **bug icon** in the top-right of the toolbar (next to the
-help icon) — or run **Report a bug** from the command palette
-(`⌘K` / `Ctrl+K`) — to open an in-app form. Describe what
+Choose **Help ▸ Report a Bug…** — or run **Report a bug** from the
+command palette (`⌘K` / `Ctrl+K`) — to open an in-app form. Describe what
 happened in plain language; you do not need a GitHub account, the
 form is anonymous by default, and submission stays inside the app.
 
@@ -152,80 +150,119 @@ form; otherwise leave it blank to stay anonymous.
 
 ---
 
-## 2. The Toolbar
+## 2. The Menu Bar and Toolbar
 
-The toolbar runs across the top of the window and groups the
-controls you will reach for most often: opening files, navigating
-sweeps, choosing what to display, and launching analysis windows.
-Buttons that require a recording are disabled until one is open;
-those that operate across files (Tags, Batch, Cohort, Export Traces)
-remain available at all times.
+### Menu bar
 
-From left to right, the toolbar is laid out in five regions:
-**file**, **sweep**, **display**, **analyses & tools**, and
-**status / settings**.
+TRACER has a standard menu bar — at the top of the screen on macOS,
+inside the window on Windows and Linux:
+
+- **File** — **Open…** (`⌘O` / `Ctrl+O`) and **Channel Scaling…**
+  (the per-channel units and scaling dialog described below). On
+  Windows and Linux, **Settings…** (`Ctrl+,`) is here too; on macOS
+  it is under the **TRACER** menu (`⌘,`).
+- **Edit** — the usual undo, cut, copy, paste and select-all for text
+  fields.
+- **View** — show or hide the **Recording Navigator** (`F1`) and the
+  **Inspector** (`F2`), **Focus Mode** (`f`), the **Command
+  Palette…** (`⌘K` / `Ctrl+K`), **Appearance** (use the system
+  setting, light or dark), and window zoom.
+- **Analysis** — every per-recording analysis window (available once
+  a recording is open).
+- **Tools** — **Tags…**, **Batch…**, **Cohort…** and **Export
+  Traces…**, which work across files.
+- **Window** — minimise, zoom and switch between TRACER's windows.
+- **Help** — the **TRACER Manual**, **Keyboard Shortcuts**, **Report a
+  Bug…**, and a link to TRACER on GitHub.
+
+### Toolbar
+
+The toolbar runs across the top of the window, to the right of the
+recording navigator, and groups the controls you will reach for most
+often. Buttons that require a recording are disabled until one is
+open; those that operate across files (Tags, Batch, Cohort, Export
+Traces) remain available at all times.
+
+From left to right: the **recording title**, **Open…**, **sweep**
+navigation, **display** controls, **Analyses** and **Tools**, then
+**Settings** and the **inspector** toggle.
 
 ![Toolbar overview](screenshots/toolbar-full-left-to-right.png)
 
+### Recording title
+
+The left end of the toolbar identifies the open recording: a
+colour-coded **metadata-status dot** (green / yellow / red, showing
+how much tagging has been done for the recording), the **file name**
+(hover for the full path) and any **file-level tag chips** from the
+Metadata window. The line underneath gives the file format, the
+current group and series, the sample rate and the sample count of
+the displayed sweep. With no recording open it reads *No recording
+open*.
+
+When the recording navigator is hidden, a sidebar button appears at
+the very left of the toolbar to bring it back.
+
 ### File
 
-**Open File** opens the standard file picker. The chevron next to
-it opens the **Recent files** list described above.
+**Open…** opens the standard file picker. The chevron next to it
+opens the **Recent files** list described above.
 
 ### Sweep
 
-For episodic recordings, the **Sweep** group shows the current
-sweep number alongside the total — for example *3 / 47* — flanked
-by **←** and **→** buttons that step backwards and forwards. The
-counter itself is read-only; the arrow buttons and the matching
-keyboard arrows are the only way to step. See the keyboard
-reference in chapter 8 for the full set.
+For episodic recordings, the sweep group reads, for example,
+*Sweep 3 of 47*, flanked by **◀** and **▶** buttons that step
+backwards and forwards. The arrow buttons and the matching keyboard
+arrows (and `Home` / `End` for the first and last sweep) are the way
+to step. See the keyboard reference in chapter 8 for the full set.
 
 For continuous recordings (a single sweep longer than about a
-minute), the counter still reads *1 / 1* but navigation happens
-through the viewport bar rather than the sweep arrows; see the
-**Trace Viewer** chapter.
+minute), the counter still reads *Sweep 1 of 1* but navigation
+happens through the viewport bar rather than the sweep arrows; see
+the **Trace Viewer** chapter.
 
 ### Display
 
-These controls govern what is drawn in the trace viewer.
-
-- **Scaling** opens the per-channel scaling modal, where you can
-  override a channel's units (for example, mark a channel as `pA`
-  when the file claims `V`) or apply a numeric multiplier. Useful
-  when a recording was saved with the wrong amplifier gain or with
-  a generic unit. Right-clicking a channel in the **Traces**
-  dropdown opens the same modal pre-focused on that channel.
+These controls govern what is drawn in the trace viewer. Hover any
+icon button to see its name and shortcut.
 
 - **Traces** lists every recorded channel and the stimulus trace
   with a checkbox next to each. Use it to hide channels you don't
-  want to see; the choice is saved per series.
+  want to see; the choice is saved per series. Right-clicking a
+  channel opens the **Channel Scaling** dialog pre-focused on that
+  channel.
 
-- **Overlay** turns on a translucent overlay of every sweep in the
-  current series, drawn on top of the active sweep. This makes it
-  easy to see how a response evolves across an experiment without
-  flipping through sweeps one at a time. The lowercase keyboard
-  shortcut is `o`.
+- **Channel Scaling** (**File ▸ Channel Scaling…**) lets you
+  override a channel's units (for example, mark a channel as `pA`
+  when the file claims `V`) or apply a numeric multiplier. Useful
+  when a recording was saved with the wrong amplifier gain or with
+  a generic unit.
 
-- **Average ▾** opens a small popover for building an *averaged
-  sweep* — a virtual sweep computed as the mean of a chosen subset.
-  Pick the source (**All sweeps**, **Selected**, or a **Range**
-  with from/to inputs), give it a label, and click **Create**. The
-  resulting average appears in the Tree Navigator under the same
-  series as a regular sweep, can be displayed and analysed like
-  any other, and is persisted in the sidecar. The same popover
-  lists existing averages and lets you delete them. The lowercase
-  shortcut `a` opens it.
+- **Overlay** (the stacked-layers icon) turns on a translucent
+  overlay of every sweep in the current series, drawn on top of the
+  active sweep. This makes it easy to see how a response evolves
+  across an experiment without flipping through sweeps one at a
+  time. The lowercase keyboard shortcut is `o`.
+
+- **Average** (the **Σ ▾** button) opens a small popover for building
+  an *averaged sweep* — a virtual sweep computed as the mean of a
+  chosen subset. Pick the source (**All sweeps**, **Selected**, or a
+  **Range** with from/to inputs), give it a label, and click
+  **Create**. The resulting average appears in the Tree Navigator
+  under the same series as a regular sweep, can be displayed and
+  analysed like any other, and is persisted in the sidecar. The same
+  popover lists existing averages and lets you delete them. The
+  lowercase shortcut `a` opens it.
 
   ![Average popover](screenshots/toolbar-average-popover.png)
 
-- **Zoom** changes what click-and-drag does in the trace viewer.
-  With Zoom **off** (the default), dragging **pans** the view; with
-  Zoom **on**, dragging sketches a rectangle and the viewer zooms
-  into it on release. The mouse wheel always zooms regardless of
-  this toggle — see chapter 4 for the full set of wheel and
-  modifier-key combinations. The lowercase shortcut `z` switches
-  modes.
+- **Zoom** (the magnifier icon) changes what click-and-drag does in
+  the trace viewer. With Zoom **off** (the default), dragging
+  **pans** the view; with Zoom **on**, dragging sketches a rectangle
+  and the viewer zooms into it on release. The mouse wheel always
+  zooms regardless of this toggle — see chapter 4 for the full set
+  of wheel and modifier-key combinations. The lowercase shortcut `z`
+  switches modes.
 
 ### Analyses, tagging and cross-recording tools
 
@@ -276,87 +313,29 @@ export*:
   drawn from one or more recordings — useful for assembling a
   multi-cell figure without leaving the app.
 
-### Status, help and settings
+### Settings and inspector
 
-The right-hand end of the toolbar is now reserved for application
-state and global settings. The current recording's identity —
-filename, metadata-status dot, and tag chips — has moved to a
-dedicated **recording header strip** below the toolbar (see
-*Recording header* at the end of this chapter); the toolbar itself
-keeps only:
+The right-hand end of the toolbar keeps:
 
 - A **Loading…** indicator, shown while the backend is doing work
   (running an analysis, opening a large file).
-- A **Help** button (the small `?` icon) that opens the help modal —
-  a keyboard-shortcut cheat sheet plus an *Open user manual*
-  button. The help modal is also reachable by pressing `?` anywhere
-  outside an input.
-- A **Report a bug** button (the bug icon) that opens an in-app
-  feedback form. No GitHub account needed; submission stays inside
-  the app and includes a small block of automatic diagnostics. See
-  *Reporting bugs and sending feedback* in chapter 1 for what's
-  attached.
-- The gear (**⚙**) button at the far right that opens the
-  **Settings** popover. Settings are global rather than
-  per-recording.
+- The gear (**⚙**) button that opens the **Settings** popover (also
+  **Settings…** in the menu bar). Settings are global rather than
+  per-recording:
+  - **Appearance** — **System** (follow the operating system's
+    light / dark setting, the default), **Light** or **Dark**.
+  - **Text size** — a small range (11–15 px) to suit your display
+    and viewing distance. The change applies live.
+  - **Trace colours** — six colour slots, five for recorded channels
+    and one for the stimulus trace, each with a colour picker and a
+    small **×** to clear an override. **Reset all** restores every
+    slot at once.
+- The **inspector** button (a window with a right-hand panel) that
+  shows or hides the Cursor Panel, like `F2`.
 
-The Settings popover's headline controls are:
-
-- **Palette** chooses among **Precision** (the default — a
-  high-contrast, neutral scheme tuned for daytime work),
-  **Classic** (neutral greys with cool blue accents), and
-  **Telegraph** (warm amber-on-near-black for dark mode,
-  ink-on-vellum for light). Each palette ships with a dark and a
-  light variant.
-
-- **Theme** switches the active variant of the current palette
-  between **Light** (☀, the default for new installs) and **Dark**
-  (☾). Existing users keep whatever they had persisted.
-
-- **UI Font** sets the application's interface font, with **IBM
-  Plex Sans** as the default and Inter, SF Pro, Helvetica Neue, and
-  the system default as alternatives.
-
-- **Code Font** sets the monospace font used in tables and numeric
-  read-outs. **JetBrains Mono** is the default; Fira Code, SF Mono,
-  and Consolas are also available.
-
-- **Font Size** offers a small range (11–15 px) to suit your display
-  and viewing distance. The change applies live.
-
-- **Trace colors** lists six colour slots — five for recorded
-  channels and one for the stimulus trace — each with a colour
-  picker and a small **×** to clear an override and fall back to the
-  palette default. **Reset all** restores every slot at once. Trace
-  colours are part of the global theme, not a per-recording setting,
-  so the channel you usually keep blue stays blue across files.
-
-A short preview ("UI preview: The quick brown fox" / "Code: fn(x) =>
-x * 2") sits at the bottom of the popover so you can compare font
-choices at a glance.
-
-### Recording header
-
-Once a recording is loaded, a thin **recording header strip**
-appears between the toolbar and the trace viewer. It carries the
-information that identifies and characterises the file you are
-looking at, organised into two zones:
-
-- **Left** — a colour-coded **metadata-status dot** (green /
-  yellow / red, indicating how much metadata has been filled in
-  for the recording), the **filename** (hover to see the full
-  path), and any **file-level tag chips** attached through the
-  Metadata window.
-- **Right** — the file format, the current **group / series /
-  sweep** position (zero-padded, e.g. *grp 01 / ser 03 / swp 042*),
-  the sample rate, and the sample count of the currently displayed
-  sweep.
-
-The strip stays visible while you work, so the file you are
-analysing is always identified at a glance — you no longer need to
-look back at the toolbar to confirm which recording is open. When
-no recording is loaded, the strip disappears and the welcome
-surface fills the centre of the window instead.
+The keyboard cheat sheet and the bug-report form live in the
+**Help** menu; `?` also opens the cheat sheet anywhere outside a text
+field.
 
 ---
 
@@ -563,10 +542,10 @@ shaded bands across the plot:
 | Peak | yellow | The window containing the response of interest |
 | Fit | purple | The window over which an exponential is fitted (decay τ, capacitive transient) |
 
-The exact shades depend on the active palette and theme variant, but
-the same green / yellow / purple identity is preserved across both
-**Classic** and **Telegraph** so that "baseline" always reads as the
-green band wherever you see it. Individual analysis windows can
+The exact shades are tuned separately for the light and dark
+appearance, but the same green / yellow / purple identity is kept in
+both so that "baseline" always reads as the green band wherever you
+see it. Individual analysis windows can
 introduce additional cursor pairs of their own — for example, the
 Field Potential window distinguishes a *volley* window from the
 *fEPSP* window — and those are colour-coded separately within each
@@ -737,72 +716,41 @@ cell on the same recording stays unfiltered.
 
 ---
 
-## 6. Settings and Theme
+## 6. Settings and Appearance
 
-The toolbar chapter introduced the **Settings** popover at a glance.
-This chapter covers what each setting does in a little more detail
-and explains how TRACER's two-axis approach to appearance —
-**theme** and **palette** — is meant to be used. All settings here
-are global: they apply to every window and every recording.
+The toolbar chapter introduced the **Settings** popover at a glance
+(the ⚙ button, or **Settings…** in the menu bar). This chapter covers
+each setting in a little more detail. All settings here are global:
+they apply to every window and every recording, and a change made in
+one window applies to the others straight away.
 
-### Palettes and themes
+### Appearance
 
-A **palette** is a coordinated set of colours; a **theme** is the
-light or dark variant of that palette. The two are independent,
-which means there are six combinations available rather than the
-usual two. TRACER ships with three palettes:
+TRACER has a light appearance (warm paper-white panels with a white
+plotting area) and a dark one (cool near-black). Choose between:
 
-- **Precision** — the default for new installs. A high-contrast,
-  neutral scheme tuned for working under daylight: clean
-  near-white backgrounds in the light variant, deep ink on charcoal
-  in the dark. Reach for it when accurate colour reading matters
-  (judging fits, comparing trace colours) and you want the
-  interface to step out of the way.
+- **System** — the default. TRACER follows the operating system's
+  light / dark setting and switches automatically when it changes
+  (for example, at sunset if your system does that).
+- **Light** or **Dark** — keep one appearance regardless of the
+  system setting.
 
-- **Classic** — neutral greys with cool blue accents. The look of
-  earlier TRACER builds, kept as an option for users who prefer
-  it.
+The same choice is in **View ▸ Appearance** in the menu bar, and in
+the command palette (*Appearance*). Menus and file dialogs follow it
+too.
 
-- **Telegraph** — warm and high-contrast. The dark variant is
-  amber-on-near-black, reminiscent of an old terminal; the light
-  variant is dark ink on a vellum background. Both are intended for
-  workflows where contrast matters more than neutrality, and for
-  the simple pleasure of a less utilitarian-looking interface.
+TRACER uses your operating system's own interface font (San
+Francisco on macOS, Segoe UI on Windows, the system sans-serif on
+Linux), so it looks at home on each platform and needs no internet
+connection. Numbers in fields, tables and read-outs use the system
+monospace font so that decimal points line up across rows.
 
-The **Theme** toggle (☀ Light / ☾ Dark) flips the active palette
-between its two variants without changing the palette itself. The
-default theme for fresh installs is **Light**; existing users keep
-whatever they had previously chosen.
+### Text size
 
-### Fonts
-
-The **UI Font** dropdown sets the typeface used for menus, buttons,
-labels, and panels. **IBM Plex Sans** is the default. Alternatives
-are **Theme default** (defers to whatever the active palette
-specifies, typically the same as the IBM Plex default), **Inter**,
-**SF Pro**, **Helvetica Neue**, and **System Default** (delegates
-to the operating system — San Francisco on macOS, Segoe UI on
-Windows, the system sans-serif on Linux).
-
-The **Code Font** dropdown sets the monospace face used in tables,
-numeric read-outs, and copyable values. **JetBrains Mono** is the
-default, with **Theme default**, **Fira Code**, **SF Mono**, and
-**Consolas** as alternatives. A monospace face matters here because
-the alignment of decimal points across rows is what makes a results
-table scannable.
-
-![Settings popover — palette, theme and fonts](screenshots/settings-popover-palettes-fonts.png)
-
-A small **UI preview** and **Code** preview line at the bottom of
-the popover gives you an immediate sense of how a font choice will
-look before committing.
-
-### Font size
-
-The **Font size** stepper covers a small range — 11 to 15 pixels —
-suitable for most displays. The change applies live, including to
-existing analysis windows; pick the smallest size that you can read
-comfortably to leave more room for plots.
+The **Text size** control covers a small range — 11 to 15 pixels,
+13 by default — suitable for most displays. The change applies live,
+including to open analysis windows; pick the smallest size that you
+can read comfortably to leave more room for plots.
 
 ### Trace colours
 
@@ -813,11 +761,11 @@ provided: five for recorded channels (1 through 5) and one for the
 stimulus trace.
 
 Each slot has a colour picker and a small **×** button that clears
-your override and falls back to the palette's default for that slot.
+your override and falls back to the default colour for that slot.
 **Reset all** clears every slot at once. The slot you have
 overridden is shown filled in, and the default is shown with a
 muted indicator, so you can tell which colours are yours and which
-came from the palette.
+are the defaults.
 
 Trace colours are global rather than per-recording, which suits the
 common case of running similar protocols on similar configurations
@@ -913,7 +861,9 @@ modifier keys.
 | Key | Action |
 |---|---|
 | `⌘K` / `Ctrl+K` | Open the **command palette** |
-| `?` | Open the **help modal** (the keyboard cheat sheet shown by the toolbar's `?` button) |
+| `⌘O` / `Ctrl+O` | Open a recording (**File ▸ Open…**) |
+| `⌘,` / `Ctrl+,` | Open **Settings** |
+| `?` | Open the **help modal** (the keyboard cheat sheet, also **Help ▸ Keyboard Shortcuts**) |
 | `Esc` | Close any open modal, popover, palette, or context menu |
 | `F1` | Toggle the left sidebar (Tree Navigator) |
 | `F2` | Toggle the right sidebar (Cursor Panel) |
@@ -922,19 +872,16 @@ modifier keys.
 The **command palette** is a search-driven launcher for every
 action in the application: open file, recent files, sweep
 navigation, view toggles, every analysis window, the manual,
-theme and palette switching. Type to filter, ↑ / ↓ to navigate,
+appearance and text size. Type to filter, ↑ / ↓ to navigate,
 ↵ to run, `Esc` to close. It is the fastest way to reach anything
 that does not have a dedicated button on the toolbar — for
 example, to open the **Cursor Measurements** window, press `⌘K`
 and start typing *cursors*. Each Part II chapter notes the
 keyword that brings up its window.
 
-TRACER does not install a native menu bar, so opening a file
-has no dedicated keyboard shortcut: use the toolbar's **Open File**
-button, drop a file onto the welcome surface, or open the command
-palette and pick an entry from the *Recent* list. (The help modal
-hints at `⌘O`; it is not currently bound and will be wired in a
-future release.)
+To open a file, press `⌘O` / `Ctrl+O` (**File ▸ Open…**), click the
+toolbar's **Open…** button, drop a file onto the welcome surface, or
+open the command palette and pick an entry from the *Recent* list.
 
 ### Trace navigation
 
@@ -3455,8 +3402,8 @@ state:
 - **Green** — file-level tags set and at least one series is
   tagged.
 
-The same dot appears in the recording header strip at the top of
-the main window, so the application's overall "tagging health"
+The same dot appears next to the file name at the left of the main
+toolbar, so the application's overall "tagging health"
 is always visible at a glance.
 
 ### The single-file editor
@@ -3520,7 +3467,7 @@ Metadata is stored in each file's `.tracer` sidecar under a
 `group_tags`, and `series_tags`. After every write, the metadata
 window broadcasts a `meta-update` message; the **Tree Navigator**
 listens for it and refreshes its series tag chips live, the
-**Recording header strip** updates its status dot, and the
+**recording title** in the toolbar updates its status dot, and the
 toast that prompts you to add tags to a freshly-opened, untagged
 recording is dismissed automatically when you bring the file's
 status to green.

@@ -105,7 +105,7 @@ export function Welcome() {
         <div className="welcome-hero">
           <img src={lockup} alt="TRACER" className="welcome-lockup" />
           <div className="welcome-tagline">
-            ELECTROPHYSIOLOGY · WORKBENCH
+            Electrophysiology workbench
           </div>
           <p className="welcome-description">
             Load a HEKA, Axon, or Neuralynx recording — then run cursors,
@@ -156,7 +156,7 @@ export function Welcome() {
         )}
 
         <div className="welcome-formats">
-          <span className="welcome-formats-key">SUPPORTED</span>
+          <span className="welcome-formats-key">Supported formats</span>
           {SUPPORTED_FORMATS.map((f, i) => (
             <React.Fragment key={f}>
               {i > 0 && <span className="welcome-formats-sep">·</span>}

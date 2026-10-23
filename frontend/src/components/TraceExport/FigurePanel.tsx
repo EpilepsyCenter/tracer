@@ -38,36 +38,27 @@ export function FigurePanel() {
 
   return (
     <div style={{
-      padding: 10, display: 'flex', flexDirection: 'column', gap: 14,
+      padding: 10, display: 'flex', flexDirection: 'column', gap: 10,
       fontSize: 'var(--font-size-sm)',
       fontFamily: 'var(--font-ui)',
       background: 'var(--bg-secondary)',
     }}>
       {/* Layout */}
       <Section title="Panel layout">
-        <div style={{ display: 'flex', gap: 6 }}>
+        <div className="segmented" style={{ alignSelf: 'flex-start' }}>
           {(['overlay', 'stacked'] as const).map((l) => (
             <button
               key={l}
-              className="btn"
+              className={panelLayout === l ? 'active' : undefined}
               onClick={() => setPanelLayout(l)}
-              style={{
-                background: panelLayout === l ? 'var(--accent)' : undefined,
-                color: panelLayout === l ? 'white' : undefined,
-              }}
               title={l === 'overlay'
                 ? 'All y-axes share one panel (twin axes).'
                 : 'One panel per y-axis stacked vertically with a shared x-axis.'}
-            >{l}</button>
+            >{l === 'overlay' ? 'Overlay' : 'Stacked'}</button>
           ))}
         </div>
         {panelLayout === 'stacked' && axes.length < 2 && (
-          <div style={{
-            marginTop: 4, padding: '4px 6px',
-            background: 'var(--bg-tertiary, rgba(120,120,120,0.10))',
-            border: '1px solid var(--border)', borderRadius: 3,
-            color: 'var(--text-muted)', fontSize: 11,
-          }}>
+          <div className="notice notice-info" style={{ marginTop: 4, fontSize: 'var(--font-size-xs)' }}>
             Stacked layout needs at least two y-axes. Add a second axis below
             (or pull in a trace with a different unit) to see panels split.
             Until then the preview shows the overlay view.
@@ -77,17 +68,13 @@ export function FigurePanel() {
 
       {/* Axis style toggle */}
       <Section title="Axis style">
-        <div style={{ display: 'flex', gap: 6 }}>
+        <div className="segmented" style={{ alignSelf: 'flex-start' }}>
           {(['scalebars', 'axes'] as const).map((s) => (
             <button
               key={s}
-              className="btn"
+              className={axisStyle === s ? 'active' : undefined}
               onClick={() => setAxisStyle(s)}
-              style={{
-                background: axisStyle === s ? 'var(--accent)' : undefined,
-                color: axisStyle === s ? 'white' : undefined,
-              }}
-            >{s}</button>
+            >{s === 'scalebars' ? 'Scalebars' : 'Axes'}</button>
           ))}
         </div>
       </Section>
@@ -96,7 +83,8 @@ export function FigurePanel() {
       <Section title={`Y axes (${axes.length})`}>
         {axes.map((a) => (
           <div key={a.id} style={{
-            border: '1px solid var(--border)', borderRadius: 3,
+            border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
+            background: 'var(--bg-field)',
             padding: 6, marginBottom: 4,
           }}>
             <Row label="Label">
@@ -123,9 +111,9 @@ export function FigurePanel() {
             </Row>
             {!a.auto_limits && (
               <Row>
-                <span>min</span>
+                <span>Min</span>
                 <NumField value={a.min ?? 0} onChange={(v) => updateAxis(a.id, { min: v })} />
-                <span>max</span>
+                <span>Max</span>
                 <NumField value={a.max ?? 0} onChange={(v) => updateAxis(a.id, { max: v })} />
               </Row>
             )}
@@ -136,7 +124,7 @@ export function FigurePanel() {
                   step={0.5} min={0.25} max={10}
                   onChange={(v) => updateAxis(a.id, { height_weight: Math.max(0.25, v) })}
                 />
-                <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>
+                <span style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-xs)' }}>
                   relative weight (1 = normal)
                 </span>
               </Row>
@@ -154,7 +142,7 @@ export function FigurePanel() {
         <Section title="Scalebar">
           <Row>
             <label>
-              <input type="checkbox" checked={scalebar.enabled} onChange={(e) => setScalebar({ enabled: e.target.checked })} /> enabled
+              <input type="checkbox" checked={scalebar.enabled} onChange={(e) => setScalebar({ enabled: e.target.checked })} /> Enabled
             </label>
           </Row>
           {scalebar.enabled && (
@@ -177,7 +165,7 @@ export function FigurePanel() {
                 <NumField value={scalebar.font_size} step={0.5} onChange={(v) => setScalebar({ font_size: v })} />
               </Row>
               <Row>
-                <label><input type="checkbox" checked={scalebar.show_labels} onChange={(e) => setScalebar({ show_labels: e.target.checked })} /> labels</label>
+                <label><input type="checkbox" checked={scalebar.show_labels} onChange={(e) => setScalebar({ show_labels: e.target.checked })} /> Labels</label>
               </Row>
 
               <SubBlock title="Time bar">
@@ -270,7 +258,7 @@ export function FigurePanel() {
       <Section title="Legend">
         <Row>
           <label>
-            <input type="checkbox" checked={legend.enabled} onChange={(e) => setLegend({ enabled: e.target.checked })} /> enabled
+            <input type="checkbox" checked={legend.enabled} onChange={(e) => setLegend({ enabled: e.target.checked })} /> Enabled
           </label>
         </Row>
         {legend.enabled && (
@@ -317,10 +305,8 @@ export function FigurePanel() {
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div>
-      <div style={{ fontWeight: 600, marginBottom: 4, paddingBottom: 2, borderBottom: '1px solid var(--border)' }}>
-        {title}
-      </div>
+    <div className="section-card">
+      <div className="section-card-title">{title}</div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>{children}</div>
     </div>
   )

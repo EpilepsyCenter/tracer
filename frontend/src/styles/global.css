@@ -1,46 +1,54 @@
 /* ============================================================
-   Fonts — universal scientific pairing.
+   TRACER theme — desktop look shared with NED-Net and ASTERISM.
 
-   - IBM Plex Sans  : UI labels, panel headings, body text. A
-     humanist sans drawn for instrumentation; reads as serious /
-     engineered without feeling cold.
-   - JetBrains Mono : every button, input, numeric readout, table
-     cell, sweep counter, time / voltage value (tabular figures).
-     Buttons are UPPERCASE for the instrument-panel feel.
+   - The platform's own UI font (SF on macOS, Segoe UI on Windows,
+     Cantarell / Ubuntu on Linux). No web fonts, so the app looks
+     the same offline.
+   - Warm-paper light theme and cool near-black dark theme, one
+     desaturated cyan accent. Light is the default; dark applies
+     when <html data-theme="dark"> (set by themeStore, which can
+     follow the system setting).
+   - Sentence-case controls, boxed fields, 5–6 px corners.
+     Monospace is used only for numbers (fields, readouts, table
+     cells) so columns line up.
 
-   Both palettes (Classic / Telegraph / Precision) share this
-   typographic identity. Palettes only differ in colour.
+   Token names are the ones the components already use
+   (--bg-primary, --text-muted, --font-size-label …), so inline
+   styles across the app pick up the new values automatically.
    ============================================================ */
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 
 /* ============================================================
-   Universal tokens (palette-independent)
+   Shared tokens (both themes)
    ============================================================ */
 :root {
   /* ---- Type ---- */
-  --font-ui:   'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --font-body: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --font-mono: 'JetBrains Mono', 'SF Mono', 'Consolas', ui-monospace, monospace;
-  --font-features-mono: "tnum", "ss01";
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI",
+             system-ui, Cantarell, Ubuntu, "Noto Sans", sans-serif;
+  --font-body: var(--font-ui);
+  --font-sans: var(--font-ui);
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas,
+               "DejaVu Sans Mono", monospace;
+  --font-features-mono: "tnum";
 
-  /* Strict scale: 10 / 11 / 12 / 13 / 15 / 18 / 22 */
-  --fs-xxs:  10px;
+  /* Type scale. The --font-size-* values are rewritten by
+     themeStore from the user's base size (default 13 px). */
+  --fs-xxs:  11px;
   --fs-xs:   11px;
   --fs-sm:   12px;
   --fs-base: 13px;
-  --fs-md:   15px;
-  --fs-lg:   18px;
+  --fs-md:   14px;
+  --fs-lg:   17px;
   --fs-xl:   22px;
-  /* Legacy aliases — older components reference these names */
   --font-size-base:  13px;
   --font-size-sm:    12px;
   --font-size-xs:    11px;
-  --font-size-label: 10px;
+  --font-size-label: 11px;
+  --font-size-lg:    15px;
 
-  /* Letter spacing for uppercase labels */
-  --tracking-label: 0.08em;
+  /* No letter-spaced labels in the desktop look. */
+  --tracking-label: 0;
 
-  /* ---- Spacing (4px base) ---- */
+  /* ---- Spacing (4 px base) ---- */
   --space-1:  4px;
   --space-2:  8px;
   --space-3: 12px;
@@ -50,100 +58,160 @@
   --space-8: 32px;
   --space-12: 48px;
 
-  /* ---- Radius (universal 3px, 0 for full-bleed) ---- */
-  --radius-sm: 2px;
-  --radius:    3px;
+  /* ---- Radius ---- */
+  --radius-sm: 4px;
+  --radius:    5px;
   --radius-md: 6px;
   --radius-lg: 10px;
+  --rad:       var(--radius);
 
   /* ---- Motion ---- */
-  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
-  --motion-fast:  80ms  var(--ease);
-  --motion:       120ms var(--ease);
-  --motion-slow:  180ms var(--ease);
+  --ease: ease;
+  --motion-fast: 80ms ease;
+  --motion:      100ms ease;
+  --motion-slow: 160ms ease;
 
-  /* ---- Status / semantic (work on any background) ---- */
-  --success: #4caf50;
-  --warning: #ff9800;
-  --error:   #f44336;
+  /* Old background texture — kept as a no-op so stale references
+     don't break. */
+  --noise: none;
 
-  /* ---- Trace colors (saturated mid-tones — both themes) ---- */
-  --trace-color-1: #4a9ede;
-  --trace-color-2: #5cb85c;
-  --trace-color-3: #e8993e;
-  --trace-color-4: #d95050;
-  --trace-color-5: #a855c8;
-  --trace-average:  #ff4444;
-  --stimulus-color: #e63946;
-
-  /* ---- Cursor region colors ---- */
-  --cursor-baseline:      #4caf50;
-  --cursor-baseline-fill: rgba(76, 175, 80, 0.12);
-  --cursor-peak:          #ef8c00;
-  --cursor-peak-fill:     rgba(239, 140, 0, 0.12);
-  --cursor-fit:           #9c27b0;
-  --cursor-fit-fill:      rgba(156, 39, 176, 0.10);
-
-  /* ---- Subtle texture ---- *
-   * 160×160 fractal-noise tile, alpha ≈ 0.5 — applied with very
-   * low opacity / blend-mode to background tiers so large flat
-   * areas don't read as dead pixels. */
-  --noise: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.45 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  /* ---- Layout ---- */
+  --toolbar-h: 52px;
+  --statusbar-h: 26px;
 }
 
 /* ============================================================
-   Classic palette — preserved for back-compat.
-   Dark
+   Light theme (default) — warm paper
    ============================================================ */
-[data-palette="classic"][data-theme="dark"],
-:root:not([data-palette])[data-theme="dark"],
-[data-theme="dark"]:not([data-palette]) {
-  --bg-primary:   #1e1e2e;
-  --bg-secondary: #282840;
-  --bg-tertiary:  #313150;
-  --bg-surface:   #383858;
-  --text-primary:   #e0e0f0;
-  --text-secondary: #a0a0c0;
-  --text-muted:     #707090;
-  --accent:       #7c6ff0;
-  --accent-hover: #9589f5;
-  --accent-dim:   #5a50b0;
-  --border:       #404060;
+:root {
+  /* Surfaces */
+  --bg-primary:   #f3f2ee;   /* canvas, analysis-window content */
+  --bg-secondary: #f8f7f4;   /* toolbar, side panels, status bar, popovers */
+  --bg-tertiary:  #e9e7e1;   /* hover, inactive tabs */
+  --bg-surface:   #e1dfd8;   /* wells, swatches */
+  --bg-sidebar:   #e8e7e2;   /* recording tree (source list) */
+  --bg-field:     #ffffff;   /* text fields, tables, menus */
+  --bg-hover:     rgba(20, 22, 28, 0.05);
+  --bg-active:    rgba(20, 22, 28, 0.09);
+  --bg-selected:  color-mix(in oklab, var(--accent) 12%, transparent);
+  --bg-error:     oklch(0.53 0.18 25);   /* filled error banner (white text) */
 
-  --chart-axis: #a0a0c0;
-  --chart-grid: rgba(100, 100, 150, 0.15);
-  --chart-tick: rgba(100, 100, 150, 0.30);
-  --chart-bg:   #1e1e2e;
+  /* Text */
+  --text-primary:   #15171b;   /* near-black, never pure */
+  --text-secondary: #43464d;
+  --text-muted:     #5f636b;
+  --text-disabled:  #9a9da4;
 
-  color-scheme: dark;
-}
+  /* Accent */
+  --accent:       oklch(0.54 0.10 215);  /* desaturated cyan */
+  --accent-hover: oklch(0.46 0.12 215);
+  --accent-dim:   oklch(0.86 0.05 215);
+  --accent-muted: color-mix(in oklab, var(--accent) 20%, transparent);
+  --on-accent:    #ffffff;
 
-/* Classic light — kept intact for back-compat (cool greyish). */
-[data-palette="classic"][data-theme="light"],
-:root:not([data-palette])[data-theme="light"],
-[data-theme="light"]:not([data-palette]) {
-  --bg-primary:   #f4f4f8;
-  --bg-secondary: #eaeaf0;
-  --bg-tertiary:  #dddde6;
-  --bg-surface:   #d2d2dc;
-  --text-primary:   #1a1a2e;
-  --text-secondary: #4a4a6a;
-  --text-muted:     #8080a0;
-  --accent:       #6c5ce7;
-  --accent-hover: #5a4bd6;
-  --accent-dim:   #c0b4f8;
-  --border:       #c0c0d4;
+  /* Lines */
+  --border:         rgba(20, 22, 28, 0.10);
+  --border-subtle:  rgba(20, 22, 28, 0.06);
+  --border-control: rgba(20, 22, 28, 0.22);
 
-  --chart-axis: #4a4a6a;
-  --chart-grid: rgba(80, 80, 120, 0.10);
-  --chart-tick: rgba(80, 80, 120, 0.22);
+  /* Status */
+  --success: oklch(0.55 0.13 150);
+  --warning: oklch(0.66 0.16 65);
+  --error:   oklch(0.55 0.20 25);
+  --accent-warn: var(--warning);
+
+  /* Plots — white page so traces read like print */
+  --chart-axis: #2a2d34;
+  --chart-grid: rgba(20, 22, 28, 0.07);
+  --chart-tick: rgba(20, 22, 28, 0.22);
   --chart-bg:   #ffffff;
 
-  --cursor-baseline-fill: rgba(76, 175, 80, 0.14);
-  --cursor-peak-fill:     rgba(239, 140, 0, 0.14);
-  --cursor-fit-fill:      rgba(156, 39, 176, 0.12);
+  --trace-color-1: oklch(0.50 0.12 215);
+  --trace-color-2: oklch(0.48 0.14 150);
+  --trace-color-3: oklch(0.55 0.17 50);
+  --trace-color-4: oklch(0.50 0.20 25);
+  --trace-color-5: oklch(0.45 0.18 290);
+  --trace-average:  oklch(0.52 0.22 25);
+  --stimulus-color: oklch(0.50 0.20 25);
+
+  --cursor-baseline:      oklch(0.50 0.15 150);
+  --cursor-baseline-fill: oklch(0.50 0.15 150 / 0.10);
+  --cursor-peak:          oklch(0.58 0.18 50);
+  --cursor-peak-fill:     oklch(0.58 0.18 50 / 0.10);
+  --cursor-fit:           oklch(0.45 0.18 290);
+  --cursor-fit-fill:      oklch(0.45 0.18 290 / 0.09);
+
+  /* Detection overlays (event / spike / burst markers) */
+  --marker-detected: oklch(0.52 0.19 25);
+  --marker-manual:   oklch(0.58 0.18 50);
+  --marker-bounds:   oklch(0.54 0.10 245);
+  --marker-outline:  #ffffff;
+
+  --shadow-popover: 0 0 0 1px rgba(20, 22, 28, 0.08), 0 8px 24px rgba(20, 22, 28, 0.14);
 
   color-scheme: light;
+}
+
+/* ============================================================
+   Dark theme — cool near-black
+   ============================================================ */
+:root[data-theme="dark"] {
+  --bg-primary:   #0e1114;
+  --bg-secondary: #13171b;
+  --bg-tertiary:  #1f252c;
+  --bg-surface:   #283039;
+  --bg-sidebar:   #15191e;
+  --bg-field:     #1b2026;
+  --bg-hover:     rgba(255, 255, 255, 0.05);
+  --bg-active:    rgba(255, 255, 255, 0.09);
+  --bg-error:     oklch(0.48 0.16 25);
+
+  --text-primary:   #e6e8ec;
+  --text-secondary: #bcc2cb;
+  --text-muted:     #8f96a1;
+  --text-disabled:  #5c636e;
+
+  --accent:       oklch(0.78 0.10 215);
+  --accent-hover: oklch(0.85 0.10 215);
+  --accent-dim:   oklch(0.40 0.08 215);
+  --on-accent:    #0b0d10;
+
+  --border:         rgba(255, 255, 255, 0.09);
+  --border-subtle:  rgba(255, 255, 255, 0.05);
+  --border-control: rgba(255, 255, 255, 0.16);
+
+  --success: oklch(0.74 0.13 150);
+  --warning: oklch(0.84 0.15 92);   /* yellower than --cursor-peak so the two stay apart */
+  --error:   oklch(0.72 0.18 25);
+
+  --chart-axis: #b8bdc6;
+  --chart-grid: rgba(255, 255, 255, 0.06);
+  --chart-tick: rgba(255, 255, 255, 0.18);
+  --chart-bg:   #0a0d12;
+
+  --trace-color-1: oklch(0.78 0.11 215);
+  --trace-color-2: oklch(0.74 0.13 150);
+  --trace-color-3: oklch(0.78 0.15 65);
+  --trace-color-4: oklch(0.72 0.18 25);
+  --trace-color-5: oklch(0.70 0.16 290);
+  --trace-average:  oklch(0.74 0.20 25);
+  --stimulus-color: oklch(0.72 0.18 25);
+
+  --cursor-baseline:      oklch(0.74 0.13 150);
+  --cursor-baseline-fill: oklch(0.74 0.13 150 / 0.14);
+  --cursor-peak:          oklch(0.78 0.15 65);
+  --cursor-peak-fill:     oklch(0.78 0.15 65 / 0.14);
+  --cursor-fit:           oklch(0.70 0.16 290);
+  --cursor-fit-fill:      oklch(0.70 0.16 290 / 0.14);
+
+  --marker-detected: oklch(0.72 0.18 25);
+  --marker-manual:   oklch(0.80 0.15 65);
+  --marker-bounds:   oklch(0.74 0.10 245);
+  --marker-outline:  #0a0d12;
+
+  --shadow-popover: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 10px 30px rgba(0, 0, 0, 0.5);
+
+  color-scheme: dark;
 }
 
 /* ============================================================
@@ -161,77 +229,33 @@ html {
   color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  text-rendering: optimizeLegibility;
 }
 
 body {
   background: var(--bg-primary);
-  background-image: var(--noise);
-  background-blend-mode: overlay;
-  background-attachment: fixed;
   overflow: hidden;
   height: 100vh;
-  font-family: var(--font-body);
-  letter-spacing: -0.005em;
-}
-
-/* ============================================================
-   Universal typography treatment — instrument-panel feel.
-   Applies under every palette. Colours come from palette files.
-   ============================================================ */
-
-/* Form controls — machine-oriented data, mono. */
-input,
-select,
-textarea,
-button.num-stepper {
-  font-family: var(--font-mono);
-  font-feature-settings: var(--font-features-mono);
-}
-
-/* Buttons — mono + UPPERCASE for the engineered look. */
-button {
-  font-family: var(--font-mono);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-
-/* Table bodies — numeric / tabular. */
-table tbody,
-table td {
-  font-family: var(--font-mono);
-  font-feature-settings: var(--font-features-mono);
-}
-
-/* Card titles + section labels — catches every inline
-   ``fontWeight: 600`` on a <span>. */
-span[style*="font-weight: 600"] {
-  font-family: var(--font-mono);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-
-/* Analysis-window Group / Series / Channel / Sweep selector
-   labels — tagged with .selector-label in the Field helpers. */
-.selector-label {
-  font-family: var(--font-mono);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-
-/* Tree navigator series / sweep / averaged-sweep labels. */
-.tree-node-label {
-  font-family: var(--font-mono);
-}
-
-/* Table column headers stay UI sans (legible). */
-table th {
   font-family: var(--font-ui);
+  line-height: 1.4;
 }
 
-/* Numeric data — every <span class="num"> / <code> / <kbd> renders
-   in mono with tabular figures so columns of voltages and times
-   line up instead of dancing. */
+/* Desktop apps show an arrow over controls, not a pointing hand. */
+button, select, label, summary, [role="button"], [role="tab"],
+input[type="checkbox"], input[type="radio"], input[type="color"] {
+  cursor: default;
+}
+
+button {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+/* Numbers in fields, tables and readouts use monospace with
+   tabular figures so columns of values line up. */
+input[type="number"],
+button.num-stepper,
+table td,
 .num,
 .num-readout,
 .readout,
@@ -240,6 +264,19 @@ table th {
 code, kbd, samp {
   font-family: var(--font-mono);
   font-feature-settings: var(--font-features-mono);
+}
+
+/* Analysis-window Group / Series / Channel / Sweep selector labels. */
+.selector-label {
+  color: var(--text-muted);
+}
+
+table th {
+  font-family: var(--font-ui);
+}
+
+::selection {
+  background: color-mix(in oklab, var(--accent) 28%, transparent);
 }
 
 #root {
@@ -255,17 +292,55 @@ code, kbd, samp {
 .app-main {
   display: flex;
   flex: 1;
+  min-height: 0;
   overflow: hidden;
 }
 
+/* Left column: recording tree, full window height (source list). */
 .app-sidebar {
-  background: var(--bg-secondary);
-  overflow-y: auto;
+  background: var(--bg-sidebar);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
   flex-shrink: 0;
+  min-height: 0;
+}
+
+.app-sidebar-header {
+  height: var(--toolbar-h);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 0 var(--space-2) 0 var(--space-4);
+  -webkit-app-region: drag;
+  user-select: none;
+}
+.app-sidebar-header button {
+  -webkit-app-region: no-drag;
+}
+/* macOS: the window's traffic lights sit in the sidebar header. */
+body[data-platform="mac"] .app-sidebar-header {
+  padding-left: 84px;
+}
+
+.app-wordmark {
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  color: var(--accent);
+}
+
+.app-sidebar-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .app-center {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -274,11 +349,14 @@ code, kbd, samp {
 .app-trace-area {
   flex: 1;
   display: flex;
+  min-height: 0;
   overflow: hidden;
+  background: var(--chart-bg);
 }
 
 .app-cursor-sidebar {
   background: var(--bg-secondary);
+  border-left: 1px solid var(--border);
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -292,9 +370,9 @@ code, kbd, samp {
   overflow: hidden;
 }
 
-/* Resize handle — barely visible at rest, accent on hover */
+/* Resize handle — invisible at rest, accent on hover */
 .resize-handle-line {
-  opacity: 0.25;
+  opacity: 0;
   transition: opacity var(--motion-fast), background var(--motion-fast);
 }
 *:hover > .resize-handle-line {
@@ -312,25 +390,19 @@ code, kbd, samp {
 }
 
 .tab-btn {
-  padding: var(--space-2) var(--space-4);
+  padding: var(--space-2) var(--space-3);
   background: none;
   border: none;
   border-bottom: 2px solid transparent;
   color: var(--text-secondary);
-  cursor: pointer;
-  font-size: var(--fs-xs);
-  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
   font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
   transition: color var(--motion), border-color var(--motion), background var(--motion);
 }
-
 .tab-btn:hover {
   color: var(--text-primary);
-  background: var(--bg-tertiary);
+  background: var(--bg-hover);
 }
-
 .tab-btn.active {
   color: var(--accent);
   border-bottom-color: var(--accent);
@@ -343,24 +415,18 @@ code, kbd, samp {
 }
 
 /* ============================================================
-   Scrollbars — slim, hover-revealed
+   Scrollbars — slim, always visible like native overlay bars
    ============================================================ */
-::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: transparent;
+  background: color-mix(in oklab, var(--text-muted) 32%, transparent);
   border-radius: 6px;
   border: 2px solid transparent;
   background-clip: content-box;
-  transition: background var(--motion);
-}
-*:hover > ::-webkit-scrollbar-thumb,
-*:hover::-webkit-scrollbar-thumb {
-  background: var(--bg-surface);
-  background-clip: content-box;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--text-muted);
+  background: color-mix(in oklab, var(--text-muted) 55%, transparent);
   background-clip: content-box;
 }
 ::-webkit-scrollbar-corner { background: transparent; }
@@ -373,208 +439,270 @@ code, kbd, samp {
 }
 
 .panel-title {
-  font-family: var(--font-ui);
-  font-size: var(--fs-xxs);
+  font-size: var(--fs-xs);
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-label);
   color: var(--text-muted);
   margin-bottom: var(--space-2);
 }
 
 /* ---- Buttons ----
-   Three tiers (primary / default / ghost) at three sizes.
-   Default visual is "secondary" — subtle bg, hairline border,
-   accent edge on hover. */
+   Default: boxed white button with a control border (like a native
+   push button). Primary: filled accent. Ghost: borderless icon/text
+   button for toolbars. */
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: var(--space-2);
-  height: 28px;
-  padding: 0 var(--space-3);
-  border: 1px solid var(--border);
+  gap: 6px;
+  height: 24px;
+  padding: 0 10px;
+  border: 1px solid var(--border-control);
   border-radius: var(--radius);
-  background: var(--bg-surface);
+  background: var(--bg-field);
   color: var(--text-primary);
-  cursor: pointer;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: var(--fs-sm);
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  font-weight: 400;
   white-space: nowrap;
-  transition:
-    background var(--motion-fast),
-    border-color var(--motion-fast),
-    color var(--motion-fast),
-    transform var(--motion-fast);
+  box-shadow: 0 0.5px 1px rgba(0, 0, 0, 0.05);
+  transition: background var(--motion-fast), border-color var(--motion-fast), color var(--motion-fast);
 }
-
-.btn:hover {
-  background: var(--bg-tertiary);
-  border-color: var(--accent-dim);
+.btn:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--bg-field) 92%, var(--text-primary));
 }
-.btn:active {
-  transform: translateY(0.5px);
+.btn:active:not(:disabled) {
+  background: color-mix(in oklab, var(--bg-field) 86%, var(--text-primary));
 }
 .btn:focus-visible {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px color-mix(in oklab, var(--accent) 28%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 28%, transparent);
 }
 
 .btn-primary {
   background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
+  border-color: transparent;
+  color: var(--on-accent);
+  font-weight: 600;
 }
-.btn-primary:hover {
+.btn-primary:hover:not(:disabled) {
   background: var(--accent-hover);
-  border-color: var(--accent-hover);
+}
+.btn-primary:active:not(:disabled) {
+  background: var(--accent-hover);
 }
 
 .btn-ghost {
   background: transparent;
   border-color: transparent;
+  box-shadow: none;
   color: var(--text-secondary);
 }
-.btn-ghost:hover {
-  background: var(--bg-tertiary);
+.btn-ghost:hover:not(:disabled) {
+  background: var(--bg-hover);
   color: var(--text-primary);
-  border-color: transparent;
 }
 
-.btn-sm { height: 24px; padding: 0 var(--space-2); font-size: var(--fs-xs); }
-.btn-lg { height: 32px; padding: 0 var(--space-4); font-size: var(--fs-base); }
+.btn-sm { height: 22px; padding: 0 var(--space-2); font-size: var(--fs-xs); }
+.btn-lg { height: 30px; padding: 0 var(--space-4); font-size: var(--fs-base); }
 
 .btn:disabled {
   opacity: 0.45;
-  cursor: not-allowed;
 }
 
-/* ---- Inputs ---- */
+/* ---- Fields ---- */
 input[type="number"],
 input[type="text"],
 input[type="search"],
+input:not([type]),
 select,
 textarea {
-  height: 28px;
-  padding: 0 var(--space-2);
-  background: var(--bg-primary);
-  border: 1px solid var(--border);
+  height: 24px;
+  padding: 0 6px;
+  background: var(--bg-field);
+  border: 1px solid var(--border-control);
   border-radius: var(--radius);
   color: var(--text-primary);
-  font-family: var(--font-mono);
-  font-feature-settings: var(--font-features-mono);
   font-size: var(--fs-sm);
-  transition: border-color var(--motion-fast), box-shadow var(--motion-fast), background var(--motion-fast);
+  transition: border-color var(--motion-fast), box-shadow var(--motion-fast);
+}
+
+input[type="text"],
+input[type="search"],
+input:not([type]),
+select,
+textarea {
+  font-family: var(--font-ui);
+}
+
+select {
+  padding-right: 4px;
 }
 
 textarea {
   height: auto;
-  padding: var(--space-2);
-  font-family: var(--font-body);
-}
-
-input[type="number"]:hover,
-input[type="text"]:hover,
-input[type="search"]:hover,
-select:hover,
-textarea:hover {
-  border-color: var(--text-muted);
+  padding: 6px;
 }
 
 input[type="number"]:focus,
 input[type="text"]:focus,
 input[type="search"]:focus,
+input:not([type]):focus,
 select:focus,
 textarea:focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px color-mix(in oklab, var(--accent) 22%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 22%, transparent);
+}
+
+input[type="checkbox"],
+input[type="radio"],
+input[type="range"] {
+  accent-color: var(--accent);
+}
+
+/* The reset above strips the browser's gap between a checkbox and
+   its label text; restore it where the text follows directly. */
+input[type="checkbox"]:not(:last-child),
+input[type="radio"]:not(:last-child) {
+  margin-right: 5px;
 }
 
 /* ---- Toolbar ---- */
 .toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-2);
-  padding: 0 var(--space-3);
-  height: 48px;
+  gap: 6px 6px;
+  padding: 6px 10px 6px var(--space-4);
+  min-height: var(--toolbar-h);
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
-  /* Whole toolbar is a window-drag region; interactive children
-     opt out below. Combined with macOS ``hiddenInset`` titlebar,
-     the toolbar absorbs the title-bar drag area. */
+  /* The toolbar is the window's drag region (macOS hiddenInset
+     title bar); interactive children opt out below. */
   -webkit-app-region: drag;
 }
 
-/* macOS: leave a gutter for the inset traffic-light controls
-   (close / minimize / maximize). Without this, the buttons sit
-   underneath the OS controls. */
-body[data-platform="mac"] .toolbar {
-  padding-left: 80px;
+/* macOS with the sidebar hidden: leave room for the traffic lights. */
+body[data-platform="mac"] .toolbar.toolbar-mac-inset {
+  padding-left: 84px;
 }
 
-/* Interactive children inside the toolbar must opt out of the
-   drag region or they become unclickable. */
 .toolbar button,
 .toolbar input,
 .toolbar select,
 .toolbar textarea,
 .toolbar a,
 .toolbar [role="button"],
-.toolbar .toolbar-separator,
 .toolbar .settings-popover {
   -webkit-app-region: no-drag;
 }
 
 .toolbar-separator {
   width: 1px;
-  height: 22px;
+  height: 20px;
   background: var(--border);
-  opacity: 0.6;
-  margin: 0 var(--space-1);
+  margin: 0 2px;
 }
 
 .toolbar-group {
   display: flex;
   align-items: center;
-  gap: var(--space-1);
+  gap: 2px;
+}
+
+.toolbar-spacer {
+  flex: 1;
+}
+
+/* Title block: open recording + one line of detail */
+.toolbar-title {
+  display: flex;
+  flex-direction: column;
+  flex: 0 1 auto;
+  min-width: 120px;
+  max-width: 360px;
+  margin-right: var(--space-3);
+  user-select: none;
+}
+.toolbar-title-name {
+  font-weight: 600;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.toolbar-title-detail {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .toolbar-label {
-  font-family: var(--font-ui);
   font-size: var(--fs-sm);
-  font-weight: 500;
-  color: var(--text-secondary);
+  color: var(--text-muted);
   margin-right: var(--space-1);
-  letter-spacing: 0.01em;
 }
 
-/* Toolbar buttons get extra height + presence — they're the
-   primary controls. Icon + label render side-by-side, with a
-   slightly heavier weight to match the TracesDropdown button. */
-.toolbar .btn {
-  height: 32px;
-  padding: 0 var(--space-3);
+/* Readout pill (e.g. "Sweep 4 of 8") */
+.toolbar-readout {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: var(--radius);
+  background: var(--bg-hover);
   font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Square icon button (toolbar, viewer headers) */
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-secondary);
+}
+.icon-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.icon-btn:disabled {
+  opacity: 0.35;
+}
+.icon-btn.active,
+.icon-btn[aria-pressed="true"] {
+  background: color-mix(in oklab, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+
+/* Toggled toolbar button (Overlay / Zoom on) */
+.btn.btn-toggled {
+  background: color-mix(in oklab, var(--accent) 14%, transparent);
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--accent);
   font-weight: 600;
-  gap: 6px;
 }
 
 .toolbar .btn .icon {
   flex-shrink: 0;
-  opacity: 0.85;
 }
 
-/* Compact toolbar button (e.g. the recent-files ▾ chevron after
-   "Open File") — no left/right padding bloat. */
-.toolbar .btn.btn-compact {
-  padding: 0 var(--space-2);
-  min-width: 28px;
+.toolbar .btn.btn-compact,
+.btn.btn-compact {
+  padding: 0 6px;
+  min-width: 24px;
 }
 
 /* Icon component — inline SVG that inherits currentColor. */
@@ -583,7 +711,6 @@ body[data-platform="mac"] .toolbar {
   flex-shrink: 0;
   vertical-align: middle;
 }
-
 .icon svg {
   display: block;
 }
@@ -593,22 +720,24 @@ body[data-platform="mac"] .toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: var(--space-4);
   padding: 0 var(--space-3);
-  height: 26px;
+  height: var(--statusbar-h);
   background: var(--bg-secondary);
   border-top: 1px solid var(--border);
-  font-family: var(--font-mono);
-  font-feature-settings: var(--font-features-mono);
-  font-size: var(--fs-xxs);
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   flex-shrink: 0;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 .status-bar-left,
 .status-bar-right {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--space-4);
+  min-width: 0;
 }
 
 /* ============================================================
@@ -622,25 +751,26 @@ body[data-platform="mac"] .toolbar {
 }
 
 .collapse-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 24px;
   background: none;
   border: none;
   color: var(--text-muted);
-  cursor: pointer;
-  font-size: var(--fs-xxs);
-  padding: 2px 6px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   line-height: 1;
   transition: background var(--motion-fast), color var(--motion-fast);
 }
 .collapse-btn:hover {
-  background: var(--bg-tertiary);
+  background: var(--bg-hover);
   color: var(--text-primary);
 }
 
 /* Collapsed strips */
 .collapsed-strip {
   background: var(--bg-secondary);
-  cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -652,11 +782,8 @@ body[data-platform="mac"] .toolbar {
   background: var(--bg-tertiary);
 }
 .collapsed-strip span {
-  font-family: var(--font-ui);
-  font-size: var(--fs-xxs);
+  font-size: var(--fs-xs);
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-label);
   color: var(--text-muted);
 }
 
@@ -675,17 +802,18 @@ body[data-platform="mac"] .toolbar {
   width: 100%;
 }
 
-/* Analysis dropdown menu */
+/* Menu rows (Analyses / Tools popovers) */
 .analysis-menu-item:hover {
-  background: var(--bg-tertiary) !important;
+  background: var(--accent) !important;
+  color: var(--on-accent) !important;
 }
 
 /* Tree navigator row hover */
 .tree-row:hover {
-  background: var(--bg-tertiary) !important;
+  background: var(--bg-hover) !important;
 }
 
-/* ---- TraceViewer zoom buttons ---- */
+/* ---- Viewer zoom buttons ---- */
 .zoom-btn {
   min-width: 22px;
   height: 22px;
@@ -694,20 +822,16 @@ body[data-platform="mac"] .toolbar {
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   color: var(--text-secondary);
-  font-family: var(--font-mono);
   font-size: var(--fs-xs);
-  cursor: pointer;
   line-height: 1;
-  transition: background var(--motion-fast), border-color var(--motion-fast), color var(--motion-fast);
+  transition: background var(--motion-fast), color var(--motion-fast);
 }
 .zoom-btn:hover:not(:disabled) {
-  background: var(--bg-tertiary);
-  border-color: var(--border);
+  background: var(--bg-hover);
   color: var(--text-primary);
 }
 .zoom-btn:disabled {
   opacity: 0.35;
-  cursor: not-allowed;
 }
 
 /* Placeholder */
@@ -717,13 +841,11 @@ body[data-platform="mac"] .toolbar {
   justify-content: center;
   height: 100%;
   color: var(--text-muted);
-  font-family: var(--font-body);
-  font-style: italic;
   font-size: var(--fs-sm);
 }
 
 /* ============================================================
-   Settings popover
+   Popovers (settings, menus)
    ============================================================ */
 .settings-popover {
   position: absolute;
@@ -731,161 +853,110 @@ body[data-platform="mac"] .toolbar {
   top: 100%;
   margin-top: var(--space-1);
   width: 268px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  background: var(--bg-field);
   border-radius: var(--radius-md);
-  box-shadow:
-    0 1px 0 color-mix(in oklab, var(--border) 50%, transparent),
-    0 12px 32px rgba(0, 0, 0, 0.18);
-  padding: var(--space-4);
+  box-shadow: var(--shadow-popover);
+  padding: var(--space-3);
   z-index: 1000;
-  backdrop-filter: blur(8px);
+  -webkit-app-region: no-drag;
+}
+
+.settings-popover.menu {
+  padding: 5px;
 }
 
 .settings-section {
   margin-bottom: var(--space-4);
 }
-
 .settings-section:last-child {
   margin-bottom: 0;
 }
 
 .settings-label {
-  font-family: var(--font-ui);
-  font-size: var(--fs-xxs);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-label);
-  color: var(--text-muted);
-  margin-bottom: var(--space-2);
-}
-
-.theme-toggle {
-  display: flex;
-  gap: 2px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 2px;
-}
-
-.theme-toggle button {
-  flex: 1;
-  height: 26px;
-  padding: 0 var(--space-2);
-  border: 1px solid transparent;
-  border-radius: 2px;
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-family: var(--font-mono);
   font-size: var(--fs-xs);
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  transition: background var(--motion-fast), color var(--motion-fast);
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 6px;
 }
 
-.theme-toggle button.active {
-  background: var(--accent);
-  color: #fff;
-}
-
-.theme-toggle button:hover:not(.active) {
-  background: var(--bg-tertiary);
-  color: var(--text-primary);
-}
-
-.font-size-row {
+/* Segmented control */
+.theme-toggle,
+.font-size-row,
+.segmented {
   display: flex;
-  gap: 2px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  gap: 0;
   padding: 2px;
+  border-radius: var(--radius-md);
+  background: var(--bg-hover);
 }
 
-.font-size-row button {
+.theme-toggle button,
+.font-size-row button,
+.segmented button {
   flex: 1;
-  height: 24px;
-  border: none;
-  border-radius: 2px;
+  height: 22px;
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-secondary);
-  cursor: pointer;
-  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
   transition: background var(--motion-fast), color var(--motion-fast);
 }
 
-.font-size-row button.active {
-  background: var(--accent);
-  color: #fff;
+.segmented button {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
-.font-size-row button:hover:not(.active) {
-  background: var(--bg-tertiary);
+.theme-toggle button.active,
+.font-size-row button.active,
+.segmented button.active,
+.segmented button[aria-pressed="true"],
+.segmented button[aria-selected="true"] {
+  background: var(--bg-field);
+  color: var(--text-primary);
+  box-shadow: 0 0.5px 1.5px rgba(0, 0, 0, 0.18);
+}
+
+.theme-toggle button:hover:not(.active),
+.font-size-row button:hover:not(.active),
+.segmented button:hover:not(.active):not([aria-pressed="true"]):not([aria-selected="true"]) {
   color: var(--text-primary);
 }
 
 /* ============================================================
-   Status-bar LED pills — base style, palettes refine via overrides.
+   Status dots (formerly "LED pills")
    ============================================================ */
 .led {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 2px var(--space-2);
-  border-radius: 999px;
-  font-family: var(--font-mono);
-  font-feature-settings: var(--font-features-mono);
-  font-size: var(--fs-xxs);
-  line-height: 1.4;
-  background: var(--bg-primary);
-  color: var(--text-secondary);
-  border: 1px solid var(--border);
-  letter-spacing: 0.01em;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
   white-space: nowrap;
 }
-
 .led::before {
+  content: none;
+}
+.led.ok::before,
+.led.err::before,
+.led.off::before {
   content: '';
   display: inline-block;
-  width: 6px;
-  height: 6px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
-  background: var(--text-muted);
   flex-shrink: 0;
 }
-
-.led.ok::before {
-  background: var(--success);
-  box-shadow:
-    0 0 0 1px color-mix(in oklab, var(--success) 35%, transparent),
-    0 0 6px color-mix(in oklab, var(--success) 50%, transparent);
-}
-
-.led.err::before {
-  background: var(--error);
-  box-shadow:
-    0 0 0 1px color-mix(in oklab, var(--error) 35%, transparent),
-    0 0 6px color-mix(in oklab, var(--error) 50%, transparent);
-}
-.led.err {
-  color: var(--error);
-}
-
-.led.off::before {
-  background: var(--text-muted);
-  opacity: 0.55;
-}
-.led.off {
-  opacity: 0.7;
-}
+.led.ok::before  { background: var(--success); }
+.led.err::before { background: var(--error); }
+.led.off::before { background: var(--text-disabled); }
+.led.err { color: var(--error); }
 
 /* ============================================================
-   Recording header — sits between the toolbar and the trace
-   viewer. Two zones: identity (left, prominent) and telemetry
-   (right, muted mono).
+   Recording header — tag chips + metadata status under the
+   toolbar (only shown when a recording is open).
    ============================================================ */
 .recording-header {
   display: flex;
@@ -893,24 +964,20 @@ body[data-platform="mac"] .toolbar {
   justify-content: space-between;
   gap: var(--space-4);
   padding: 0 var(--space-4);
-  height: 36px;
+  height: 30px;
   border-bottom: 1px solid var(--border);
   background: var(--bg-secondary);
-  font-family: var(--font-mono);
-  font-feature-settings: var(--font-features-mono);
-  font-size: var(--fs-base);
+  font-size: var(--fs-xs);
   color: var(--text-muted);
-  letter-spacing: 0.01em;
   white-space: nowrap;
   overflow: hidden;
   flex-shrink: 0;
 }
 
-/* Identity zone — status dot, filename, file-level tag chips. */
 .recording-header-left {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--space-2);
   min-width: 0;
   flex: 1 1 auto;
   overflow: hidden;
@@ -918,19 +985,16 @@ body[data-platform="mac"] .toolbar {
 
 .recording-header .meta-status-dot {
   display: inline-block;
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
-  cursor: default;
 }
 
 .recording-header .filename {
-  font-family: var(--font-ui);
   font-weight: 600;
-  font-size: var(--fs-base);
+  font-size: var(--fs-sm);
   color: var(--text-primary);
-  letter-spacing: 0.01em;
   text-overflow: ellipsis;
   overflow: hidden;
   flex-shrink: 1;
@@ -948,50 +1012,31 @@ body[data-platform="mac"] .toolbar {
 
 .recording-header .tag-chip {
   display: inline-block;
-  padding: 2px 8px;
-  border-radius: 3px;
-  background: color-mix(in oklab, var(--accent) 18%, transparent);
-  border: 1px solid color-mix(in oklab, var(--accent) 30%, transparent);
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--accent) 14%, transparent);
   color: var(--text-primary);
-  font-family: var(--font-mono);
-  font-feature-settings: var(--font-features-mono);
   font-size: var(--fs-xs);
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  line-height: 1.4;
+  line-height: 1.5;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 160px;
 }
 
-/* Telemetry zone — fmt / grp / ser / swp / Hz / samples. */
 .recording-header-right {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: 6px;
   flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
 }
-
-.recording-header .sep {
-  color: color-mix(in oklab, var(--text-muted) 50%, transparent);
-}
-
-.recording-header .key {
-  color: color-mix(in oklab, var(--text-muted) 70%, var(--text-secondary));
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-label);
-  font-size: var(--fs-sm);
-}
-
-.recording-header .val {
-  color: var(--text-secondary);
-  font-size: var(--fs-sm);
-}
+.recording-header .sep { opacity: 0.5; }
+.recording-header .key { color: var(--text-muted); }
+.recording-header .val { color: var(--text-secondary); }
 
 /* ============================================================
-   Welcome surface — empty-state landing inside the trace viewer.
+   Welcome surface — empty state inside the trace viewer.
    ============================================================ */
 .welcome {
   position: absolute;
@@ -1002,62 +1047,38 @@ body[data-platform="mac"] .toolbar {
   padding: var(--space-8);
   z-index: 20;
   background: var(--bg-primary);
-  background-image: var(--noise);
-  background-blend-mode: overlay;
-  background-attachment: fixed;
   overflow: auto;
 }
 
-/* Drag-active state — accent ring around the whole drop zone */
 .welcome.welcome-drag {
-  box-shadow: inset 0 0 0 2px var(--accent),
-              inset 0 0 0 4px color-mix(in oklab, var(--accent) 15%, transparent);
+  box-shadow: inset 0 0 0 2px var(--accent);
+  background: color-mix(in oklab, var(--accent) 6%, var(--bg-primary));
 }
 .welcome.welcome-drag::after {
-  content: 'DROP TO OPEN';
+  content: 'Drop to open';
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  font-family: var(--font-mono);
   font-size: var(--fs-xl);
   font-weight: 600;
-  letter-spacing: 0.12em;
   color: var(--accent);
   pointer-events: none;
   z-index: 30;
 }
 
-/* Engineered crop marks at TL + BR — match the trace viewer */
 .welcome-corner {
-  position: absolute;
-  width: 14px;
-  height: 14px;
-  pointer-events: none;
-  opacity: 0.5;
-}
-.welcome-corner-tl {
-  top: 12px;
-  left: 12px;
-  border-left: 1px solid var(--accent);
-  border-top:  1px solid var(--accent);
-}
-.welcome-corner-br {
-  bottom: 12px;
-  right: 12px;
-  border-right:  1px solid var(--accent);
-  border-bottom: 1px solid var(--accent);
+  display: none;
 }
 
 .welcome-inner {
   width: 100%;
-  max-width: 640px;
+  max-width: 600px;
   display: flex;
   flex-direction: column;
   gap: var(--space-8);
 }
 
-/* ---- Hero ---- */
 .welcome-hero {
   display: flex;
   flex-direction: column;
@@ -1067,32 +1088,25 @@ body[data-platform="mac"] .toolbar {
 }
 
 .welcome-lockup {
-  max-width: 360px;
-  width: 70%;
+  max-width: 320px;
+  width: 64%;
   height: auto;
-  opacity: 0.95;
 }
 
 .welcome-tagline {
-  font-family: var(--font-mono);
   font-size: var(--fs-sm);
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.18em;
   color: var(--text-muted);
 }
 
 .welcome-description {
-  font-family: var(--font-ui);
-  font-size: var(--fs-lg);
-  font-weight: 400;
+  font-size: var(--fs-md);
   line-height: 1.55;
   color: var(--text-secondary);
-  max-width: 540px;
+  max-width: 520px;
   margin: 0 auto;
 }
 
-/* ---- Primary action ---- */
 .welcome-actions {
   display: flex;
   flex-direction: column;
@@ -1100,32 +1114,22 @@ body[data-platform="mac"] .toolbar {
   gap: var(--space-3);
 }
 
-.btn-lg {
-  height: 38px;
-  padding: 0 var(--space-5);
-  font-size: var(--fs-base);
-}
-
 .welcome-drop-hint {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  font-family: var(--font-mono);
   font-size: var(--fs-sm);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
   color: var(--text-muted);
 }
 .welcome-drop-hint .dot {
   display: inline-block;
-  width: 5px;
-  height: 5px;
+  width: 4px;
+  height: 4px;
   border-radius: 50%;
   background: var(--text-muted);
   opacity: 0.6;
 }
 
-/* ---- Section blocks ---- */
 .welcome-section {
   display: flex;
   flex-direction: column;
@@ -1136,34 +1140,23 @@ body[data-platform="mac"] .toolbar {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  font-family: var(--font-mono);
-  font-size: var(--fs-sm);
+  font-size: var(--fs-xs);
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
   color: var(--text-muted);
 }
-.welcome-section-title::after {
-  content: '';
-  flex: 1;
-  height: 1px;
-  background: var(--border);
-}
 .welcome-section-title .tick {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  background: var(--accent);
-  flex-shrink: 0;
+  display: none;
 }
 
-/* ---- Recent files list ---- */
 .welcome-recent {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 4px;
   display: flex;
   flex-direction: column;
+  background: var(--bg-field);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
 }
 
 .welcome-recent-row {
@@ -1172,34 +1165,21 @@ body[data-platform="mac"] .toolbar {
   gap: var(--space-3);
   width: 100%;
   text-align: left;
-  padding: var(--space-3) var(--space-3);
+  padding: 6px var(--space-2);
   background: transparent;
   border: none;
-  border-bottom: 1px solid var(--border);
-  cursor: pointer;
-  font-family: var(--font-mono);
+  border-radius: var(--radius-sm);
   font-size: var(--fs-base);
-  text-transform: none;
-  letter-spacing: 0;
   color: var(--text-primary);
-  transition: background var(--motion-fast), color var(--motion-fast);
 }
 .welcome-recent-row:hover {
-  background: color-mix(in oklab, var(--accent) 8%, transparent);
-}
-.welcome-recent-row:last-child {
-  border-bottom: none;
+  background: var(--bg-hover);
 }
 .welcome-recent-dot {
-  width: 5px;
-  height: 5px;
-  background: var(--accent);
-  border-radius: 50%;
-  flex-shrink: 0;
-  opacity: 0.7;
+  display: none;
 }
 .welcome-recent-name {
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text-primary);
   flex-shrink: 0;
 }
@@ -1213,22 +1193,17 @@ body[data-platform="mac"] .toolbar {
   text-align: right;
 }
 
-/* ---- Supported formats ---- */
 .welcome-formats {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: center;
   gap: var(--space-2);
-  font-family: var(--font-mono);
   font-size: var(--fs-xs);
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
   color: var(--text-muted);
 }
 .welcome-formats-key {
   font-weight: 600;
-  color: color-mix(in oklab, var(--text-muted) 70%, var(--text-secondary));
   margin-right: var(--space-1);
 }
 .welcome-formats-sep {
@@ -1236,14 +1211,13 @@ body[data-platform="mac"] .toolbar {
 }
 
 /* ============================================================
-   Command palette (Cmd+K) — fuzzy-searchable action launcher.
+   Command palette (Cmd+K)
    ============================================================ */
 .cmdk-overlay {
   position: fixed;
   inset: 0;
   z-index: 9000;
-  background: color-mix(in oklab, var(--bg-primary) 50%, rgba(0, 0, 0, 0.45));
-  backdrop-filter: blur(6px);
+  background: rgba(0, 0, 0, 0.18);
   display: flex;
   align-items: flex-start;
   justify-content: center;
@@ -1256,49 +1230,22 @@ body[data-platform="mac"] .toolbar {
 }
 
 .cmdk-panel {
-  width: min(640px, calc(100vw - 48px));
+  width: min(620px, calc(100vw - 48px));
   max-height: 70vh;
   display: flex;
   flex-direction: column;
-  background: var(--bg-primary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  box-shadow:
-    0 0 0 1px color-mix(in oklab, var(--accent) 15%, transparent),
-    0 1px 0 var(--border),
-    0 30px 80px rgba(0, 0, 0, 0.35);
+  background: var(--bg-field);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-popover), 0 24px 60px rgba(0, 0, 0, 0.25);
   overflow: hidden;
-  animation: cmdk-slide var(--motion-slow);
-}
-@keyframes cmdk-slide {
-  from { transform: translateY(-8px); opacity: 0; }
-  to   { transform: translateY(0);    opacity: 1; }
 }
 
 .cmdk-search {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
+  padding: var(--space-2) var(--space-4);
   border-bottom: 1px solid var(--border);
-  position: relative;
-}
-.cmdk-search::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    var(--accent) 22%,
-    var(--accent) 78%,
-    transparent 100%
-  );
-  opacity: 0.6;
-  pointer-events: none;
 }
 .cmdk-search-icon {
   color: var(--text-muted);
@@ -1306,101 +1253,80 @@ body[data-platform="mac"] .toolbar {
 }
 .cmdk-search input {
   flex: 1;
-  height: 32px;
+  height: 36px;
   background: transparent;
   border: none;
   outline: none;
-  font-family: var(--font-mono);
-  font-feature-settings: var(--font-features-mono);
+  box-shadow: none;
   font-size: var(--fs-md);
   color: var(--text-primary);
-  letter-spacing: 0.01em;
   padding: 0;
+}
+.cmdk-search input:focus {
+  box-shadow: none;
 }
 .cmdk-search input::placeholder {
   color: var(--text-muted);
-  text-transform: none;
-  letter-spacing: 0.01em;
 }
 .cmdk-hint-key {
-  font-family: var(--font-mono);
-  font-size: var(--fs-xxs);
+  font-size: var(--fs-xs);
   color: var(--text-muted);
-  letter-spacing: 0.08em;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  padding: 1px 6px;
+  padding: 0 5px;
 }
 
 .cmdk-list {
   flex: 1;
   overflow: auto;
-  padding: var(--space-2) 0;
+  padding: 6px;
 }
 
 .cmdk-empty {
   padding: var(--space-6);
   text-align: center;
   color: var(--text-muted);
-  font-family: var(--font-mono);
   font-size: var(--fs-sm);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
 }
 
 .cmdk-group {
-  margin-bottom: var(--space-2);
+  margin-bottom: var(--space-1);
 }
 
 .cmdk-group-title {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-4) var(--space-1);
-  font-family: var(--font-mono);
+  padding: var(--space-2) var(--space-2) var(--space-1);
   font-size: var(--fs-xs);
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
   color: var(--text-muted);
 }
 .cmdk-group-title .tick {
-  display: inline-block;
-  width: 5px;
-  height: 5px;
-  background: var(--accent);
-  flex-shrink: 0;
+  display: none;
 }
 
 .cmdk-row {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding: var(--space-2) var(--space-4);
-  cursor: pointer;
-  font-family: var(--font-mono);
-  font-feature-settings: var(--font-features-mono);
-  font-size: var(--fs-sm);
-  color: var(--text-secondary);
-  border-left: 2px solid transparent;
-  transition: background var(--motion-fast), color var(--motion-fast), border-color var(--motion-fast);
+  padding: 6px var(--space-2);
+  border-radius: var(--radius);
+  font-size: var(--fs-base);
+  color: var(--text-primary);
 }
 .cmdk-row .icon {
   color: var(--text-muted);
   flex-shrink: 0;
 }
 .cmdk-row.active {
-  background: color-mix(in oklab, var(--accent) 12%, transparent);
-  border-left-color: var(--accent);
-  color: var(--text-primary);
+  background: var(--accent);
+  color: var(--on-accent);
 }
-.cmdk-row.active .icon {
-  color: var(--accent);
+.cmdk-row.active .icon,
+.cmdk-row.active .cmdk-row-hint {
+  color: var(--on-accent);
+  border-color: color-mix(in oklab, var(--on-accent) 40%, transparent);
 }
 .cmdk-row-label {
   flex: 1;
-  text-transform: none;
-  letter-spacing: 0.005em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1408,10 +1334,9 @@ body[data-platform="mac"] .toolbar {
 .cmdk-row-hint {
   font-size: var(--fs-xs);
   color: var(--text-muted);
-  letter-spacing: 0.04em;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  padding: 1px 6px;
+  padding: 0 5px;
   flex-shrink: 0;
   max-width: 280px;
   overflow: hidden;
@@ -1423,14 +1348,11 @@ body[data-platform="mac"] .toolbar {
   display: flex;
   align-items: center;
   gap: var(--space-4);
-  padding: var(--space-2) var(--space-4);
+  padding: 6px var(--space-4);
   border-top: 1px solid var(--border);
   background: var(--bg-secondary);
-  font-family: var(--font-mono);
-  font-size: var(--fs-xxs);
+  font-size: var(--fs-xs);
   color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
 }
 .cmdk-kbd {
   display: inline-block;
@@ -1438,15 +1360,13 @@ body[data-platform="mac"] .toolbar {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 0 4px;
-  background: var(--bg-primary);
+  background: var(--bg-field);
   color: var(--text-secondary);
-  font-size: var(--fs-xxs);
+  font-size: var(--fs-xs);
 }
 
 /* ============================================================
    Manual viewer — local user manual rendered from MANUAL.md.
-   Two-column layout: filterable TOC on the left, scrolling
-   content on the right. Styled to match the rest of the app.
    ============================================================ */
 .manual {
   display: flex;
@@ -1455,11 +1375,10 @@ body[data-platform="mac"] .toolbar {
   overflow: hidden;
 }
 
-/* ---- TOC ---- */
 .manual-toc {
-  width: 360px;
+  width: 320px;
   flex-shrink: 0;
-  background: var(--bg-secondary);
+  background: var(--bg-sidebar);
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
@@ -1470,23 +1389,11 @@ body[data-platform="mac"] .toolbar {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-3) var(--space-3);
-  border-bottom: 1px solid var(--border);
-  position: relative;
-}
-.manual-toc-search::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 2px;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    var(--accent) 18%,
-    var(--accent) 82%,
-    transparent 100%
-  );
-  opacity: 0.55;
+  margin: var(--space-3);
+  padding: 0 var(--space-2);
+  background: var(--bg-field);
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-md);
 }
 .manual-toc-icon {
   color: var(--text-muted);
@@ -1495,30 +1402,29 @@ body[data-platform="mac"] .toolbar {
 }
 .manual-toc-search input {
   flex: 1;
-  height: 36px;
+  height: 28px;
   background: transparent;
   border: none;
   outline: none;
+  box-shadow: none;
   color: var(--text-primary);
-  font-family: var(--font-mono);
-  font-size: var(--fs-md);
-  letter-spacing: 0.01em;
+  font-size: var(--fs-base);
   padding: 0;
+}
+.manual-toc-search input:focus {
+  box-shadow: none;
 }
 
 .manual-toc-list {
   flex: 1;
   overflow: auto;
-  padding: var(--space-2) 0;
+  padding: 0 var(--space-2) var(--space-2);
 }
 
 .manual-toc-empty {
   padding: var(--space-4);
   text-align: center;
-  font-family: var(--font-mono);
-  font-size: var(--fs-base);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  font-size: var(--fs-sm);
   color: var(--text-muted);
 }
 
@@ -1530,36 +1436,21 @@ body[data-platform="mac"] .toolbar {
   text-align: left;
   background: transparent;
   border: none;
-  border-left: 2px solid transparent;
-  padding: 8px var(--space-3) 8px var(--space-3);
-  cursor: pointer;
-  font-family: var(--font-ui);
-  font-size: var(--fs-md);
-  text-transform: none;
-  letter-spacing: 0.005em;
+  border-radius: var(--radius);
+  padding: 5px var(--space-2);
+  font-size: var(--fs-base);
   color: var(--text-secondary);
-  transition: background var(--motion-fast), color var(--motion-fast);
 }
 .manual-toc-row:hover {
-  background: color-mix(in oklab, var(--accent) 8%, transparent);
+  background: var(--bg-hover);
   color: var(--text-primary);
 }
 .manual-toc-row.active {
-  background: color-mix(in oklab, var(--accent) 14%, transparent);
-  color: var(--text-primary);
-  border-left-color: var(--accent);
-}
-.manual-toc-row.active .manual-toc-tick {
   background: var(--accent);
-  opacity: 1;
+  color: var(--on-accent);
 }
 .manual-toc-tick {
-  display: inline-block;
-  width: 4px;
-  height: 4px;
-  background: var(--text-muted);
-  flex-shrink: 0;
-  opacity: 0.4;
+  display: none;
 }
 .manual-toc-label {
   flex: 1;
@@ -1568,162 +1459,105 @@ body[data-platform="mac"] .toolbar {
   text-overflow: ellipsis;
 }
 
-/* TOC level indents — H1 prominent, H2/H3 progressively dim */
 .manual-toc-row.level-1 {
-  font-family: var(--font-mono);
-  font-size: var(--fs-md);
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  margin-top: var(--space-3);
-  padding-top: 9px;
-  padding-bottom: 9px;
+  margin-top: var(--space-2);
   color: var(--text-primary);
+}
+.manual-toc-row.level-1.active {
+  color: var(--on-accent);
 }
 .manual-toc-row.level-1:first-child {
   margin-top: 0;
 }
 .manual-toc-row.level-2 {
-  font-size: var(--fs-md);
-  padding-left: var(--space-4);
-  font-weight: 500;
-  color: var(--text-secondary);
+  padding-left: var(--space-5);
 }
 .manual-toc-row.level-3 {
-  font-size: var(--fs-base);
-  padding-left: var(--space-6);
-  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+  padding-left: 32px;
 }
 
-/* ---- Content ---- */
 .manual-content {
   flex: 1;
   overflow: auto;
-  padding: var(--space-8) var(--space-8);
+  padding: var(--space-8);
   background: var(--bg-primary);
 }
 
 .manual-content article {
-  max-width: 760px;
+  max-width: 740px;
   margin: 0 auto;
-  font-family: var(--font-ui);
   font-size: var(--fs-md);
-  line-height: 1.65;
+  line-height: 1.6;
   color: var(--text-primary);
 }
 
-/* Inline screenshots from docs/screenshots/, bundled by Vite. */
 .manual-content img {
   display: block;
   max-width: 100%;
   height: auto;
   margin: var(--space-4) auto;
   border: 1px solid var(--border);
-  border-radius: var(--rad);
+  border-radius: var(--radius-md);
   background: var(--bg-secondary);
 }
 
-/* Placeholder shown when MANUAL.md references a screenshot that
-   hasn't been captured yet — keeps the page from showing broken
-   <img> icons. Replaced automatically once the file is dropped
-   into docs/screenshots/. */
 .manual-img-missing {
   display: flex;
   flex-direction: column;
   gap: 2px;
   padding: var(--space-3) var(--space-4);
   margin: var(--space-4) auto;
-  border: 1px dashed var(--border);
-  border-radius: var(--rad);
+  border: 1px dashed var(--border-control);
+  border-radius: var(--radius-md);
   background: var(--bg-secondary);
-  font-family: var(--font-mono);
   font-size: var(--fs-xs);
   color: var(--text-muted);
 }
 .manual-img-missing .k {
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
   color: var(--text-secondary);
-  font-weight: 500;
+  font-weight: 600;
 }
 .manual-img-missing .v {
   color: var(--text-muted);
-  letter-spacing: 0.02em;
 }
 
 .manual-content h1 {
-  font-family: var(--font-mono);
-  font-size: var(--fs-xl);
+  font-size: 24px;
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
   color: var(--text-primary);
   margin: var(--space-8) 0 var(--space-4);
-  padding-bottom: var(--space-3);
-  border-bottom: 1px solid var(--border);
-  scroll-margin-top: var(--space-4);
-  position: relative;
-}
-.manual-content h1::before {
-  content: '';
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  background: var(--accent);
-  margin-right: var(--space-3);
-  vertical-align: middle;
-  margin-top: -3px;
-}
-.manual-content h1:first-child {
-  margin-top: 0;
-}
-
-.manual-content h2 {
-  font-family: var(--font-mono);
-  font-size: var(--fs-lg);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--text-primary);
-  margin: var(--space-8) 0 var(--space-3);
   padding-bottom: var(--space-2);
   border-bottom: 1px solid var(--border);
   scroll-margin-top: var(--space-4);
 }
-
-.manual-content h3 {
-  font-family: var(--font-mono);
-  font-size: var(--fs-md);
+.manual-content h1:first-child {
+  margin-top: 0;
+}
+.manual-content h2 {
+  font-size: 19px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  color: var(--text-primary);
+  margin: var(--space-8) 0 var(--space-3);
+  scroll-margin-top: var(--space-4);
+}
+.manual-content h3 {
+  font-size: 16px;
+  font-weight: 600;
   color: var(--text-primary);
   margin: var(--space-6) 0 var(--space-2);
   scroll-margin-top: var(--space-4);
 }
-.manual-content h3::before {
-  content: '';
-  display: inline-block;
-  width: 4px;
-  height: 4px;
-  background: var(--accent);
-  margin-right: var(--space-2);
-  vertical-align: middle;
-  margin-top: -2px;
-}
-
 .manual-content h4 {
-  font-family: var(--font-ui);
-  font-size: var(--fs-base);
+  font-size: var(--fs-md);
   font-weight: 600;
-  letter-spacing: 0.02em;
   color: var(--text-primary);
   margin: var(--space-5) 0 var(--space-2);
 }
 
 .manual-content p {
   margin: 0 0 var(--space-4);
-  color: var(--text-primary);
 }
 
 .manual-content ul,
@@ -1732,68 +1566,49 @@ body[data-platform="mac"] .toolbar {
   padding-left: var(--space-5);
 }
 .manual-content li {
-  margin-bottom: var(--space-2);
-  color: var(--text-primary);
-}
-.manual-content ul li::marker {
-  color: var(--accent);
+  margin-bottom: var(--space-1);
 }
 
 .manual-content a {
   color: var(--accent);
   text-decoration: none;
-  border-bottom: 1px solid color-mix(in oklab, var(--accent) 35%, transparent);
-  transition: border-color var(--motion-fast);
 }
 .manual-content a:hover {
-  border-bottom-color: var(--accent);
+  text-decoration: underline;
 }
 
-.manual-content strong {
-  color: var(--text-primary);
-  font-weight: 600;
-}
-.manual-content em {
-  color: var(--text-primary);
-  font-style: italic;
-}
+.manual-content strong { font-weight: 600; }
+.manual-content em { font-style: italic; }
 
 .manual-content code {
-  font-family: var(--font-mono);
-  font-feature-settings: var(--font-features-mono);
-  font-size: 0.92em;
-  padding: 1px 6px;
+  font-size: 0.9em;
+  padding: 1px 5px;
   border-radius: var(--radius-sm);
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  background: var(--bg-hover);
   color: var(--text-primary);
 }
 
 .manual-content pre {
-  background: var(--bg-secondary);
+  background: var(--bg-field);
   border: 1px solid var(--border);
-  border-left: 2px solid var(--accent);
-  border-radius: var(--radius);
+  border-radius: var(--radius-md);
   padding: var(--space-3) var(--space-4);
   margin: 0 0 var(--space-4);
   overflow: auto;
 }
 .manual-content pre code {
   background: transparent;
-  border: none;
   padding: 0;
   font-size: var(--fs-sm);
   line-height: 1.55;
-  color: var(--text-primary);
 }
 
 .manual-content blockquote {
   margin: 0 0 var(--space-4);
   padding: var(--space-2) var(--space-4);
-  border-left: 3px solid var(--accent);
-  background: color-mix(in oklab, var(--accent) 6%, transparent);
+  border-radius: var(--radius-md);
+  background: color-mix(in oklab, var(--accent) 8%, transparent);
   color: var(--text-secondary);
-  font-style: italic;
 }
 
 .manual-content hr {
@@ -1807,48 +1622,41 @@ body[data-platform="mac"] .toolbar {
   border-collapse: collapse;
   margin: 0 0 var(--space-5);
   font-size: var(--fs-sm);
+  background: var(--bg-field);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-md);
   overflow: hidden;
 }
 .manual-content thead {
   background: var(--bg-secondary);
 }
 .manual-content th {
-  font-family: var(--font-mono);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
   font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--text-muted);
   text-align: left;
-  padding: var(--space-2) var(--space-3);
+  padding: 6px var(--space-3);
   border-bottom: 1px solid var(--border);
 }
 .manual-content td {
-  padding: var(--space-2) var(--space-3);
-  border-bottom: 1px solid color-mix(in oklab, var(--border) 60%, transparent);
-  color: var(--text-primary);
+  font-family: var(--font-ui);
+  padding: 6px var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
   vertical-align: top;
   line-height: 1.5;
 }
 .manual-content tr:last-child td {
   border-bottom: none;
 }
-.manual-content tbody tr:hover {
-  background: color-mix(in oklab, var(--accent) 5%, transparent);
-}
 
 /* ============================================================
-   Help modal — keyboard shortcuts cheat sheet + manual link.
-   Mirrors the cmdk panel's structure for visual coherence.
+   Help modal — keyboard shortcuts + manual link.
    ============================================================ */
 .help-overlay {
   position: fixed;
   inset: 0;
   z-index: 9000;
-  background: color-mix(in oklab, var(--bg-primary) 50%, rgba(0, 0, 0, 0.45));
-  backdrop-filter: blur(6px);
+  background: rgba(0, 0, 0, 0.18);
   display: flex;
   align-items: flex-start;
   justify-content: center;
@@ -1861,15 +1669,10 @@ body[data-platform="mac"] .toolbar {
   max-height: 78vh;
   display: flex;
   flex-direction: column;
-  background: var(--bg-primary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  box-shadow:
-    0 0 0 1px color-mix(in oklab, var(--accent) 15%, transparent),
-    0 1px 0 var(--border),
-    0 30px 80px rgba(0, 0, 0, 0.35);
+  background: var(--bg-secondary);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-popover), 0 24px 60px rgba(0, 0, 0, 0.25);
   overflow: hidden;
-  animation: cmdk-slide var(--motion-slow);
 }
 
 .help-header {
@@ -1878,32 +1681,14 @@ body[data-platform="mac"] .toolbar {
   justify-content: space-between;
   padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--border);
-  position: relative;
-}
-.help-header::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 2px;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    var(--accent) 22%,
-    var(--accent) 78%,
-    transparent 100%
-  );
-  opacity: 0.6;
 }
 
 .help-title {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  font-family: var(--font-mono);
-  font-size: var(--fs-sm);
+  font-size: var(--fs-base);
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
   color: var(--text-primary);
 }
 
@@ -1917,20 +1702,18 @@ body[data-platform="mac"] .toolbar {
 }
 
 .help-intro {
-  font-family: var(--font-ui);
   font-size: var(--fs-base);
-  line-height: 1.6;
+  line-height: 1.55;
   color: var(--text-secondary);
 }
 .help-intro .kbd {
   display: inline-block;
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
-  letter-spacing: 0.04em;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-control);
   border-radius: var(--radius-sm);
   padding: 0 5px;
-  background: var(--bg-secondary);
+  background: var(--bg-field);
   color: var(--text-primary);
   margin: 0 2px;
   vertical-align: 1px;
@@ -1949,23 +1732,13 @@ body[data-platform="mac"] .toolbar {
 }
 
 .help-group-title {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-family: var(--font-mono);
   font-size: var(--fs-xs);
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
   color: var(--text-muted);
   margin-bottom: var(--space-2);
 }
 .help-group-title .tick {
-  display: inline-block;
-  width: 5px;
-  height: 5px;
-  background: var(--accent);
-  flex-shrink: 0;
+  display: none;
 }
 
 .help-shortcut-list {
@@ -1974,7 +1747,7 @@ body[data-platform="mac"] .toolbar {
   margin: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: 6px;
 }
 .help-shortcut-list li {
   display: flex;
@@ -1984,174 +1757,123 @@ body[data-platform="mac"] .toolbar {
 }
 .help-shortcut-keys {
   font-family: var(--font-mono);
-  font-feature-settings: var(--font-features-mono);
   font-size: var(--fs-xs);
-  letter-spacing: 0.04em;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-control);
   border-radius: var(--radius-sm);
-  padding: 1px 6px;
-  background: var(--bg-secondary);
+  padding: 0 5px;
+  background: var(--bg-field);
   color: var(--text-primary);
   flex-shrink: 0;
   white-space: nowrap;
 }
 .help-shortcut-label {
-  font-family: var(--font-ui);
   font-size: var(--fs-sm);
   color: var(--text-secondary);
   text-align: right;
 }
 
 /* ============================================================
-   Custom tooltip (suppresses native [title]) — populated via
-   useGlobalTooltips() hook mounted at App root.
+   Tooltip (replaces native [title]; useGlobalTooltips)
    ============================================================ */
 .tooltip {
   position: fixed;
   z-index: 9999;
   pointer-events: none;
-  padding: 4px 8px 4px 10px;
-  background: var(--bg-primary);
+  padding: 4px 8px;
+  background: var(--bg-field);
   color: var(--text-primary);
-  border: 1px solid var(--border);
-  border-left: 2px solid var(--accent);
-  border-radius: var(--radius-sm);
-  font-family: var(--font-mono);
-  font-feature-settings: var(--font-features-mono);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-popover);
   font-size: var(--fs-xs);
-  letter-spacing: 0.02em;
   line-height: 1.4;
   max-width: 320px;
-  box-shadow:
-    0 1px 0 var(--border),
-    0 6px 20px rgba(0, 0, 0, 0.18);
   opacity: 0;
-  transform: translateY(2px);
-  transition: opacity var(--motion-fast), transform var(--motion-fast);
+  transition: opacity var(--motion-fast);
   white-space: pre-wrap;
 }
 .tooltip.tooltip-visible {
   opacity: 1;
-  transform: translateY(0);
 }
 
 /* ============================================================
-   uPlot crosshair — styled to match the rest of the design
-   language: accent-coloured, subtle dash, with a refined point.
+   uPlot crosshair + drag-zoom box
    ============================================================ */
 .u-cursor-x,
 .u-cursor-y {
-  border-color: var(--accent) !important;
+  border-color: var(--text-muted) !important;
   border-style: dashed !important;
-  opacity: 0.65;
+  opacity: 0.6;
 }
 .u-cursor-pt {
   border-color: var(--accent) !important;
-  background: var(--bg-primary) !important;
+  background: var(--chart-bg) !important;
   border-width: 2px !important;
   width: 8px !important;
   height: 8px !important;
 }
-/* Drag-zoom selection rectangle */
 .u-select {
-  background: color-mix(in oklab, var(--accent) 15%, transparent) !important;
-  border: 1px dashed var(--accent) !important;
+  background: color-mix(in oklab, var(--accent) 14%, transparent) !important;
+  border: 1px solid color-mix(in oklab, var(--accent) 60%, transparent) !important;
 }
 
-/* ============================================================
-   uPlot hover coordinate tooltip — shared style replaces the
-   inline-styled black-box that lived in TraceViewer.
-   ============================================================ */
+/* uPlot hover coordinate readout */
 .coord-tooltip {
   position: absolute;
   display: none;
   pointer-events: none;
   z-index: 15;
-  padding: 3px 8px 3px 10px;
-  background: var(--bg-primary);
+  padding: 3px 8px;
+  background: var(--bg-field);
   color: var(--text-primary);
-  border: 1px solid var(--border);
-  border-left: 2px solid var(--accent);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-popover);
   font-family: var(--font-mono);
   font-feature-settings: var(--font-features-mono);
-  font-size: var(--fs-sm);
-  letter-spacing: 0.01em;
+  font-size: var(--fs-xs);
   white-space: nowrap;
-  box-shadow:
-    0 1px 0 var(--border),
-    0 4px 12px rgba(0, 0, 0, 0.18);
 }
 
 /* ============================================================
-   CursorPanel — control surface treatment.
-   Section / Readout / Divider primitives styled to read as a
-   labelled instrument rack.
+   CursorPanel (main-window inspector) sections
    ============================================================ */
 .cp-section {
-  margin-bottom: var(--space-4);
-  padding-left: 0;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border);
   position: relative;
 }
 
-/* Accent variant — left-edge colour stripe + tinted title. The
-   ``--section-accent`` CSS var is set inline by the caller. */
-.cp-section-accent {
-  padding-left: var(--space-3);
-  border-left: 2px solid var(--section-accent);
+.cp-section-accent .cp-section-title {
+  color: var(--section-accent);
 }
 
 .cp-section-title {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  font-family: var(--font-ui);
+  gap: 6px;
   font-size: var(--fs-xs);
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-label);
   color: var(--text-muted);
   margin-bottom: var(--space-2);
 }
-.cp-section-accent .cp-section-title {
-  color: var(--section-accent);
-}
 
 .cp-section-tick {
-  display: inline-block;
-  width: 5px;
-  height: 5px;
-  background: currentColor;
-  flex-shrink: 0;
+  display: none;
 }
 
-/* Hairline divider between sections. */
 .cp-divider {
-  height: 1px;
-  background: var(--border);
-  margin: var(--space-2) 0 var(--space-4);
+  display: none;
 }
 
-/* Readout row — label left, mono value right. The signature
-   "data card" in the cursor panel. */
 .cp-readout {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: var(--space-3);
-  padding: var(--space-1) 0;
-  border-bottom: 1px dashed color-mix(in oklab, var(--border) 60%, transparent);
-}
-.cp-readout:last-child {
-  border-bottom: none;
+  padding: 3px 0;
 }
 
 .cp-readout-label {
-  font-family: var(--font-ui);
   font-size: var(--fs-xs);
-  font-weight: 500;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
   color: var(--text-muted);
 }
 
@@ -2161,22 +1883,120 @@ body[data-platform="mac"] .toolbar {
   gap: 4px;
   font-family: var(--font-mono);
   font-feature-settings: var(--font-features-mono);
-  font-size: var(--fs-md);
-  font-weight: 500;
+  font-size: var(--fs-base);
   color: var(--text-primary);
-  letter-spacing: -0.005em;
 }
 
 .cp-readout-unit {
+  font-family: var(--font-ui);
   font-size: var(--fs-xs);
   color: var(--text-muted);
-  font-weight: 400;
-  letter-spacing: 0.04em;
-  text-transform: lowercase;
+}
+
+.num-display {
+  font-family: var(--font-mono);
+  font-feature-settings: var(--font-features-mono);
+  font-size: var(--fs-lg);
+  color: var(--text-primary);
 }
 
 /* ============================================================
-   Telegraph theme is imported AFTER this stylesheet from
-   ``frontend/src/main.tsx`` so its tokens win when palette=telegraph.
-   Precision is imported after Telegraph for the same reason.
+   Analysis-window building blocks (shared by all 15 windows)
    ============================================================ */
+
+/* A settings / results group. */
+.section-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  font-size: var(--font-size-sm);
+}
+
+.section-card-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--text-muted);
+  user-select: none;
+}
+
+/* Bar across the top of an analysis window: group / series /
+   channel / sweep selectors. */
+.selector-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 14px;
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+}
+
+/* Header strip of an in-window mini viewer (Reset cursors, Zero
+   offset, viewport presets…). */
+.viewer-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  padding: 4px 10px;
+  min-height: 32px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-secondary);
+  font-size: var(--font-size-sm);
+}
+
+/* Inline notice banners */
+.notice {
+  padding: 6px 10px;
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  line-height: 1.4;
+}
+.notice-error {
+  background: color-mix(in oklab, var(--error) 12%, transparent);
+  color: var(--error);
+}
+.notice-warning {
+  background: color-mix(in oklab, var(--warning) 14%, transparent);
+  color: color-mix(in oklab, var(--warning) 70%, var(--text-primary));
+}
+.notice-info {
+  background: color-mix(in oklab, var(--accent) 10%, transparent);
+  color: var(--text-secondary);
+}
+
+/* Data tables inside analysis windows */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-sm);
+  background: var(--bg-field);
+}
+.data-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bg-secondary);
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  text-align: left;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.data-table td {
+  padding: 3px 8px;
+  border-bottom: 1px solid var(--border-subtle);
+  white-space: nowrap;
+}
+.data-table tbody tr:hover td {
+  background: var(--bg-hover);
+}

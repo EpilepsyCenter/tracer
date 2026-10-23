@@ -92,7 +92,7 @@ export function NumInput({
       style={style}
       disabled={disabled}
       title={title}
-      className={className}
+      className={`num${className ? ` ${className}` : ''}`}
       onChange={(e) => setLocal(e.target.value)}
       onFocus={() => setFocused(true)}
       onBlur={() => { setFocused(false); commit() }}

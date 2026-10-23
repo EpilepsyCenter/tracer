@@ -102,28 +102,15 @@ export function ResultsApp() {
       {/* Table */}
       <div style={{ flex: 1, overflow: 'auto', padding: 12 }}>
         {results.length === 0 ? (
-          <p style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-xs)', fontStyle: 'italic' }}>
+          <p style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-sm)' }}>
             Run an analysis in the main window to see results here.
           </p>
         ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--font-size-xs)' }}>
+          <table className="data-table" style={{ border: '1px solid var(--border)' }}>
             <thead>
               <tr>
                 {columns.map((col) => (
-                  <th
-                    key={col}
-                    style={{
-                      padding: '4px 8px',
-                      textAlign: 'left',
-                      borderBottom: '1px solid var(--border)',
-                      color: 'var(--text-secondary)',
-                      fontWeight: 500,
-                      whiteSpace: 'nowrap',
-                      position: 'sticky',
-                      top: 0,
-                      background: 'var(--bg-primary)',
-                    }}
-                  >
+                  <th key={col}>
                     {col}
                   </th>
                 ))}
@@ -131,17 +118,9 @@ export function ResultsApp() {
             </thead>
             <tbody>
               {results.map((row, i) => (
-                <tr key={i} style={{ background: i % 2 === 0 ? 'transparent' : 'var(--bg-secondary)' }}>
+                <tr key={i}>
                   {columns.map((col) => (
-                    <td
-                      key={col}
-                      style={{
-                        padding: '3px 8px',
-                        borderBottom: '1px solid var(--border)',
-                        fontFamily: 'var(--font-mono)',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
+                    <td key={col}>
                       {typeof row[col] === 'number' ? (row[col] as number).toFixed(4) : row[col] ?? ''}
                     </td>
                   ))}

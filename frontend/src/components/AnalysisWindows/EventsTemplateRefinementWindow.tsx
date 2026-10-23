@@ -5,7 +5,7 @@ import {
   useAppStore,
   EventsData, EventsTemplate, EventsDetectionMeasure,
 } from '../../stores/appStore'
-import { useThemeStore } from '../../stores/themeStore'
+import { useThemeStore, useThemeKey } from '../../stores/themeStore'
 import { NumInput } from '../common/NumInput'
 import { CoefficientStepper } from '../common/CoefficientStepper'
 import { usePlotMenu } from '../common/PlotMenu'
@@ -35,8 +35,6 @@ function cssVar(name: string): string {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim()
 }
 
-const AVG_COLOR = '#e57373'
-const FIT_COLOR = '#ffb74d'
 
 export function EventsTemplateRefinementWindow({
   backendUrl, fileInfo,
@@ -203,11 +201,8 @@ export function EventsTemplateRefinementWindow({
           borderRadius: 4, border: '1px solid var(--border)',
           overflow: 'auto', fontSize: 'var(--font-size-label)',
         }}>
-          <div style={{
-            padding: 8, border: '1px solid var(--border)', borderRadius: 4,
-            background: 'var(--bg-primary)', display: 'flex', flexDirection: 'column', gap: 6,
-          }}>
-            <span style={{ fontWeight: 600, color: 'var(--text-muted)' }}>Averaging</span>
+          <div className="section-card">
+            <span className="section-card-title">Averaging</span>
             <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={{ color: 'var(--text-muted)', flex: 1 }}>Align on</span>
               <select value={align}
@@ -235,12 +230,8 @@ export function EventsTemplateRefinementWindow({
           </div>
 
           {result && (
-            <div style={{
-              padding: 8, border: '1px solid var(--border)', borderRadius: 4,
-              background: 'var(--bg-primary)', display: 'flex', flexDirection: 'column', gap: 6,
-              fontSize: 'var(--font-size-label)',
-            }}>
-              <span style={{ fontWeight: 600, color: 'var(--text-muted)' }}>
+            <div className="section-card">
+              <span className="section-card-title">
                 Result ({result.nAveraged} events · R² = {result.fit.rSquared.toFixed(3)})
               </span>
               {/* Coefficient stepper — editable manual tweak of the fit
@@ -277,28 +268,23 @@ export function EventsTemplateRefinementWindow({
               <div style={{ display: 'flex', gap: 4, marginTop: 6 }}>
                 <button className="btn" onClick={() => onApply('overwrite')}
                   disabled={!activeTemplate}
-                  style={{ flex: 1, padding: '3px 6px', fontSize: 'var(--font-size-label)' }}>
+                  style={{ flex: 1 }}>
                   Apply to current
                 </button>
                 <button className="btn" onClick={() => onApply('save-as')}
-                  style={{ flex: 1, padding: '3px 6px', fontSize: 'var(--font-size-label)' }}>
+                  style={{ flex: 1 }}>
                   Save as new
                 </button>
               </div>
             </div>
           )}
           {err && (
-            <div style={{
-              padding: '6px 10px',
-              background: 'var(--bg-error, #5c1b1b)',
-              color: '#fff', borderRadius: 3,
-              fontSize: 'var(--font-size-xs)',
+            <div className="notice notice-error" style={{
               display: 'flex', alignItems: 'center', gap: 8,
             }}>
               <span style={{ flex: 1 }}>⚠ {err}</span>
-              <button className="btn" onClick={() => setErr(null)}
-                style={{ padding: '1px 6px', fontSize: 'var(--font-size-label)' }}>
-                dismiss
+              <button className="btn btn-sm" onClick={() => setErr(null)}>
+                Dismiss
               </button>
             </div>
           )}
@@ -328,6 +314,7 @@ function AveragePlot({
     footSampleIdx: number
   } | null
 }) {
+  const themeKey = useThemeKey()
   const containerRef = useRef<HTMLDivElement>(null)
   const plotRef = useRef<uPlot | null>(null)
   const { onContextMenu, menu } = usePlotMenu({
@@ -368,27 +355,27 @@ function AveragePlot({
             grid: { stroke: cssVar('--chart-grid'), width: 1 },
             ticks: { stroke: cssVar('--chart-tick'), width: 1 },
             label: 'Time from alignment (s)', labelSize: 14,
-            font: `${cssVar('--font-size-xs')} ${cssVar('--font-mono')}`,
+            font: `${cssVar('--font-size-xs')} ${cssVar('--font-ui')}`,
           },
           { stroke: cssVar('--chart-axis'),
             grid: { stroke: cssVar('--chart-grid'), width: 1 },
             ticks: { stroke: cssVar('--chart-tick'), width: 1 },
             size: 55,
-            font: `${cssVar('--font-size-xs')} ${cssVar('--font-mono')}`,
+            font: `${cssVar('--font-size-xs')} ${cssVar('--font-ui')}`,
           },
         ],
         cursor: { drag: { x: false, y: false } },
         series: [
           {},
-          { stroke: AVG_COLOR, width: 1.5 },
-          { stroke: FIT_COLOR, width: 2, spanGaps: false },
+          { stroke: cssVar('--trace-average'), width: 1.5 },
+          { stroke: cssVar('--cursor-fit'), width: 2, spanGaps: false },
         ],
       }
       const payload: uPlot.AlignedData = [avgX, avgY, fitY as any]
       plotRef.current = new uPlot(opts, payload, container)
     })
     return () => cancelAnimationFrame(frame)
-  }, [result])
+  }, [result, themeKey])
 
   useEffect(() => {
     // Depend on ``result`` because the container element only exists

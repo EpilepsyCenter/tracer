@@ -47,10 +47,10 @@ export function MacroEditor() {
     <div style={{ display: 'flex', height: '100%' }}>
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', borderRight: '1px solid var(--border)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 8px', background: 'var(--bg-secondary)' }}>
-          <span style={{ fontSize: 'var(--font-size-xs)', fontWeight: 500, color: 'var(--text-secondary)' }}>MACRO EDITOR</span>
+          <span style={{ fontSize: 'var(--font-size-xs)', fontWeight: 600, color: 'var(--text-muted)' }}>Macro editor</span>
           <div style={{ display: 'flex', gap: 4 }}>
             <button className="btn btn-primary" onClick={runMacro} disabled={running}>
-              {running ? 'Running...' : 'Run'}
+              {running ? 'Running…' : 'Run'}
             </button>
           </div>
         </div>
@@ -60,9 +60,12 @@ export function MacroEditor() {
           spellCheck={false}
           style={{
             flex: 1,
-            background: 'var(--bg-primary)',
+            height: 'auto',
+            background: 'var(--bg-field)',
             color: 'var(--text-primary)',
             border: 'none',
+            borderRadius: 0,
+            boxShadow: 'none',
             padding: 12,
             fontFamily: 'var(--font-mono)',
             fontSize: 'var(--font-size-sm)',
@@ -74,8 +77,8 @@ export function MacroEditor() {
         />
       </div>
       <div style={{ width: 300, display: 'flex', flexDirection: 'column' }}>
-        <div style={{ padding: '4px 8px', background: 'var(--bg-secondary)', fontSize: 'var(--font-size-xs)', fontWeight: 500, color: 'var(--text-secondary)' }}>
-          OUTPUT
+        <div style={{ padding: '4px 8px', background: 'var(--bg-secondary)', fontSize: 'var(--font-size-xs)', fontWeight: 600, color: 'var(--text-muted)' }}>
+          Output
         </div>
         <pre style={{
           flex: 1,

@@ -82,7 +82,7 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
             className="btn btn-compact btn-ghost"
             onClick={onClose}
             title="Close (Esc)"
-          >ESC</button>
+          >Esc</button>
         </div>
 
         <div className="help-body">

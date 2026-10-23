@@ -154,10 +154,10 @@ export function PreviewContextMenu({ backendUrl, x, y, onClose, onOpenExport }: 
       style={{
         position: 'fixed', left, top, zIndex: 200,
         minWidth: W,
-        background: 'var(--bg-primary)',
-        border: '1px solid var(--border)',
-        borderRadius: 4,
-        boxShadow: '0 6px 20px rgba(0,0,0,0.22)',
+        background: 'var(--bg-field)',
+        borderRadius: 'var(--radius-md)',
+        boxShadow: 'var(--shadow-popover)',
+        padding: 5,
         fontSize: 'var(--font-size-sm)',
         fontFamily: 'var(--font-ui)',
         overflow: 'hidden',
@@ -190,13 +190,18 @@ export function PreviewContextMenu({ backendUrl, x, y, onClose, onOpenExport }: 
         }}
       />
       {(error || success) && (
-        <div style={{
-          padding: '4px 8px',
-          fontSize: 11,
-          background: error ? 'rgba(200,80,80,0.18)' : 'rgba(80,180,120,0.18)',
-          color: error ? 'var(--text-primary)' : 'var(--text-primary)',
-          borderTop: '1px solid var(--border)',
-        }}>
+        <div
+          className={error ? 'notice notice-error' : 'notice'}
+          style={{
+            marginTop: 4,
+            padding: '4px 8px',
+            fontSize: 'var(--font-size-xs)',
+            ...(error ? {} : {
+              background: 'color-mix(in oklab, var(--success) 14%, transparent)',
+              color: 'var(--text-primary)',
+            }),
+          }}
+        >
           {error ?? success}
         </div>
       )}
@@ -209,25 +214,25 @@ function MenuItem({ label, hint, onClick, busy }: {
 }) {
   return (
     <button
+      className="analysis-menu-item"
       onClick={onClick}
       disabled={busy}
       style={{
         display: 'block', width: '100%', textAlign: 'left',
-        padding: '6px 10px',
+        padding: '4px 8px',
         background: 'transparent',
         border: 'none',
+        borderRadius: 'var(--radius-sm)',
         color: 'var(--text-primary)',
-        cursor: busy ? 'wait' : 'pointer',
+        cursor: busy ? 'wait' : undefined,
         fontSize: 'var(--font-size-sm)',
         fontFamily: 'var(--font-ui)',
       }}
-      onMouseEnter={(e) => { if (!busy) (e.currentTarget.style.background = 'var(--bg-active)') }}
-      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
     >
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-        <span style={{ fontWeight: 500 }}>{busy ? `${label}…` : label}</span>
+        <span>{busy ? `${label}…` : label}</span>
         {hint && (
-          <span style={{ color: 'var(--text-muted)', fontSize: 11, marginLeft: 'auto' }}>{hint}</span>
+          <span style={{ opacity: 0.65, fontSize: 'var(--font-size-xs)', marginLeft: 'auto' }}>{hint}</span>
         )}
       </div>
     </button>
@@ -235,5 +240,5 @@ function MenuItem({ label, hint, onClick, busy }: {
 }
 
 function Divider() {
-  return <div style={{ height: 1, background: 'var(--border)' }} />
+  return <div style={{ height: 1, margin: '4px 0', background: 'var(--border)' }} />
 }

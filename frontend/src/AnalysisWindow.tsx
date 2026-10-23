@@ -309,6 +309,12 @@ export function AnalysisWindow({ view }: { view: string }) {
 
   const title = TITLES[view] || view
 
+  // The native title bar shows the window name and recording, so the
+  // page itself needs no header strip.
+  useEffect(() => {
+    document.title = fileInfo?.fileName ? `${title} — ${fileInfo.fileName}` : title
+  }, [title, fileInfo?.fileName])
+
   if (!backendReady) {
     return (
       <div style={{
@@ -319,7 +325,7 @@ export function AnalysisWindow({ view }: { view: string }) {
         background: 'var(--bg-primary)',
         color: 'var(--text-muted)',
       }}>
-        Connecting to backend...
+        Connecting to backend…
       </div>
     )
   }
@@ -332,23 +338,6 @@ export function AnalysisWindow({ view }: { view: string }) {
       background: 'var(--bg-primary)',
       color: 'var(--text-primary)',
     }}>
-      {/* Header */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '6px 12px',
-        background: 'var(--bg-secondary)',
-        borderBottom: '1px solid var(--border)',
-        fontSize: 'var(--font-size-sm)',
-        flexShrink: 0,
-      }}>
-        <span style={{ fontWeight: 600 }}>{title}</span>
-        <span style={{ color: 'var(--text-muted)' }}>
-          {fileInfo?.fileName || 'No file loaded'}
-        </span>
-      </div>
-
       {/* Analysis content. Each window is its own lazy chunk —
           Suspense covers the brief disk read + parse on first open. */}
       <div style={{ flex: 1, overflow: 'auto' }}>

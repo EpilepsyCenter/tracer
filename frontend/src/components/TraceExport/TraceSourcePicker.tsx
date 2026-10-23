@@ -148,7 +148,7 @@ export function TraceSourcePicker({ backendUrl, initialFile, onClose }: Props) {
         style={{
           width: 720, maxHeight: '80vh',
           background: 'var(--bg-primary)', color: 'var(--text-primary)',
-          border: '1px solid var(--border)', borderRadius: 6,
+          borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-popover)',
           display: 'flex', flexDirection: 'column', overflow: 'hidden',
           fontSize: 'var(--font-size-sm)',
           fontFamily: 'var(--font-ui)',
@@ -214,7 +214,7 @@ export function TraceSourcePicker({ backendUrl, initialFile, onClose }: Props) {
           ) : (
             <>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
-                <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>
+                <span style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-sm)' }}>
                   Sweeps (1–{series.sweepCount})
                 </span>
                 <span style={{ flex: 1 }} />
@@ -229,7 +229,7 @@ export function TraceSourcePicker({ backendUrl, initialFile, onClose }: Props) {
                 />
               </div>
               <div style={{ display: 'flex', gap: 8, marginTop: 12, alignItems: 'center' }}>
-                <span style={{ color: 'var(--text-muted)', fontSize: 12, minWidth: 56 }}>
+                <span style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-sm)', minWidth: 56 }}>
                   Range:
                 </span>
                 <input
@@ -241,11 +241,12 @@ export function TraceSourcePicker({ backendUrl, initialFile, onClose }: Props) {
                     if (e.key === 'Escape') { setRangeText(formatRanges(selectedSweeps)) }
                   }}
                   placeholder="e.g. 1-5, 7, 9-12"
-                  style={{ flex: 1, padding: '3px 6px' }}
+                  className="num"
+                  style={{ flex: 1 }}
                   spellCheck={false}
                 />
               </div>
-              <div style={{ marginTop: 10, color: 'var(--text-muted)', fontSize: 12 }}>
+              <div style={{ marginTop: 10, color: 'var(--text-muted)', fontSize: 'var(--font-size-sm)' }}>
                 {selectedSweeps.size} of {series.sweepCount} selected
                 {selectedSweeps.size > 0 && (
                   <>
@@ -281,10 +282,9 @@ export function TraceSourcePicker({ backendUrl, initialFile, onClose }: Props) {
           <span style={{ flex: 1 }} />
           <button className="btn" onClick={onClose}>Cancel</button>
           <button
-            className="btn"
+            className="btn btn-primary"
             onClick={commit}
             disabled={selectedSweeps.size === 0}
-            style={{ background: 'var(--accent)', color: 'white' }}
           >
             Add {selectedSweeps.size > 0 ? `(${selectedSweeps.size})` : ''}
           </button>

@@ -56,7 +56,7 @@ export function CommandPalette() {
     currentGroup, currentSeries, currentSweep, currentTrace,
     selectSweep,
   } = useAppStore()
-  const { theme, palette, fontSize, toggleTheme, setTheme, setPalette, setFontSize } =
+  const { theme, themePref, fontSize, toggleTheme, setThemePref, setFontSize } =
     useThemeStore()
   const { toggleLeft, toggleRight, toggleFocus } = useLayoutStore()
 
@@ -78,8 +78,13 @@ export function CommandPalette() {
         setOpen(false)
       }
     }
+    const onOpen = () => setOpen(true)
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    window.addEventListener('open-command-palette', onOpen)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('open-command-palette', onOpen)
+    }
   }, [open])
 
   // Reset + focus when opening
@@ -262,21 +267,15 @@ export function CommandPalette() {
       keywords: 'theme appearance',
       run: toggleTheme,
     })
-    if (theme !== 'light') cmds.push({
-      id: 'theme.light', group: 'Theme', label: 'Theme · Light', run: () => setTheme('light'),
+    if (themePref !== 'system') cmds.push({
+      id: 'theme.system', group: 'Theme', label: 'Appearance · Use system setting',
+      keywords: 'theme dark light auto', run: () => setThemePref('system'),
     })
-    if (theme !== 'dark') cmds.push({
-      id: 'theme.dark', group: 'Theme', label: 'Theme · Dark', run: () => setTheme('dark'),
+    if (themePref !== 'light') cmds.push({
+      id: 'theme.light', group: 'Theme', label: 'Appearance · Light', run: () => setThemePref('light'),
     })
-
-    ;(['precision', 'classic', 'telegraph'] as const).forEach((p) => {
-      if (palette === p) return
-      cmds.push({
-        id: `palette.${p}`, group: 'Palette',
-        label: `Palette · ${p[0].toUpperCase()}${p.slice(1)}`,
-        keywords: 'colors theme',
-        run: () => setPalette(p),
-      })
+    if (themePref !== 'dark') cmds.push({
+      id: 'theme.dark', group: 'Theme', label: 'Appearance · Dark', run: () => setThemePref('dark'),
     })
 
     // ---- Help ----
@@ -303,7 +302,7 @@ export function CommandPalette() {
       if (sz === fontSize) return
       cmds.push({
         id: `font.${sz}`, group: 'Settings',
-        label: `Set font size · ${sz}px`,
+        label: `Text size · ${sz} px`,
         run: () => setFontSize(sz),
       })
     })
@@ -311,10 +310,10 @@ export function CommandPalette() {
     return cmds
   }, [
     recording, recentFiles, currentGroup, currentSeries, currentSweep, currentTrace,
-    totalSweeps, showOverlay, showAverage, theme, palette, fontSize,
+    totalSweeps, showOverlay, showAverage, theme, themePref, fontSize,
     handleOpenFile, handleOpenRecent, openAnalysis,
     selectSweep, clearOverlays, overlayAllSweeps, loadAverageTrace,
-    toggleLeft, toggleRight, toggleFocus, toggleTheme, setTheme, setPalette, setFontSize,
+    toggleLeft, toggleRight, toggleFocus, toggleTheme, setThemePref, setFontSize,
   ])
 
   // Filter ----

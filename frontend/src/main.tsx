@@ -3,13 +3,6 @@ import ReactDOM from 'react-dom/client'
 import App from './App'
 import { AnalysisWindow } from './AnalysisWindow'
 import './styles/global.css'
-// Telegraph theme — imported AFTER global.css so its :root token
-// values override the defaults. Loading it via main.tsx (instead of
-// an @import at the bottom of global.css) sidesteps the CSS spec
-// rule that @import must appear before any other rule — otherwise
-// the override stylesheet is silently dropped by the parser.
-import './styles/telegraph.css'
-import './styles/precision.css'
 
 // Tag <body> with the host platform so CSS can apply platform-
 // specific styling (macOS traffic-light gutter on the toolbar etc.)

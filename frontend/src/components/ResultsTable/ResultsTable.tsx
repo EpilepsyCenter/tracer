@@ -53,26 +53,16 @@ export function ResultsTable() {
       </div>
 
       {results.length === 0 ? (
-        <p style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-xs)', fontStyle: 'italic' }}>
+        <p style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-sm)' }}>
           No results yet. Run an analysis to populate this table.
         </p>
       ) : (
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--font-size-xs)' }}>
+          <table className="data-table">
             <thead>
               <tr>
                 {columns.map((col) => (
-                  <th
-                    key={col}
-                    style={{
-                      padding: '4px 8px',
-                      textAlign: 'left',
-                      borderBottom: '1px solid var(--border)',
-                      color: 'var(--text-secondary)',
-                      fontWeight: 500,
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
+                  <th key={col}>
                     {col}
                   </th>
                 ))}
@@ -80,17 +70,9 @@ export function ResultsTable() {
             </thead>
             <tbody>
               {results.map((row: any, i) => (
-                <tr key={i} style={{ background: i % 2 === 0 ? 'transparent' : 'var(--bg-secondary)' }}>
+                <tr key={i}>
                   {columns.map((col) => (
-                    <td
-                      key={col}
-                      style={{
-                        padding: '3px 8px',
-                        borderBottom: '1px solid var(--border)',
-                        fontFamily: 'var(--font-mono)',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
+                    <td key={col}>
                       {typeof row[col] === 'number' ? row[col].toFixed(4) : row[col] ?? ''}
                     </td>
                   ))}

@@ -132,9 +132,7 @@ export function TraceViewer() {
 
   // Subscribe to theme so chart rebuilds on theme/font change
   const theme = useThemeStore((s) => s.theme)
-  const fontUI = useThemeStore((s) => s.fontFamily)
   const fontSize = useThemeStore((s) => s.fontSize)
-  const monoFont = useThemeStore((s) => s.monoFont)
   // ``colorForChannel`` reads CSS vars at build time; the plot
   // doesn't auto-rebuild on theme updates so we subscribe to the
   // overrides slice and join it as a string for the dep array.
@@ -255,16 +253,22 @@ export function TraceViewer() {
         ctx.stroke()
         ctx.setLineDash([])
         ctx.fillStyle = color
-        ctx.font = `${cssVar('--font-size-label')} ${cssVar('--font-mono')}`
+        ctx.font = `${cssVar('--font-size-label')} ${cssVar('--font-ui')}`
         ctx.fillText(label, bx + 4, py - 3)
       }
-      hLine(fb.baselineValue, 'rgba(158,158,158,0.8)', 'baseline')
+      ctx.save()
+      ctx.globalAlpha = 0.8
+      hLine(fb.baselineValue, cssVar('--text-muted'), 'baseline')
+      ctx.restore()
+      ctx.save()
+      ctx.globalAlpha = 0.7
       if (fb.thresholdHigh != null) {
-        hLine(fb.thresholdHigh, 'rgba(229,115,115,0.7)', 'thr ↑')
+        hLine(fb.thresholdHigh, cssVar('--marker-detected'), 'thr ↑')
       }
       if (fb.thresholdLow != null && fb.thresholdLow !== fb.thresholdHigh) {
-        hLine(fb.thresholdLow, 'rgba(229,115,115,0.7)', 'thr ↓')
+        hLine(fb.thresholdLow, cssVar('--marker-detected'), 'thr ↓')
       }
+      ctx.restore()
     }
     if (fb && fb.bursts.length > 0) {
       const xScale = u.scales.x
@@ -273,11 +277,12 @@ export function TraceViewer() {
       const sweep = currentSweepRef.current
       const selected = fb.selectedIdx
       const colors = {
-        baseline: '#9e9e9e',   // neutral grey
-        peak: '#e57373',       // red
-        decay: '#ffb74d',      // orange
-        end: '#81c784',        // green
+        baseline: cssVar('--text-muted'),
+        peak: cssVar('--marker-detected'),
+        decay: cssVar('--cursor-peak'),
+        end: cssVar('--success'),
       }
+      const outline = cssVar('--marker-outline')
 
       // Pull the displayed trace samples (already filter / zero-offset
       // adjusted server-side) so markers track whatever's actually on
@@ -319,9 +324,12 @@ export function TraceViewer() {
           ctx.arc(px, py, r, 0, 2 * Math.PI)
           ctx.fillStyle = color
           ctx.fill()
-          ctx.strokeStyle = isSel ? '#ffffff' : 'rgba(255,255,255,0.6)'
+          ctx.save()
+          ctx.strokeStyle = outline
+          ctx.globalAlpha = isSel ? 1 : 0.6
           ctx.lineWidth = isSel ? 2 : 1
           ctx.stroke()
+          ctx.restore()
         }
 
         drawDot(px0, py0, colors.baseline)
@@ -331,7 +339,9 @@ export function TraceViewer() {
 
         // Faint vertical bar from pre-baseline to peak to anchor the group
         // visually; muted so it doesn't fight the trace.
-        ctx.strokeStyle = 'rgba(229,115,115,0.35)'
+        ctx.save()
+        ctx.strokeStyle = colors.peak
+        ctx.globalAlpha = 0.35
         ctx.lineWidth = 1
         ctx.setLineDash([3, 3])
         ctx.beginPath()
@@ -339,6 +349,7 @@ export function TraceViewer() {
         ctx.lineTo(px1, py1)
         ctx.stroke()
         ctx.setLineDash([])
+        ctx.restore()
       }
     }
 
@@ -362,13 +373,19 @@ export function TraceViewer() {
       const ps = ap.perSweep.find((p) => p.sweep === sweep)
       const peakTimes = ps?.peakTimes ?? []
       const sweepSpikes = ap.perSpike.filter((sp) => sp.sweep === sweep)
+      const apOutline = cssVar('--marker-outline')
+      const apPeak = cssVar('--marker-detected')
+      const apThreshold = cssVar('--text-muted')
+      const apFwhm = cssVar('--warning')
+      const apFahp = cssVar('--cursor-peak')
+      const apMahp = cssVar('--cursor-fit')
       const drawAPDot = (px: number, py: number, color: string, manual: boolean = false) => {
         if (!isFinite(px) || !isFinite(py)) return
         ctx.beginPath()
         ctx.arc(px, py, 4, 0, 2 * Math.PI)
         ctx.fillStyle = color
         ctx.fill()
-        ctx.strokeStyle = '#ffffff'
+        ctx.strokeStyle = apOutline
         ctx.lineWidth = 1
         ctx.stroke()
         if (manual) {
@@ -380,12 +397,12 @@ export function TraceViewer() {
         }
       }
       if (sweepSpikes.length > 0) {
-        // Color scheme matches the AP-window viewer's legend:
-        //   peak       = #e57373 (red)
-        //   threshold  = #9e9e9e (grey)
-        //   FWHM tips  = #ffeb3b (yellow)
-        //   fAHP       = #ffb74d (orange)
-        //   mAHP       = #ff7043 (darker orange)
+        // Color scheme (theme tokens):
+        //   peak       = --marker-detected
+        //   threshold  = --text-muted
+        //   FWHM tips  = --warning
+        //   fAHP       = --cursor-peak
+        //   mAHP       = --cursor-fit
         const td = traceDataRef.current
         const tt = td?.time
         const tv = td?.values
@@ -397,14 +414,14 @@ export function TraceViewer() {
           const peakY = peakSampled != null ? peakSampled : (sp.peakVm - yOffset)
           const px = u.valToPos(sp.peakT, 'x', true) / dpr
           const py = u.valToPos(peakY, 'y', true) / dpr
-          drawAPDot(px, py, '#e57373', sp.manual)
+          drawAPDot(px, py, apPeak, sp.manual)
           // Threshold (when kinetics measured)
           if (sp.thresholdT !== 0 || sp.thresholdVm !== 0) {
             const thrSampled = sampleTraceYAt(tt, tv, sp.thresholdT)
             const thrY = thrSampled != null ? thrSampled : (sp.thresholdVm - yOffset)
             const tpx = u.valToPos(sp.thresholdT, 'x', true) / dpr
             const tpy = u.valToPos(thrY, 'y', true) / dpr
-            drawAPDot(tpx, tpy, '#9e9e9e')
+            drawAPDot(tpx, tpy, apThreshold)
           }
           // FWHM crossings — find them on the main viewer's trace
           // data using the same walk-the-samples approach as the
@@ -449,7 +466,7 @@ export function TraceViewer() {
               const pyR = u.valToPos(halfV - yOffset, 'y', true) / dpr
               if (isFinite(pxL) && isFinite(pyL) && isFinite(pxR) && isFinite(pyR)) {
                 ctx.save()
-                ctx.strokeStyle = '#ffeb3b'
+                ctx.strokeStyle = apFwhm
                 ctx.lineWidth = 1
                 ctx.setLineDash([3, 3])
                 ctx.beginPath()
@@ -457,8 +474,8 @@ export function TraceViewer() {
                 ctx.stroke()
                 ctx.setLineDash([])
                 ctx.restore()
-                drawAPDot(pxL, pyL, '#ffeb3b')
-                drawAPDot(pxR, pyR, '#ffeb3b')
+                drawAPDot(pxL, pyL, apFwhm)
+                drawAPDot(pxR, pyR, apFwhm)
               }
             }
           }
@@ -468,7 +485,7 @@ export function TraceViewer() {
             const fY = fSampled != null ? fSampled : (sp.fahpVm - yOffset)
             const px2 = u.valToPos(sp.fahpT, 'x', true) / dpr
             const py2 = u.valToPos(fY, 'y', true) / dpr
-            drawAPDot(px2, py2, '#ffb74d')
+            drawAPDot(px2, py2, apFahp)
           }
           // mAHP
           if (sp.mahpVm != null && sp.mahpT != null) {
@@ -476,7 +493,7 @@ export function TraceViewer() {
             const mY = mSampled != null ? mSampled : (sp.mahpVm - yOffset)
             const px3 = u.valToPos(sp.mahpT, 'x', true) / dpr
             const py3 = u.valToPos(mY, 'y', true) / dpr
-            drawAPDot(px3, py3, '#ff7043')
+            drawAPDot(px3, py3, apMahp)
           }
         }
       } else if (peakTimes.length > 0) {
@@ -498,7 +515,7 @@ export function TraceViewer() {
             const y = td.values[nearestIdx]
             const px = u.valToPos(t, 'x', true) / dpr
             const py = u.valToPos(y, 'y', true) / dpr
-            drawAPDot(px, py, '#e57373', false)
+            drawAPDot(px, py, apPeak, false)
           }
         }
       }
@@ -526,13 +543,18 @@ export function TraceViewer() {
         const PEAK_R_SELECTED = 8
         const FOOT_R = 4
         const ENDPOINT_R = 4
+        const evOutline = cssVar('--marker-outline')
+        const evDetected = cssVar('--marker-detected')
+        const evManual = cssVar('--marker-manual')
+        const evFoot = cssVar('--text-muted')
+        const evEndpoint = cssVar('--cursor-fit')
         const drawEvDot = (px: number, py: number, color: string, r: number = PEAK_R) => {
           if (!isFinite(px) || !isFinite(py)) return
           ctx.beginPath()
           ctx.arc(px, py, r, 0, 2 * Math.PI)
           ctx.fillStyle = color
           ctx.fill()
-          ctx.strokeStyle = '#ffffff'
+          ctx.strokeStyle = evOutline
           ctx.lineWidth = 1.5
           ctx.stroke()
         }
@@ -549,13 +571,13 @@ export function TraceViewer() {
           const peakY = peakSampled != null ? peakSampled : (e.peakVal - yOffset)
           const px = u.valToPos(e.peakTimeS, 'x', true) / dpr
           const py = u.valToPos(peakY, 'y', true) / dpr
-          drawEvDot(px, py, e.manual ? '#ffb74d' : '#e57373', selected ? PEAK_R_SELECTED : PEAK_R)
+          drawEvDot(px, py, e.manual ? evManual : evDetected, selected ? PEAK_R_SELECTED : PEAK_R)
           // Foot (gray) at footTimeS — also pinned to the trace.
           const footSampled = sampleTraceYAt(ttE, tvE, e.footTimeS)
           const footY = footSampled != null ? footSampled : (e.baselineVal - yOffset)
           const fpx = u.valToPos(e.footTimeS, 'x', true) / dpr
           const fpy = u.valToPos(footY, 'y', true) / dpr
-          drawEvDot(fpx, fpy, '#9e9e9e', FOOT_R)
+          drawEvDot(fpx, fpy, evFoot, FOOT_R)
           // Decay endpoint (purple) — the endpoint sits on the trace
           // where it returned to baseline, so sample there too.
           if (e.decayEndpointIdx != null) {
@@ -564,7 +586,7 @@ export function TraceViewer() {
             const epY = epSampled != null ? epSampled : (e.baselineVal - yOffset)
             const dpx = u.valToPos(endpointT, 'x', true) / dpr
             const dpy = u.valToPos(epY, 'y', true) / dpr
-            drawEvDot(dpx, dpy, '#ab47bc', ENDPOINT_R)
+            drawEvDot(dpx, dpy, evEndpoint, ENDPOINT_R)
           }
         }
       }
@@ -788,8 +810,8 @@ export function TraceViewer() {
         ticks: { stroke: cssVar('--chart-tick'), width: 1 },
         label: 'Time (s)',
         labelSize: 16,
-        font: `500 ${cssVar('--font-size-sm')} ${cssVar('--font-mono')}`,
-        labelFont: `600 ${cssVar('--font-size-sm')} ${cssVar('--font-mono')}`,
+        font: `500 ${cssVar('--font-size-sm')} ${cssVar('--font-ui')}`,
+        labelFont: `600 ${cssVar('--font-size-sm')} ${cssVar('--font-ui')}`,
       },
       {
         stroke: cssVar('--chart-axis'),
@@ -797,8 +819,8 @@ export function TraceViewer() {
         ticks: { stroke: cssVar('--chart-tick'), width: 1 },
         label: traceData.units || 'Value',
         labelSize: 16,
-        font: `500 ${cssVar('--font-size-sm')} ${cssVar('--font-mono')}`,
-        labelFont: `600 ${cssVar('--font-size-sm')} ${cssVar('--font-mono')}`,
+        font: `500 ${cssVar('--font-size-sm')} ${cssVar('--font-ui')}`,
+        labelFont: `600 ${cssVar('--font-size-sm')} ${cssVar('--font-ui')}`,
         scale: 'y',
       },
     ]
@@ -904,8 +926,8 @@ export function TraceViewer() {
         ticks: { stroke: cssVar('--chart-tick'), width: 1 },
         label: altUnits || 'Alt',
         labelSize: 16,
-        font: `500 ${cssVar('--font-size-sm')} ${cssVar('--font-mono')}`,
-        labelFont: `600 ${cssVar('--font-size-sm')} ${cssVar('--font-mono')}`,
+        font: `500 ${cssVar('--font-size-sm')} ${cssVar('--font-ui')}`,
+        labelFont: `600 ${cssVar('--font-size-sm')} ${cssVar('--font-ui')}`,
         scale: 'y_alt',
         side: 1,
       })
@@ -959,8 +981,8 @@ export function TraceViewer() {
         ticks: { stroke: cssVar('--chart-tick'), width: 1 },
         label: `Stim (${stimulus.unit})`,
         labelSize: 16,
-        font: `500 ${cssVar('--font-size-sm')} ${cssVar('--font-mono')}`,
-        labelFont: `600 ${cssVar('--font-size-sm')} ${cssVar('--font-mono')}`,
+        font: `500 ${cssVar('--font-size-sm')} ${cssVar('--font-ui')}`,
+        labelFont: `600 ${cssVar('--font-size-sm')} ${cssVar('--font-ui')}`,
         scale: 'stim',
         side: 1,
       })
@@ -1173,7 +1195,7 @@ export function TraceViewer() {
       plotRef.current?.destroy()
       plotRef.current = null
     }
-  }, [traceData, buildSeriesData, theme, fontUI, fontSize, monoFont, zoomMode, showStimulusOverlay, stimulus, traceColorsKey]) // deliberately NOT including cursors
+  }, [traceData, buildSeriesData, theme, fontSize, zoomMode, showStimulusOverlay, stimulus, traceColorsKey]) // deliberately NOT including cursors
 
   // ================================================================
   // Repaint cursor canvas when cursor positions or visibility change
@@ -1796,10 +1818,10 @@ export function TraceViewer() {
             onClick={toggleCoordinates}
             disabled={!traceData}
             title={showCoordinates ? 'Hide hover coordinates' : 'Show hover coordinates (x, y)'}
+            aria-pressed={showCoordinates}
             style={showCoordinates ? {
-              background: 'var(--accent)',
-              borderColor: 'var(--accent)',
-              color: '#fff',
+              background: 'color-mix(in oklab, var(--accent) 14%, transparent)',
+              color: 'var(--accent)',
             } : undefined}
           >
             x,y
@@ -1825,7 +1847,7 @@ export function TraceViewer() {
               onClick={() => autoScale('x')}
               disabled={!traceData}
               title="Auto-range X"
-            >auto</button>
+            >Auto</button>
           </div>
 
           {/* Data Y-axis zoom */}
@@ -1850,7 +1872,7 @@ export function TraceViewer() {
               onClick={() => autoScale('y')}
               disabled={!traceData}
               title="Auto-range Y"
-            >auto</button>
+            >Auto</button>
           </div>
 
           {/* Alt Y-axis zoom — visible when an additional channel
@@ -1875,7 +1897,7 @@ export function TraceViewer() {
                 className="zoom-btn"
                 onClick={() => autoScale('y_alt')}
                 title={`Auto-range ${altScaleUnits}`}
-              >auto</button>
+              >Auto</button>
             </div>
           )}
 
@@ -1899,7 +1921,7 @@ export function TraceViewer() {
                 className="zoom-btn"
                 onClick={() => autoScale('stim')}
                 title="Auto-range stimulus"
-              >auto</button>
+              >Auto</button>
             </div>
           )}
         </div>
@@ -1972,15 +1994,13 @@ function ExcludedSweepBadge() {
     <button
       onClick={() => toggleSweepExcluded(group, series, sweep)}
       title="This sweep is excluded from analyses — click to restore it."
+      className="notice notice-warning"
       style={{
-        fontSize: 'var(--font-size-label)',
+        fontSize: 'var(--font-size-xs)',
         fontWeight: 600,
-        color: '#fff',
-        background: '#e65100',
         border: 'none',
         padding: '2px 8px',
-        borderRadius: 3,
-        cursor: 'pointer',
+        borderRadius: 'var(--radius-sm)',
         lineHeight: 1.4,
       }}
     >

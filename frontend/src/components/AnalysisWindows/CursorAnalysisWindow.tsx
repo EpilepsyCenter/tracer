@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { useThemeKey } from '../../stores/themeStore'
 import uPlot from 'uplot'
 import 'uplot/dist/uPlot.min.css'
 import {
@@ -61,7 +62,7 @@ const MEAS_COLUMNS: ColDef[] = [
       display: 'inline-block', width: 14, height: 14, borderRadius: 2,
       background: SLOT_COLORS[m.slot % SLOT_COLORS.length],
       color: '#000', fontWeight: 700, textAlign: 'center',
-      lineHeight: '14px', fontSize: 10,
+      lineHeight: '14px', fontSize: 'var(--font-size-xs)',
     }}>{m.slot + 1}</span>
   ) },
   { id: 'baseline', label: 'Baseline', value: (m) => fmt(m.baseline, 3) },
@@ -90,7 +91,7 @@ const FIT_COLUMNS: ColDef[] = [
       display: 'inline-block', width: 14, height: 14, borderRadius: 2,
       background: SLOT_COLORS[m.slot % SLOT_COLORS.length],
       color: '#000', fontWeight: 700, textAlign: 'center',
-      lineHeight: '14px', fontSize: 10,
+      lineHeight: '14px', fontSize: 'var(--font-size-xs)',
     }}>{m.slot + 1}</span>
   ) },
   { id: 'fit_function', label: 'Function', value: (m, ctx) => {
@@ -585,7 +586,7 @@ export function CursorAnalysisWindow({
         display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', flexShrink: 0,
         background: 'var(--bg-secondary)',
         padding: '6px 10px',
-        borderRadius: 4,
+        borderRadius: 'var(--radius-md)',
         border: '1px solid var(--border)',
       }}>
         <Field label="Group">
@@ -614,9 +615,9 @@ export function CursorAnalysisWindow({
               persisted sweepOne that drives "Run on single sweep".
               Same setup as Resistance / FPsp / I-V. */}
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-            <button className="btn" disabled={totalSweeps === 0 || previewSweep <= 0}
+            <button className="btn btn-compact" disabled={totalSweeps === 0 || previewSweep <= 0}
               onClick={() => setPreviewSweepState((s) => Math.max(0, s - 1))}
-              style={{ padding: '2px 8px' }} title="Previous sweep">
+              title="Previous sweep">
               ←
             </button>
             <NumInput value={previewSweep + 1} step={1} min={1} max={Math.max(1, totalSweeps)}
@@ -625,9 +626,9 @@ export function CursorAnalysisWindow({
             <span style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-label)' }}>
               / {totalSweeps || '—'}
             </span>
-            <button className="btn" disabled={totalSweeps === 0 || previewSweep >= totalSweeps - 1}
+            <button className="btn btn-compact" disabled={totalSweeps === 0 || previewSweep >= totalSweeps - 1}
               onClick={() => setPreviewSweepState((s) => Math.min(totalSweeps - 1, s + 1))}
-              style={{ padding: '2px 8px' }} title="Next sweep">
+              title="Next sweep">
               →
             </button>
           </span>
@@ -652,7 +653,7 @@ export function CursorAnalysisWindow({
           display: 'flex', flexDirection: 'column', minHeight: 0, gap: 8,
           background: 'var(--bg-secondary)',
           padding: 8,
-          borderRadius: 4,
+          borderRadius: 'var(--radius-md)',
           border: '1px solid var(--border)',
         }}>
           {/* Scrollable param sections. */}
@@ -665,11 +666,7 @@ export function CursorAnalysisWindow({
                 Compact vertical layout so it fits in the narrower
                 column. (Zero offset lives in the viewer header — same
                 place as every other window.) */}
-            <div style={{
-              display: 'flex', flexDirection: 'column', gap: 6,
-              padding: 8, border: '1px solid var(--border)', borderRadius: 4,
-              background: 'var(--bg-primary)', fontSize: 'var(--font-size-label)',
-            }}>
+            <div className="section-card" style={{ fontSize: 'var(--font-size-label)' }}>
               <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontWeight: 600 }}>
                   <input type="checkbox" checked={localFilter.enabled}
@@ -715,11 +712,7 @@ export function CursorAnalysisWindow({
             </div>
 
             {/* Baseline + slot count */}
-            <div style={{
-              display: 'flex', flexDirection: 'column', gap: 6,
-              padding: 8, border: '1px solid var(--border)', borderRadius: 4,
-              background: 'var(--bg-primary)', fontSize: 'var(--font-size-label)',
-            }}>
+            <div className="section-card" style={{ fontSize: 'var(--font-size-label)' }}>
               <span style={{ fontWeight: 600, color: 'var(--cursor-baseline)' }}>Baseline</span>
               <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
                 <NumInput value={localData.baseline.start} step={0.001}
@@ -734,8 +727,8 @@ export function CursorAnalysisWindow({
                   Method:
                   <select value={localData.baselineMethod}
                     onChange={(e) => patch({ baselineMethod: e.target.value as 'mean' | 'median' })}>
-                    <option value="mean">mean</option>
-                    <option value="median">median</option>
+                    <option value="mean">Mean</option>
+                    <option value="median">Median</option>
                   </select>
                 </label>
                 <label style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
@@ -773,18 +766,10 @@ export function CursorAnalysisWindow({
               disclosure for Range/Single) + "Average selected sweeps
               first" checkbox, then secondary Clear / Export CSV below
               a separator. */}
-          <div style={{
-            flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 6,
-            padding: 8,
-            border: '1px solid var(--border)', borderRadius: 4,
-            background: 'var(--bg-primary)',
-          }}>
-            <button className="btn btn-primary" onClick={onRun}
+          <div className="section-card" style={{ flexShrink: 0 }}>
+            <button className="btn btn-primary btn-lg" onClick={onRun}
               disabled={running || !fileInfo}
-              style={{
-                width: '100%', padding: '8px 0',
-                fontSize: 'var(--font-size-sm)', fontWeight: 600,
-              }}>
+              style={{ width: '100%' }}>
               {running ? 'Running…' : 'Run'}
             </button>
             <div style={{
@@ -803,7 +788,7 @@ export function CursorAnalysisWindow({
             {localData.runMode === 'range' && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 6,
                 fontSize: 'var(--font-size-label)', color: 'var(--text-muted)' }}>
-                <span>from</span>
+                <span>From</span>
                 <NumInput value={localData.sweepFrom} step={1} min={1} max={Math.max(1, totalSweeps)}
                   onChange={(v) => patch({ sweepFrom: Math.max(1, Math.round(v)) })} style={{ width: 60 }} />
                 <span>to</span>
@@ -815,7 +800,7 @@ export function CursorAnalysisWindow({
             {localData.runMode === 'one' && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 6,
                 fontSize: 'var(--font-size-label)', color: 'var(--text-muted)' }}>
-                <span>sweep</span>
+                <span>Sweep</span>
                 <NumInput value={localData.sweepOne} step={1} min={1} max={Math.max(1, totalSweeps)}
                   onChange={(v) => patch({ sweepOne: Math.max(1, Math.round(v)) })} style={{ width: 60 }} />
                 <span style={{ marginLeft: 'auto' }}>/ {totalSweeps || '—'}</span>
@@ -844,17 +829,12 @@ export function CursorAnalysisWindow({
             </div>
           </div>
           {error && (
-            <div style={{
+            <div className="notice notice-error" style={{
               flexShrink: 0,
-              padding: '6px 10px',
-              background: 'var(--bg-error, #5c1b1b)',
-              color: '#fff', borderRadius: 3,
               display: 'flex', alignItems: 'center', gap: 8,
-              fontSize: 'var(--font-size-xs)',
             }}>
               <span style={{ flex: 1 }}>⚠ {error}</span>
-              <button className="btn" onClick={() => setError(null)}
-                style={{ padding: '1px 6px', fontSize: 'var(--font-size-label)' }}>dismiss</button>
+              <button className="btn btn-sm" onClick={() => setError(null)}>Dismiss</button>
             </div>
           )}
         </div>{/* close LEFT panel */}
@@ -1045,20 +1025,16 @@ function SlotRow({
   }
 
   return (
-    <div style={{
-      display: 'flex', flexDirection: 'column', gap: 6,
-      padding: 8,
-      border: '1px solid var(--border)', borderRadius: 4,
-      background: 'var(--bg-primary)',
+    <div className="section-card" style={{
       fontSize: 'var(--font-size-label)',
       opacity: slot.enabled ? 1 : 0.55,
     }}>
       {/* Header: slot badge + enable toggle */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <span style={{
-          display: 'inline-block', width: 18, height: 18, borderRadius: 3,
+          display: 'inline-block', width: 18, height: 18, borderRadius: 'var(--radius-sm)',
           background: color, textAlign: 'center', color: '#000', fontWeight: 700,
-          fontFamily: 'var(--font-mono)', fontSize: 12, lineHeight: '18px',
+          fontFamily: 'var(--font-mono)', fontSize: 'var(--font-size-sm)', lineHeight: '18px',
         }}>{index + 1}</span>
         <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontWeight: 600 }}>
           <input type="checkbox" checked={slot.enabled}
@@ -1119,26 +1095,25 @@ function SlotRow({
           </div>
           {/* Advanced fit options — collapsed by default. Mirrors the
               "Fit opts" gear button in the old table layout. */}
-          <button className="btn"
+          <button className="btn btn-ghost btn-sm"
             onClick={() => setAdvancedOpen((v) => !v)}
             style={{
-              padding: '2px 6px', fontSize: 'var(--font-size-label)',
               alignSelf: 'flex-start',
               color: 'var(--text-muted)',
             }}
             title="Per-slot fit options (iterations, tolerances, initial guesses)">
-            {advancedOpen ? '▾ advanced fit options' : '▸ advanced fit options'}
+            {advancedOpen ? '▾ Advanced fit options' : '▸ Advanced fit options'}
           </button>
           {advancedOpen && activeFn && (
             <div style={{
               display: 'flex', flexDirection: 'column', gap: 4,
               padding: 6,
               border: '1px dashed var(--border)',
-              borderRadius: 3,
-              background: 'var(--bg-secondary)',
+              borderRadius: 'var(--radius)',
+              background: 'var(--bg-primary)',
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <span style={{ color: 'var(--text-muted)', minWidth: 54 }}>max iter</span>
+                <span style={{ color: 'var(--text-muted)', minWidth: 54 }}>Max iter</span>
                 <NumInput value={opts.maxfev ?? 5000} step={500} min={100}
                   onChange={(v) => setOpts({ maxfev: Math.max(100, Math.round(v)) })} style={{ flex: 1 }} />
               </div>
@@ -1161,7 +1136,7 @@ function SlotRow({
                     const cur = opts.initialGuess?.[p]
                     return (
                       <div key={p} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <span style={{ fontFamily: 'var(--font-mono)', minWidth: 54 }}>{p}</span>
+                        <span style={{ minWidth: 54 }}>{p}</span>
                         <input
                           type="text" inputMode="decimal"
                           defaultValue={cur == null ? '' : String(cur)}
@@ -1174,13 +1149,10 @@ function SlotRow({
                     )
                   })}
                   {opts.initialGuess && Object.keys(opts.initialGuess).length > 0 && (
-                    <button className="btn"
+                    <button className="btn btn-sm"
                       onClick={() => setOpts({ initialGuess: {} })}
-                      style={{
-                        padding: '1px 6px', fontSize: 'var(--font-size-label)',
-                        alignSelf: 'flex-start',
-                      }}>
-                      reset guesses
+                      style={{ alignSelf: 'flex-start' }}>
+                      Reset guesses
                     </button>
                   )}
                 </>
@@ -1221,6 +1193,7 @@ function MiniViewer({
    *  parent can place baseline + enabled slot peaks back in view. */
   onResetCursorsInView: (xMin: number, xMax: number) => void
 }) {
+  const themeKey = useThemeKey()
   const containerRef = useRef<HTMLDivElement>(null)
   const plotRef = useRef<uPlot | null>(null)
   const { onContextMenu: onPlotContextMenu, menu: plotMenu } = usePlotMenu({
@@ -1355,25 +1328,25 @@ function MiniViewer({
       },
       axes: [
         {
-          stroke: cssVar('--chart-axis') || '#888',
-          grid: { stroke: cssVar('--chart-grid') || '#2a2a2a', width: 1 },
-          ticks: { stroke: cssVar('--chart-tick') || '#444', width: 1 },
-          label: 'time (s)', labelSize: 14,
-          font: `${cssVar('--font-size-label') || '11px'} ${cssVar('--font-mono') || 'monospace'}`,
+          stroke: cssVar('--chart-axis'),
+          grid: { stroke: cssVar('--chart-grid'), width: 1 },
+          ticks: { stroke: cssVar('--chart-tick'), width: 1 },
+          label: 'Time (s)', labelSize: 14,
+          font: `${cssVar('--font-size-label') || '11px'} ${cssVar('--font-ui') || 'system-ui'}`,
         },
         {
-          stroke: cssVar('--chart-axis') || '#888',
-          grid: { stroke: cssVar('--chart-grid') || '#2a2a2a', width: 1 },
-          ticks: { stroke: cssVar('--chart-tick') || '#444', width: 1 },
+          stroke: cssVar('--chart-axis'),
+          grid: { stroke: cssVar('--chart-grid'), width: 1 },
+          ticks: { stroke: cssVar('--chart-tick'), width: 1 },
           label: traceUnit || '', labelSize: 14,
-          font: `${cssVar('--font-size-label') || '11px'} ${cssVar('--font-mono') || 'monospace'}`,
+          font: `${cssVar('--font-size-label') || '11px'} ${cssVar('--font-ui') || 'system-ui'}`,
         },
       ],
       cursor: { drag: { x: false, y: false } },
       series: [
         {},
         {
-          stroke: cssVar('--trace-color-1') || '#4a9ede',
+          stroke: cssVar('--trace-color-1'),
           width: 1,
           points: { show: false },
         },
@@ -1657,7 +1630,7 @@ function MiniViewer({
   // Rebuilt on every data change (matching Resistance/FPsp/I-V).
   // Also on traceUnit change so the Y-axis label stays accurate.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, traceUnit])
+  }, [data, traceUnit, themeKey])
 
   // Keep the FIRST-DATA auto-fit behaviour (initial placeholder mount
   // doesn't count — wait for real data before stashing the initial
@@ -1698,7 +1671,7 @@ function MiniViewer({
     <div
       onContextMenu={onPlotContextMenu}
       style={{
-        height: '100%', border: '1px solid var(--border)', borderRadius: 4,
+        height: '100%', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
         background: 'var(--bg-primary)', position: 'relative',
       }}
     >
@@ -1706,8 +1679,9 @@ function MiniViewer({
       <div style={{
         position: 'absolute', top: 4, right: 4, zIndex: 2,
         display: 'flex', gap: 6, alignItems: 'center',
-        background: 'var(--bg-secondary, rgba(0,0,0,0.55))',
-        padding: '2px 6px', borderRadius: 4,
+        background: 'var(--bg-secondary)',
+        border: '1px solid var(--border)',
+        padding: '2px 6px', borderRadius: 'var(--radius-md)',
       }}>
         <label style={{
           display: 'flex', alignItems: 'center', gap: 3,
@@ -1718,7 +1692,7 @@ function MiniViewer({
           Zero offset
         </label>
         <button
-          className="btn"
+          className="btn btn-sm"
           onClick={() => {
             const u = plotRef.current
             let xMin: number | null = u?.scales.x.min ?? null
@@ -1730,15 +1704,13 @@ function MiniViewer({
             if (xMin != null && xMax != null && xMax > xMin) onResetCursorsInView(xMin, xMax)
           }}
           title="Distribute baseline + visible slot cursors across the current view"
-          style={{ padding: '1px 8px', fontSize: 'var(--font-size-label)' }}
         >
           Reset cursors
         </button>
         <button
-          className="btn"
+          className="btn btn-sm"
           onClick={resetZoom}
           title="Reset zoom — rescales X and Y to the full sweep"
-          style={{ padding: '1px 8px', fontSize: 'var(--font-size-label)' }}
         >
           Reset zoom
         </button>
@@ -1751,7 +1723,7 @@ function MiniViewer({
         fontSize: 'var(--font-size-label)', color: 'var(--text-muted)',
         fontStyle: 'italic', pointerEvents: 'none',
       }}>
-        scroll = zoom X · ⌥ scroll = zoom Y · drag empty area = pan · drag inside a band = move · drag an edge = resize
+        Scroll = zoom X · ⌥ scroll = zoom Y · drag empty area = pan · drag inside a band = move · drag an edge = resize
       </span>
       <div ref={containerRef} style={{ height: '100%', width: '100%' }} />
       {(!data || data.time.length === 0) && (
@@ -1793,7 +1765,7 @@ function drawBands(
     if (label) {
       ctx.globalAlpha = 1
       ctx.fillStyle = color
-      ctx.font = `bold ${10 * dpr}px ${cssVar('--font-mono')}`
+      ctx.font = `600 ${10 * dpr}px ${cssVar('--font-ui')}`
       ctx.fillText(label, Math.min(px0, px1) + 2 * dpr, yTop + 12 * dpr)
     }
     ctx.restore()
@@ -1802,8 +1774,8 @@ function drawBands(
   // viewer; peak bands still cycle per-slot so the 10 slots are
   // distinguishable. CSS vars resolve at draw time so the theme honors
   // dark/light mode.
-  const baselineColor = cssVar('--cursor-baseline') || '#4caf50'
-  const fitColor = cssVar('--cursor-fit') || '#9c27b0'
+  const baselineColor = cssVar('--cursor-baseline')
+  const fitColor = cssVar('--cursor-fit')
   drawBand(state.baseline.start, state.baseline.end, baselineColor, 0.16, 'BL')
   state.slots.forEach((s, i) => {
     if (!s.enabled) return
@@ -1829,7 +1801,7 @@ function drawFits(
   for (const m of state.measurements) {
     if (m.fit) byKey.set(`${m.sweep}:${m.slot}`, m)
   }
-  const fitColor = cssVar('--cursor-fit') || '#9c27b0'
+  const fitColor = cssVar('--cursor-fit')
   const yShift = state.displayYOffset
   state.slots.forEach((s, i) => {
     if (!s.enabled || !s.fit) return
@@ -1907,10 +1879,10 @@ function ResultsTabs({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
       <div style={{
-        display: 'flex', alignItems: 'stretch', gap: 0,
-        borderBottom: '1px solid var(--border)',
-        background: 'var(--bg-secondary)',
+        display: 'flex', alignItems: 'center', gap: 8,
+        paddingBottom: 6,
       }}>
+        <div className="segmented">
         {([
           { id: 'measurements' as const, label: 'Measurements', count: measurements.length },
           { id: 'fit' as const, label: 'Fit', count: fitCount },
@@ -1928,37 +1900,29 @@ function ResultsTabs({
             <button
               key={t.id}
               type="button"
+              className={active ? 'active' : undefined}
+              aria-selected={active}
               onClick={fire}
               onMouseDown={fire}
               style={{
-                cursor: 'pointer',
                 userSelect: 'none',
-                padding: '8px 16px',
-                border: 'none',
-                borderBottom: active ? '3px solid var(--accent)' : '3px solid transparent',
-                background: active ? 'var(--bg-primary)' : 'transparent',
-                color: active ? 'var(--accent)' : 'var(--text-muted)',
-                fontSize: 'var(--font-size-sm)',
-                fontFamily: 'var(--font-ui)',
-                fontWeight: active ? 700 : 400,
-                outline: 'none',
                 minWidth: 110,
               }}
             >
               {t.label}
               {t.count > 0 && (
-                <span style={{
+                <span className="num" style={{
                   marginLeft: 6,
                   fontSize: 'var(--font-size-label)',
                   color: 'var(--text-muted)',
-                  fontWeight: 400,
                 }}>({t.count})</span>
               )}
             </button>
           )
         })}
+        </div>
         <span style={{ flex: 1 }} />
-        <div style={{ display: 'flex', alignItems: 'center', paddingRight: 4 }}>
+        <div style={{ display: 'flex', alignItems: 'center' }}>
           <ColumnsButton
             allColumns={allColumns}
             visibleIds={columns}
@@ -1980,12 +1944,9 @@ function ResultsTabs({
               : 'No fits yet — enable a fit cursor on a slot and click Run.'}
           </div>
         ) : (
-          <table style={{
-            width: '100%', borderCollapse: 'collapse',
-            fontSize: 'var(--font-size-label)', fontFamily: 'var(--font-mono)',
-          }}>
+          <table className="data-table">
             <thead>
-              <tr style={{ background: 'var(--bg-secondary)', textAlign: 'left', position: 'sticky', top: 0 }}>
+              <tr>
                 {visible.map((c) => (
                   <Th key={c.id}>
                     {c.id === 'baseline' ? <>Baseline ({traceUnit})</> : c.label}
@@ -2001,11 +1962,9 @@ function ResultsTabs({
                     if (!sel.isSelected(i)) sel.setSelected([i])
                   })}
                   style={{
-                    borderTop: '1px solid var(--border)',
                     background: sel.isSelected(i)
-                      ? 'var(--accent-muted, rgba(100,181,246,0.30))'
-                      : (i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)'),
-                    cursor: 'pointer',
+                      ? 'var(--accent-muted)'
+                      : 'transparent',
                   }}>
                   {visible.map((c) => (
                     <Td key={c.id}>{c.value(m, { traceUnit, fitFunctions })}</Td>
@@ -2048,34 +2007,33 @@ function ColumnsButton({
 
   return (
     <div ref={ref} style={{ position: 'relative' }}>
-      <button className="btn" onClick={() => setOpen((v) => !v)}
-        style={{ padding: '2px 8px', marginRight: 4, fontSize: 'var(--font-size-label)' }}>
+      <button className="btn btn-sm" onClick={() => setOpen((v) => !v)}>
         Columns {'\u25BE'}
       </button>
       {open && (
         <div style={{
           position: 'absolute', right: 0, top: '100%',
-          background: 'var(--bg-primary)',
-          border: '1px solid var(--border)', borderRadius: 4,
+          background: 'var(--bg-field)',
+          borderRadius: 'var(--radius-md)',
           padding: 6, zIndex: 10,
           fontSize: 'var(--font-size-label)',
           minWidth: 200,
           maxHeight: 400, overflow: 'auto',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.35)',
+          boxShadow: 'var(--shadow-popover)',
         }}>
           {allColumns.map((c) => {
             const locked = lockedIds.has(c.id)
             return (
               <label key={c.id} style={{
                 display: 'flex', alignItems: 'center', gap: 6,
-                padding: '2px 4px', cursor: locked ? 'default' : 'pointer',
+                padding: '2px 4px',
                 opacity: locked ? 0.55 : 1,
               }}>
                 <input type="checkbox" disabled={locked}
                   checked={locked || visibleIds.includes(c.id)}
                   onChange={() => toggle(c.id)} />
                 {c.label}
-                {locked && <span style={{ color: 'var(--text-muted)', marginLeft: 'auto', fontSize: 10 }}>required</span>}
+                {locked && <span style={{ color: 'var(--text-muted)', marginLeft: 'auto', fontSize: 'var(--font-size-xs)' }}>Required</span>}
               </label>
             )
           })}
@@ -2088,10 +2046,8 @@ function ColumnsButton({
 // ---- Small shared cells ---------------------------------------------------
 
 const Th = ({ children }: { children?: React.ReactNode }) => (
-  <th style={{ padding: '4px 8px', fontWeight: 600, fontSize: 'var(--font-size-label)', whiteSpace: 'nowrap' }}>
-    {children}
-  </th>
+  <th>{children}</th>
 )
 const Td = ({ children, style }: { children?: React.ReactNode; style?: React.CSSProperties }) => (
-  <td style={{ padding: '3px 8px', whiteSpace: 'nowrap', ...style }}>{children}</td>
+  <td style={style}>{children}</td>
 )

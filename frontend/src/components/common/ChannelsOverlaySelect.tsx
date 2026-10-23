@@ -87,8 +87,8 @@ export function ChannelsOverlaySelect({
         className="btn"
         onClick={() => setOpen((v) => !v)}
         style={{
-          padding: '3px 10px',
-          fontSize: 'var(--font-size-label)',
+          padding: '0 8px 0 10px',
+          fontSize: 'var(--font-size-sm)',
           display: 'flex',
           alignItems: 'center',
           gap: 6,
@@ -97,7 +97,7 @@ export function ChannelsOverlaySelect({
         title="Pick the analysis target (primary) and any extra channels to overlay as stacked subplots below."
       >
         <span style={{ flex: 1, textAlign: 'left' }}>{buttonText}</span>
-        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>▾</span>
+        <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>▾</span>
       </button>
 
       {open && (
@@ -108,28 +108,27 @@ export function ChannelsOverlaySelect({
             left: 0,
             marginTop: 4,
             minWidth: 240,
-            background: 'var(--bg-surface, var(--bg-primary))',
-            border: '1px solid var(--border)',
-            borderRadius: 4,
-            boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+            background: 'var(--bg-field)',
+            borderRadius: 'var(--radius-md)',
+            boxShadow: 'var(--shadow-popover)',
             zIndex: 100,
-            padding: 4,
+            padding: 5,
           }}
         >
           <div style={{
-            padding: '3px 6px', fontSize: 'var(--font-size-label)',
-            color: 'var(--text-muted)',
+            padding: '3px 6px', fontSize: 'var(--font-size-xs)',
+            fontWeight: 600, color: 'var(--text-muted)',
           }}>
-            Primary (analysis target):
+            Primary (analysis target)
           </div>
           {channels.map((c) => (
             <label
               key={`p-${c.index}`}
               style={{
                 display: 'flex', alignItems: 'center', gap: 8,
-                padding: '3px 6px', cursor: 'pointer', userSelect: 'none',
-                borderRadius: 3,
-                background: c.index === primary ? 'var(--bg-secondary)' : 'transparent',
+                padding: '3px 6px', userSelect: 'none',
+                borderRadius: 'var(--radius-sm)',
+                background: c.index === primary ? 'var(--bg-selected)' : 'transparent',
               }}
             >
               <input
@@ -139,8 +138,8 @@ export function ChannelsOverlaySelect({
                 onChange={() => onPrimaryChange(c.index)}
                 style={{ margin: 0 }}
               />
-              <span style={{ flex: 1, fontSize: 'var(--font-size-label)' }}>{c.label}</span>
-              <span style={{ fontSize: 'var(--font-size-label)', color: 'var(--text-muted)' }}>
+              <span style={{ flex: 1, fontSize: 'var(--font-size-sm)' }}>{c.label}</span>
+              <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
                 {c.units}
               </span>
             </label>
@@ -149,12 +148,13 @@ export function ChannelsOverlaySelect({
             <>
               <div style={{
                 padding: '6px 6px 3px',
-                fontSize: 'var(--font-size-label)',
+                fontSize: 'var(--font-size-xs)',
+                fontWeight: 600,
                 color: 'var(--text-muted)',
                 borderTop: '1px solid var(--border)',
                 marginTop: 4,
               }}>
-                Overlays (display only):
+                Overlays (display only)
               </div>
               {channels.map((c) => {
                 if (c.index === primary) return null
@@ -163,8 +163,8 @@ export function ChannelsOverlaySelect({
                     key={`o-${c.index}`}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 8,
-                      padding: '3px 6px', cursor: 'pointer', userSelect: 'none',
-                      borderRadius: 3,
+                      padding: '3px 6px', userSelect: 'none',
+                      borderRadius: 'var(--radius-sm)',
                     }}
                   >
                     <input
@@ -173,8 +173,8 @@ export function ChannelsOverlaySelect({
                       onChange={() => toggle(c.index)}
                       style={{ margin: 0 }}
                     />
-                    <span style={{ flex: 1, fontSize: 'var(--font-size-label)' }}>{c.label}</span>
-                    <span style={{ fontSize: 'var(--font-size-label)', color: 'var(--text-muted)' }}>
+                    <span style={{ flex: 1, fontSize: 'var(--font-size-sm)' }}>{c.label}</span>
+                    <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
                       {c.units}
                     </span>
                   </label>
@@ -184,8 +184,8 @@ export function ChannelsOverlaySelect({
                 <label
                   style={{
                     display: 'flex', alignItems: 'center', gap: 8,
-                    padding: '3px 6px', cursor: 'pointer', userSelect: 'none',
-                    borderRadius: 3,
+                    padding: '3px 6px', userSelect: 'none',
+                    borderRadius: 'var(--radius-sm)',
                   }}
                 >
                   <input
@@ -194,7 +194,7 @@ export function ChannelsOverlaySelect({
                     onChange={() => toggle(STIMULUS_OVERLAY_KEY)}
                     style={{ margin: 0 }}
                   />
-                  <span style={{ flex: 1, fontSize: 'var(--font-size-label)' }}>
+                  <span style={{ flex: 1, fontSize: 'var(--font-size-sm)' }}>
                     ⚙ Stimulus (from protocol)
                   </span>
                 </label>

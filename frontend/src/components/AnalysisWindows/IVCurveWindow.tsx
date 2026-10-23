@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import uPlot from 'uplot'
 import 'uplot/dist/uPlot.min.css'
 import { useAppStore, IVCurveData, IVResponseMetric, CursorPositions } from '../../stores/appStore'
-import { useThemeStore } from '../../stores/themeStore'
+import { useThemeStore, useThemeKey } from '../../stores/themeStore'
 import { NumInput } from '../common/NumInput'
 import { ImSourceCard } from '../common/ImSourceCard'
 import { ChannelsOverlaySelect, STIMULUS_OVERLAY_KEY } from '../common/ChannelsOverlaySelect'
@@ -456,7 +456,7 @@ export function IVCurveWindow({
               onClick={() => setPreviewSweep((s) => Math.max(0, s - 1))}
               disabled={previewSweep <= 0 || totalSweeps === 0}
               title="Previous sweep">←</button>
-            <span style={{ minWidth: 58, textAlign: 'center', fontSize: 'var(--font-size-label)', color: 'var(--text-muted)' }}>
+            <span className="num" style={{ minWidth: 58, textAlign: 'center', fontSize: 'var(--font-size-label)', color: 'var(--text-muted)' }}>
               {totalSweeps > 0 ? `${previewSweep + 1} / ${totalSweeps}` : '— / —'}
             </span>
             <button className="btn" style={{ padding: '2px 8px' }}
@@ -502,19 +502,18 @@ export function IVCurveWindow({
               borderRadius: 4,
               background: 'var(--bg-primary)',
               fontSize: 'var(--font-size-label)',
-              fontFamily: 'var(--font-mono)',
             }}>
               <span style={{ color: 'var(--cursor-baseline)', fontWeight: 600, width: '100%' }}>
                 Baseline:
               </span>
-              <span>{cursors.baselineStart.toFixed(4)}s → {cursors.baselineEnd.toFixed(4)}s</span>
+              <span className="num">{cursors.baselineStart.toFixed(4)}s → {cursors.baselineEnd.toFixed(4)}s</span>
               <span style={{ color: 'var(--cursor-peak)', fontWeight: 600, width: '100%' }}>
                 Peak / SS:
               </span>
-              <span>{cursors.peakStart.toFixed(4)}s → {cursors.peakEnd.toFixed(4)}s</span>
+              <span className="num">{cursors.peakStart.toFixed(4)}s → {cursors.peakEnd.toFixed(4)}s</span>
               <label style={{
                 display: 'flex', flexDirection: 'column', gap: 3,
-                width: '100%', marginTop: 4, fontFamily: 'var(--font-ui)',
+                width: '100%', marginTop: 4,
               }}>
                 <span style={{ color: 'var(--text-muted)' }}>Y metric:</span>
                 <select
@@ -586,7 +585,7 @@ export function IVCurveWindow({
             {runMode === 'range' && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 6,
                 fontSize: 'var(--font-size-label)', color: 'var(--text-muted)' }}>
-                <span>from</span>
+                <span>From</span>
                 <NumInput value={sweepFrom} step={1} min={1} max={Math.max(1, totalSweeps)}
                   onChange={(v) => setSweepFrom(Math.max(1, Math.round(v)))} style={{ width: 60 }} />
                 <span>to</span>
@@ -598,7 +597,7 @@ export function IVCurveWindow({
             {runMode === 'one' && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 6,
                 fontSize: 'var(--font-size-label)', color: 'var(--text-muted)' }}>
-                <span>sweep</span>
+                <span>Sweep</span>
                 <NumInput value={sweepOne} step={1} min={1} max={Math.max(1, totalSweeps)}
                   onChange={(v) => setSweepOne(Math.max(1, Math.round(v)))} style={{ width: 60 }} />
                 <span style={{ marginLeft: 'auto' }}>/ {totalSweeps || '—'} · appends</span>
@@ -623,17 +622,12 @@ export function IVCurveWindow({
             </div>
           </div>
           {error && (
-            <div style={{
+            <div className="notice notice-error" style={{
               flexShrink: 0,
-              padding: '6px 10px',
-              background: 'var(--bg-error, #5c1b1b)',
-              color: '#fff', borderRadius: 3,
               display: 'flex', alignItems: 'center', gap: 8,
-              fontSize: 'var(--font-size-xs)',
             }}>
               <span style={{ flex: 1 }}>⚠ {error}</span>
-              <button className="btn" onClick={() => setError(null)}
-                style={{ padding: '1px 6px', fontSize: 'var(--font-size-label)' }}>dismiss</button>
+              <button className="btn btn-sm" onClick={() => setError(null)}>Dismiss</button>
             </div>
           )}
         </div>{/* close LEFT panel */}
@@ -762,7 +756,7 @@ export function IVCurveWindow({
               flexShrink: 0,
               fontSize: 'var(--font-size-label)',
               color: 'var(--text-muted)',
-              fontFamily: 'var(--font-mono)',
+              fontVariantNumeric: 'tabular-nums',
               background: 'var(--bg-primary)',
               padding: '4px 8px',
               borderRadius: 3,
@@ -843,6 +837,7 @@ function IVPlot({
   onSelectIdx: (idx: number) => void
   fit: { slope: number; intercept: number; r2: number; rInMOhm: number | null } | null
 }) {
+  const themeKey = useThemeKey()
   const containerRef = useRef<HTMLDivElement>(null)
   const plotRef = useRef<uPlot | null>(null)
   const { onContextMenu, menu } = usePlotMenu({
@@ -925,16 +920,16 @@ function IVPlot({
           grid: { stroke: cssVar('--chart-grid'), width: 1 },
           ticks: { stroke: cssVar('--chart-tick'), width: 1 },
           label: xLabel, labelSize: 14,
-          font: `${cssVar('--font-size-label')} ${cssVar('--font-mono')}`,
-          labelFont: `${cssVar('--font-size-sm')} ${cssVar('--font-mono')}`,
+          font: `${cssVar('--font-size-label')} ${cssVar('--font-ui')}`,
+          labelFont: `${cssVar('--font-size-sm')} ${cssVar('--font-ui')}`,
         },
         {
           stroke: cssVar('--chart-axis'),
           grid: { stroke: cssVar('--chart-grid'), width: 1 },
           ticks: { stroke: cssVar('--chart-tick'), width: 1 },
           label: yLabel, labelSize: 14,
-          font: `${cssVar('--font-size-label')} ${cssVar('--font-mono')}`,
-          labelFont: `${cssVar('--font-size-sm')} ${cssVar('--font-mono')}`,
+          font: `${cssVar('--font-size-label')} ${cssVar('--font-ui')}`,
+          labelFont: `${cssVar('--font-size-sm')} ${cssVar('--font-ui')}`,
         },
       ],
       cursor: { drag: { x: false, y: false } },
@@ -996,7 +991,7 @@ function IVPlot({
     // path; the rebuild is cheap (a handful of points), so the
     // occasional extra fire on selection changes is fine.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entry])
+  }, [entry, themeKey])
 
   // Re-fit size synchronously on splitter drag.
   useEffect(() => {
@@ -1064,7 +1059,7 @@ function drawSelectedMarker(u: uPlot, selectedIdx: number | null) {
   ctx.beginPath()
   ctx.arc(px, py, 8, 0, Math.PI * 2)
   ctx.fillStyle = cssVar('--accent')
-  ctx.strokeStyle = '#fff'
+  ctx.strokeStyle = cssVar('--marker-outline')
   ctx.lineWidth = 2
   ctx.fill()
   ctx.stroke()
@@ -1119,7 +1114,7 @@ function IVTable({
     }}>
       <table style={{
         width: '100%', borderCollapse: 'collapse',
-        fontSize: 'var(--font-size-label)', fontFamily: 'var(--font-mono)',
+        fontSize: 'var(--font-size-label)',
       }}>
         <thead>
           <tr style={{ background: 'var(--bg-secondary)', textAlign: 'left', position: 'sticky', top: 0 }}>
@@ -1149,11 +1144,10 @@ function IVTable({
                 })}
                 style={{
                   background: sel.isSelected(i)
-                    ? 'var(--accent-muted, rgba(100,181,246,0.30))'
+                    ? 'var(--accent-muted)'
                     : i === entry.selectedIdx
-                      ? 'var(--bg-selected, rgba(100,181,246,0.2))'
+                      ? 'var(--bg-selected)'
                       : 'transparent',
-                  cursor: 'pointer',
                   borderTop: '1px solid var(--border)',
                 }}
               >
@@ -1220,6 +1214,7 @@ function TraceMiniViewer({
    *  overlay viewers mirror the x range. Same pattern as AP. */
   onXRangeChange?: (xMin: number, xMax: number) => void
 }) {
+  const themeKey = useThemeKey()
   const containerRef = useRef<HTMLDivElement>(null)
   const plotRef = useRef<uPlot | null>(null)
   const { onContextMenu, menu } = usePlotMenu({
@@ -1343,13 +1338,13 @@ function TraceMiniViewer({
           { stroke: cssVar('--chart-axis'), grid: { stroke: cssVar('--chart-grid'), width: 1 },
             ticks: { stroke: cssVar('--chart-tick'), width: 1 },
             label: 'Time (s)', labelSize: 14,
-            font: `${cssVar('--font-size-xs')} ${cssVar('--font-mono')}`,
-            labelFont: `${cssVar('--font-size-sm')} ${cssVar('--font-mono')}` },
+            font: `${cssVar('--font-size-xs')} ${cssVar('--font-ui')}`,
+            labelFont: `${cssVar('--font-size-sm')} ${cssVar('--font-ui')}` },
           { stroke: cssVar('--chart-axis'), grid: { stroke: cssVar('--chart-grid'), width: 1 },
             ticks: { stroke: cssVar('--chart-tick'), width: 1 },
             label: traceUnits || '', labelSize: 14,
-            font: `${cssVar('--font-size-xs')} ${cssVar('--font-mono')}`,
-            labelFont: `${cssVar('--font-size-sm')} ${cssVar('--font-mono')}` },
+            font: `${cssVar('--font-size-xs')} ${cssVar('--font-ui')}`,
+            labelFont: `${cssVar('--font-size-sm')} ${cssVar('--font-ui')}` },
         ],
         cursor: { drag: { x: false, y: false } },
         series: [
@@ -1543,7 +1538,7 @@ function TraceMiniViewer({
       plotRef.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [traceTime, traceValues])
+  }, [traceTime, traceValues, themeKey])
 
   // Redraw bands on cursor / theme changes.
   useEffect(() => { plotRef.current?.redraw() }, [cursors])
@@ -1578,14 +1573,13 @@ function TraceMiniViewer({
             the Run controls — the dedicated "Run sweep N" button
             here was redundant with that toggle + the Run button, so
             it's been removed to match the other analysis windows. */}
-        <span style={{ minWidth: 58, textAlign: 'center' }}>
+        <span style={{ minWidth: 58, textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>
           Sweep {totalSweeps > 0 ? previewSweep + 1 : '—'}
         </span>
         {isExcluded && (
-          <span style={{
-            fontSize: 'var(--font-size-label)', fontWeight: 600,
-            color: '#fff', background: '#e65100',
-            padding: '1px 6px', borderRadius: 3,
+          <span className="notice notice-warning" style={{
+            fontSize: 'var(--font-size-xs)', fontWeight: 600,
+            padding: '1px 8px', borderRadius: 'var(--radius-sm)', lineHeight: 1.4,
           }}>⊘ Excluded</span>
         )}
         <label style={{
@@ -1628,7 +1622,7 @@ function TraceMiniViewer({
         borderTop: '1px solid var(--border)',
         flexShrink: 0,
       }}>
-        scroll = zoom X · ⌥ scroll = zoom Y · drag empty = pan · drag band = move · drag edge = resize
+        Scroll = zoom X · ⌥ scroll = zoom Y · drag empty = pan · drag band = move · drag edge = resize
       </div>
     </div>
   )
@@ -1653,10 +1647,8 @@ function ResultsTabs({
       flex: 1, display: 'flex', flexDirection: 'column',
       minHeight: 0, overflow: 'hidden',
     }}>
-      <div style={{
-        display: 'flex', alignItems: 'stretch',
-        borderBottom: '1px solid var(--border)',
-        background: 'var(--bg-secondary)', flexShrink: 0,
+      <div className="segmented" style={{
+        alignSelf: 'flex-start', flexShrink: 0, marginBottom: 6,
       }}>
         {([
           { id: 'iv' as const, label: 'I-V curve' },
@@ -1667,19 +1659,9 @@ function ResultsTabs({
             <button
               key={t.id}
               type="button"
+              className={active ? 'active' : undefined}
               onClick={() => setActiveTab(t.id)}
-              style={{
-                cursor: 'pointer',
-                userSelect: 'none',
-                padding: '6px 14px',
-                border: 'none',
-                borderBottom: active ? '3px solid var(--accent)' : '3px solid transparent',
-                background: active ? 'var(--bg-primary)' : 'transparent',
-                color: active ? 'var(--accent)' : 'var(--text-muted)',
-                fontSize: 'var(--font-size-sm)',
-                fontFamily: 'var(--font-ui)',
-                fontWeight: active ? 700 : 400,
-              }}
+              style={{ flex: 'none', userSelect: 'none', padding: '0 14px', whiteSpace: 'nowrap' }}
             >
               {t.label}
               {pointCount > 0 && t.id === 'iv' && (

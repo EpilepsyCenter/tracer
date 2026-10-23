@@ -134,9 +134,9 @@ export function TagChipInput({
         overflowX: inline ? 'auto' : undefined,
         gap: 5, alignItems: 'center',
         padding: '4px 8px',
-        border: '1px solid var(--border)',
-        borderRadius: 3,
-        background: disabled ? 'var(--bg-secondary)' : 'var(--bg-primary)',
+        border: '1px solid var(--border-control)',
+        borderRadius: 'var(--radius)',
+        background: disabled ? 'var(--bg-secondary)' : 'var(--bg-field)',
         minHeight: 32,
         cursor: 'text',
         position: 'relative',
@@ -150,9 +150,8 @@ export function TagChipInput({
             display: 'inline-flex', alignItems: 'center', gap: 3,
             padding: '1px 4px 1px 6px',
             borderRadius: 10,
-            background: 'var(--accent-dim, rgba(100,150,200,0.18))',
-            fontFamily: 'var(--font-mono)',
-            fontSize: 'var(--font-size-base)',
+            background: 'var(--accent-muted)',
+            fontSize: 'var(--font-size-sm)',
             whiteSpace: 'nowrap',
             color: 'var(--text-primary)',
           }}>
@@ -163,7 +162,6 @@ export function TagChipInput({
             title="Remove tag"
             style={{
               background: 'transparent', border: 'none',
-              cursor: disabled ? 'default' : 'pointer',
               color: 'var(--text-muted)',
               padding: 0, marginLeft: 2,
               fontSize: 14, lineHeight: 1,
@@ -198,11 +196,10 @@ export function TagChipInput({
         }}
         style={{
           flex: '1 1 80px', minWidth: 60,
-          border: 'none', outline: 'none',
+          border: 'none', outline: 'none', boxShadow: 'none',
           background: 'transparent',
           color: 'var(--text-primary)',
-          fontFamily: 'var(--font-mono)',
-          fontSize: 'var(--font-size-base)',
+          fontSize: 'var(--font-size-sm)',
           padding: '3px 0',
         }}
       />
@@ -218,23 +215,25 @@ export function TagChipInput({
           top: dropdownPos.top,
           width: dropdownPos.width,
           zIndex: 9999,
-          background: 'var(--bg-primary)',
-          border: '1px solid var(--border)',
-          borderRadius: 3,
+          background: 'var(--bg-field)',
+          borderRadius: 'var(--radius-md)',
           fontSize: 'var(--font-size-base)',
-          fontFamily: 'var(--font-mono)',
-          boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+          fontFamily: 'var(--font-ui)',
+          boxShadow: 'var(--shadow-popover)',
+          padding: 5,
           maxHeight: 240,
           overflowY: 'auto',
         }}>
           {ranked.map((s, i) => (
             <div
               key={s}
+              className="analysis-menu-item"
               onMouseDown={(e) => { e.preventDefault(); commit(s) }}
               style={{
-                padding: '5px 10px',
-                cursor: 'pointer',
-                background: i === highlight ? 'var(--bg-tertiary)' : 'transparent',
+                padding: '4px 8px',
+                borderRadius: 'var(--radius-sm)',
+                background: i === highlight ? 'var(--accent)' : 'transparent',
+                color: i === highlight ? 'var(--on-accent)' : 'var(--text-primary)',
               }}>{s}</div>
           ))}
         </div>,

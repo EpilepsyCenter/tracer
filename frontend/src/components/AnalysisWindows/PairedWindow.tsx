@@ -5,7 +5,7 @@ import {
   PairedData, PairedFormState, PairedManualEdits, PairedTrial,
   defaultPairedForm, useAppStore,
 } from '../../stores/appStore'
-import { useThemeStore } from '../../stores/themeStore'
+import { useThemeStore, useThemeKey } from '../../stores/themeStore'
 import { NumInput } from '../common/NumInput'
 import { sampleTraceYAt } from '../../utils/sampleTraceY'
 import { useRowSelection, buildTSV, copyTextToClipboard } from '../../utils/rowSelection'
@@ -31,6 +31,24 @@ function cssVar(name: string): string {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#888'
 }
 
+/** Add an alpha channel to a resolved colour (theme oklch() tokens,
+ *  or a user-picked hex / rgb() trace colour), for canvas fills that
+ *  need a tint. */
+function withAlpha(color: string, alpha: number): string {
+  const fn = /^(oklch|oklab|lch|lab|rgb|hsl)a?\(([^/)]*)\)$/.exec(color)
+  if (fn) {
+    const args = fn[2].trim()
+    return args.includes(',') ? `${fn[1]}a(${args}, ${alpha})` : `${fn[1]}(${args} / ${alpha})`
+  }
+  const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(color)
+  if (hex) {
+    const h = hex[1].length === 3 ? hex[1].split('').map((c) => c + c).join('') : hex[1]
+    const n = parseInt(h, 16)
+    return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`
+  }
+  return color
+}
+
 // ---------------------------------------------------------------------------
 // Main window
 // ---------------------------------------------------------------------------
@@ -47,7 +65,6 @@ export function PairedWindow({
     pairedAnalyses, pairedForm, setPairedAnalysis, clearPairedAnalysis, setPairedForm,
   } = useAppStore()
   const theme = useThemeStore((s) => s.theme)
-  const palette = useThemeStore((s) => s.palette)
   const fontSize = useThemeStore((s) => s.fontSize)
   // Subscribe to traceColors so per-slot overrides set in the
   // global Settings panel re-render the viewer (cssVar() resolves
@@ -55,7 +72,7 @@ export function PairedWindow({
   // when the user picks a new colour). Reference everything to
   // keep the subscriptions live.
   const traceColors = useThemeStore((s) => s.traceColors)
-  void theme; void fontSize; void palette; void traceColors
+  void theme; void fontSize; void traceColors
 
   // ---- Selectors ----
   const [group, setGroup] = useState(mainGroup ?? 0)
@@ -616,7 +633,7 @@ export function PairedWindow({
             onClick={() => setSweep(Math.max(0, sweep - 1))} title="Prev sweep">◀</button>
           <span style={{
             display: 'inline-flex', minWidth: 60, justifyContent: 'center',
-            color: 'var(--text-muted)',
+            color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums',
           }}>Sweep {sweepLabel}</span>
           <button className="btn" style={{ padding: '2px 8px' }}
             disabled={totalSweeps === 0 || sweep >= totalSweeps - 1}
@@ -750,8 +767,7 @@ export function PairedWindow({
               </button>
             </div>
             {runError && (
-              <div style={{
-                color: '#e57373', fontSize: 'var(--font-size-label)',
+              <div className="notice notice-error" style={{
                 whiteSpace: 'pre-wrap',
               }}>{runError}</div>
             )}
@@ -783,8 +799,8 @@ export function PairedWindow({
             <OverlayViewer
               preData={preData}
               postData={postData}
-              preColor={cssVar('--trace-color-1') || '#64b5f6'}
-              postColor={cssVar('--trace-color-2') || '#81c784'}
+              preColor={cssVar('--trace-color-1')}
+              postColor={cssVar('--trace-color-2')}
               preUnits={channels[preTrace]?.units ?? ''}
               postUnits={channels[postTrace]?.units ?? ''}
               xRange={xRange}
@@ -828,38 +844,27 @@ export function PairedWindow({
             background: 'var(--border)',
           }} />
 
-          {/* Tab strip — AP-style: flex bar with a hairline bottom
-              border that the active tab "joins" via a 3 px accent
-              underline + matching bg-primary tone. */}
+          {/* Tab strip — segmented control in a hairline-bordered bar. */}
           <div style={{
-            flexShrink: 0, display: 'flex', gap: 2,
+            flexShrink: 0, display: 'flex',
             borderBottom: '1px solid var(--border)',
-            alignItems: 'flex-end',
-            padding: '0 8px',
+            padding: '6px 8px',
             background: 'var(--bg-secondary)',
           }}>
-            {(['trials', 'statistics', 'sta'] as Tab[]).map((t) => {
-              const label = t === 'trials' ? 'Trials'
-                : t === 'statistics' ? 'Statistics'
-                : 'STA / Average'
-              const active = tab === t
-              return (
-                <button key={t} className="btn"
-                  onClick={() => setTab(t)}
-                  style={{
-                    padding: '8px 22px',
-                    borderBottomLeftRadius: 0,
-                    borderBottomRightRadius: 0,
-                    borderBottom: active ? '3px solid var(--accent, #4a90e2)' : '3px solid transparent',
-                    marginBottom: -1,
-                    background: active ? 'var(--bg-primary)' : 'transparent',
-                    color: active ? 'var(--accent, #4a90e2)' : 'var(--text-muted)',
-                    fontWeight: active ? 700 : 500,
-                    fontSize: 'var(--font-size-sm)',
-                    fontFamily: 'var(--font-ui)',
-                  }}>{label}</button>
-              )
-            })}
+            <div className="segmented">
+              {(['trials', 'statistics', 'sta'] as Tab[]).map((t) => {
+                const label = t === 'trials' ? 'Trials'
+                  : t === 'statistics' ? 'Statistics'
+                  : 'STA / Average'
+                const active = tab === t
+                return (
+                  <button key={t}
+                    className={active ? 'active' : undefined}
+                    onClick={() => setTab(t)}
+                    style={{ flex: 'none', padding: '0 18px', whiteSpace: 'nowrap' }}>{label}</button>
+                )
+              })}
+            </div>
           </div>
 
           {/* Result region — absorbs whatever's below the splitter. */}
@@ -923,12 +928,10 @@ function Selector({
 
 function ParamGrid({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{
+    <div className="section-card" style={{
       display: 'grid',
       gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-      gap: 8, padding: 8,
-      border: '1px solid var(--border)', borderRadius: 4,
-      background: 'var(--bg-primary)',
+      gap: 8,
     }}>
       {children}
     </div>
@@ -1033,8 +1036,6 @@ function SubHeader({ children }: { children: React.ReactNode }) {
       fontSize: 'var(--font-size-xs)',
       color: 'var(--text-muted)',
       fontWeight: 600,
-      textTransform: 'uppercase',
-      letterSpacing: 0.4,
       paddingTop: 4,
       borderTop: '1px solid var(--border)',
       marginTop: 4,
@@ -1341,10 +1342,12 @@ function LatencyCard({
 // Mini-viewer (uPlot, rebuild-on-data, shared X via parent ref)
 // ---------------------------------------------------------------------------
 
-const BOUND_COLOR = '#64b5f6'    // analysis-bounds band (post viewer)
-const PRE_MARKER_COLOR = '#ffb74d'
-const SUCCESS_COLOR = '#66bb6a'
-const FAILURE_COLOR = '#e57373'
+// Overlay colours as theme-token names, resolved with cssVar() at draw
+// time so theme switches apply.
+const BOUND_COLOR = '--marker-bounds'      // analysis-bounds band (post viewer)
+const PRE_MARKER_COLOR = '--marker-manual' // pre events + pre bounds band
+const SUCCESS_COLOR = '--success'
+const FAILURE_COLOR = '--error'
 const MARKER_RADIUS = 5          // matches AP / Bursts spike-marker size
 const MARKER_RING_RADIUS = 9     // for manually-added markers
 const BAND_EDGE_PX = 6           // grab tolerance on bounds edges
@@ -1366,7 +1369,7 @@ const DRAG_THRESHOLD_PX = 3      // click-vs-drag
  * - X axis values are stored in seconds; the bottom axis displays them
  *   as milliseconds via the ``values:`` formatter. ``time: false`` on
  *   the X scale stops uPlot from formatting them as Unix dates.
- * - Marker dots match AP / Bursts: 5 px radius, 1.2 px white outline;
+ * - Marker dots match AP / Bursts: 5 px radius, 1.2 px outline;
  *   manual ones get a 9 px ring. Pre-event dots ride the ``y`` scale,
  *   post-peak dots ride ``y_post`` so they sit on the right-axis trace.
  *
@@ -1418,6 +1421,7 @@ function OverlayViewer({
    *  reclassified to a failure (or back to its auto state). */
   onTogglePostFailure?: (preT: number) => void
 }) {
+  const themeKey = useThemeKey()
   const containerRef = useRef<HTMLDivElement>(null)
   const plotRef = useRef<uPlot | null>(null)
   // Y ranges per scale (left = pre, right = post). X is shared with
@@ -1559,21 +1563,21 @@ function OverlayViewer({
           ticks: { stroke: cssVar('--chart-tick'), width: 1 },
           values: (_u, splits) => splits.map((s) => fmtMs(s * 1000)),
           label: 'Time (ms)', labelSize: 22,
-          font: `${cssVar('--font-size-label')} ${cssVar('--font-mono')}`,
+          font: `${cssVar('--font-size-label')} ${cssVar('--font-ui')}`,
           labelFont: `${cssVar('--font-size-sm')} ${cssVar('--font-ui')}` },
         { stroke: preColor,
           grid: { stroke: cssVar('--chart-grid'), width: 1 },
           ticks: { stroke: cssVar('--chart-tick'), width: 1 },
           label: `Pre (${preUnits || 'Vm'})`, labelSize: 22,
           scale: 'y',
-          font: `${cssVar('--font-size-label')} ${cssVar('--font-mono')}`,
+          font: `${cssVar('--font-size-label')} ${cssVar('--font-ui')}`,
           labelFont: `${cssVar('--font-size-sm')} ${cssVar('--font-ui')}` },
         { stroke: postColor,
           grid: { show: false },
           ticks: { stroke: cssVar('--chart-tick'), width: 1 },
           label: `Post (${postUnits || 'I'})`, labelSize: 22,
           scale: 'y_post', side: 1,
-          font: `${cssVar('--font-size-label')} ${cssVar('--font-mono')}`,
+          font: `${cssVar('--font-size-label')} ${cssVar('--font-ui')}`,
           labelFont: `${cssVar('--font-size-sm')} ${cssVar('--font-ui')}` },
       ],
       hooks: {
@@ -1635,7 +1639,7 @@ function OverlayViewer({
       if (plotRef.current) { plotRef.current.destroy(); plotRef.current = null }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [preData, postData, preColor, postColor, preUnits, postUnits])
+  }, [preData, postData, preColor, postColor, preUnits, postUnits, themeKey])
 
   function drawOverlay(u: uPlot) {
     const ctx = u.ctx
@@ -1649,10 +1653,10 @@ function OverlayViewer({
       const px1 = u.valToPos(x1, 'x', true)
       ctx.save()
       ctx.globalAlpha = 0.14
-      ctx.fillStyle = fill
+      ctx.fillStyle = cssVar(fill)
       ctx.fillRect(Math.min(px0, px1), top, Math.abs(px1 - px0), bottom - top)
       ctx.globalAlpha = 1
-      ctx.fillStyle = fill
+      ctx.fillStyle = cssVar(fill)
       ctx.font = `bold ${10 * dpr}px ${cssVar('--font-mono')}`
       ctx.fillText(label, Math.min(px0, px1) + 2 * dpr, top + 12 * dpr)
       ctx.restore()
@@ -1661,14 +1665,14 @@ function OverlayViewer({
       const b = preBoundsRef.current
       const xMax = u.scales.x.max ?? b.start
       const effEnd = b.end > b.start ? b.end : xMax
-      drawBand(b.start, effEnd, '#ffb74d', 'pre bounds')
+      drawBand(b.start, effEnd, PRE_MARKER_COLOR, 'Pre bounds')
     }
     if (showPostBoundsRef.current) {
       const b = postBoundsRef.current
       if (b.start != null) {
         const xMax = u.scales.x.max ?? b.start
         const effEnd = b.end != null ? b.end : xMax
-        drawBand(b.start, effEnd, '#64b5f6', 'post-search bounds')
+        drawBand(b.start, effEnd, BOUND_COLOR, 'Post-search bounds')
       }
     }
 
@@ -1676,14 +1680,15 @@ function OverlayViewer({
     // post-peak dots. ``scaleKey`` picks which Y axis the marker's
     // y value is positioned against.
     const dot = (px: number, py: number, fill: string, ring: boolean) => {
+      const color = cssVar(fill)
       ctx.beginPath()
       ctx.arc(px, py, MARKER_RADIUS, 0, Math.PI * 2)
-      ctx.fillStyle = fill; ctx.fill()
-      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.2; ctx.stroke()
+      ctx.fillStyle = color; ctx.fill()
+      ctx.strokeStyle = cssVar('--marker-outline'); ctx.lineWidth = 1.2; ctx.stroke()
       if (ring) {
         ctx.beginPath()
         ctx.arc(px, py, MARKER_RING_RADIUS, 0, Math.PI * 2)
-        ctx.strokeStyle = fill; ctx.lineWidth = 1.5; ctx.stroke()
+        ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.stroke()
       }
     }
     // Detection markers (pre-event peaks) — linearly interpolate
@@ -1708,7 +1713,7 @@ function OverlayViewer({
         if (primed?.side === 'pre' && Math.abs(primed.preT - m.preT) <= tolPrime) {
           ctx.beginPath()
           ctx.arc(px, py, MARKER_RING_RADIUS + 2, 0, Math.PI * 2)
-          ctx.strokeStyle = '#64b5f6'; ctx.lineWidth = 2; ctx.stroke()
+          ctx.strokeStyle = cssVar('--accent'); ctx.lineWidth = 2; ctx.stroke()
         }
       }
       ctx.restore()
@@ -1724,13 +1729,13 @@ function OverlayViewer({
         const px = u.valToPos(m.t, 'x', true)
         const py = u.valToPos(m.y, 'y_post', true)
         const fill = m.postManualFailure
-          ? '#9e9e9e'
+          ? '--text-muted'
           : (m.success ? SUCCESS_COLOR : FAILURE_COLOR)
         dot(px, py, fill, false)
         if (primed?.side === 'post' && Math.abs(primed.preT - m.preT) <= tolPrime) {
           ctx.beginPath()
           ctx.arc(px, py, MARKER_RING_RADIUS + 2, 0, Math.PI * 2)
-          ctx.strokeStyle = '#64b5f6'; ctx.lineWidth = 2; ctx.stroke()
+          ctx.strokeStyle = cssVar('--accent'); ctx.lineWidth = 2; ctx.stroke()
         }
       }
       ctx.restore()
@@ -2212,7 +2217,7 @@ function OverlayViewer({
     }}>
       <div style={{
         padding: '3px 8px', fontSize: 'var(--font-size-label)',
-        color: 'var(--text-muted)', fontFamily: 'var(--font-mono)',
+        color: 'var(--text-muted)',
         borderBottom: '1px solid var(--border)',
         display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center',
       }}>
@@ -2239,7 +2244,7 @@ function OverlayViewer({
         background: 'var(--bg-secondary)',
         borderTop: '1px solid var(--border)',
       }}>
-        scroll = zoom X · ⌥ scroll = zoom Y (nearest trace) · drag = pan X + nearest Y · drag bounds edge to resize · double-click = reset
+        Scroll = zoom X · ⌥ scroll = zoom Y (nearest trace) · drag = pan X + nearest Y · drag bounds edge to resize · double-click = reset
       </div>
     </div>
   )
@@ -2284,19 +2289,15 @@ function ChannelSwatch({ color, label }: { color: string; label: string }) {
 }
 
 /** Tiny inline legend matching the AP / Events marker convention —
- *  small coloured dots with one-word labels, mono font, muted text. */
+ *  small coloured dots with one-word labels, muted text. */
 function PairedMarkerLegend({ role }: { role: 'pre' | 'post' | 'overlay' }) {
+  const pre = { color: `var(${PRE_MARKER_COLOR})`, label: 'Pre event' }
+  const success = { color: `var(${SUCCESS_COLOR})`, label: 'Success' }
+  const failure = { color: `var(${FAILURE_COLOR})`, label: 'Failure' }
   const items =
-    role === 'pre' ? [{ color: '#ffb74d', label: 'pre event' }]
-    : role === 'post' ? [
-      { color: '#66bb6a', label: 'success' },
-      { color: '#e57373', label: 'failure' },
-    ]
-    : [
-      { color: '#ffb74d', label: 'pre event' },
-      { color: '#66bb6a', label: 'success' },
-      { color: '#e57373', label: 'failure' },
-    ]
+    role === 'pre' ? [pre]
+    : role === 'post' ? [success, failure]
+    : [pre, success, failure]
   return (
     <span style={{ display: 'inline-flex', gap: 10, alignItems: 'center' }}>
       {items.map((it) => (
@@ -2456,7 +2457,7 @@ function TrialsTab({ data }: { data: PairedData | null }) {
     }}>
       <table style={{
         width: '100%', borderCollapse: 'collapse',
-        fontSize: 'var(--font-size-label)', fontFamily: 'var(--font-mono)',
+        fontSize: 'var(--font-size-label)',
       }}>
         <thead>
           <tr style={{
@@ -2475,16 +2476,15 @@ function TrialsTab({ data }: { data: PairedData | null }) {
               })}
               style={{
                 borderTop: '1px solid var(--border)',
-                cursor: 'pointer',
                 background: sel.isSelected(i)
-                  ? 'var(--accent-muted, rgba(100,181,246,0.30))'
-                  : t.success ? 'transparent' : 'rgba(229,115,115,0.08)',
+                  ? 'var(--accent-muted)'
+                  : t.success ? 'transparent' : 'color-mix(in oklab, var(--error) 8%, transparent)',
               }}>
               <Td>{t.sweep + 1}</Td>
               <Td>{t.trialIdx + 1}{t.manual ? '*' : ''}</Td>
               <Td>{fmt(t.preTS, 4)}</Td>
               <Td>{fmt(t.amplitude)}</Td>
-              <Td style={{ color: t.success ? '#66bb6a' : '#e57373' }}>
+              <Td style={{ color: t.success ? 'var(--success)' : 'var(--error)' }}>
                 {t.success ? 'yes' : 'no'}
               </Td>
               <Td>{fmt(t.latencyMs)}</Td>
@@ -2543,7 +2543,6 @@ function StatisticsTab({
         <div style={{
           padding: '4px 10px', fontSize: 'var(--font-size-label)',
           fontWeight: 600, color: 'var(--text-muted)',
-          textTransform: 'uppercase', letterSpacing: 0.4,
           borderBottom: '1px solid var(--border)',
           background: 'var(--bg-secondary)',
           display: 'flex', alignItems: 'center', gap: 8,
@@ -2559,21 +2558,21 @@ function StatisticsTab({
             style={{
               marginLeft: 'auto',
               fontSize: 'var(--font-size-xs)',
-              padding: '1px 8px', textTransform: 'none', letterSpacing: 0,
+              padding: '1px 8px',
             }}>
             Copy CSV
           </button>
         </div>
         <table style={{
           width: '100%', borderCollapse: 'collapse',
-          fontSize: 'var(--font-size-label)', fontFamily: 'var(--font-mono)',
+          fontSize: 'var(--font-size-label)',
         }}>
           <tbody>
             {items.map((it) => (
               <tr key={it.label} style={{ borderTop: '1px solid var(--border)' }}>
                 <td style={{
                   color: 'var(--text-muted)', padding: '3px 10px',
-                  whiteSpace: 'nowrap',
+                  whiteSpace: 'nowrap', fontFamily: 'var(--font-ui)',
                 }}>{it.label}</td>
                 <td style={{ padding: '3px 10px', textAlign: 'right' }}>{it.value}</td>
               </tr>
@@ -2589,7 +2588,6 @@ function StatisticsTab({
         <div style={{
           padding: '4px 10px', fontSize: 'var(--font-size-label)',
           fontWeight: 600, color: 'var(--text-muted)',
-          textTransform: 'uppercase', letterSpacing: 0.4,
           borderBottom: '1px solid var(--border)',
           background: 'var(--bg-secondary)',
           display: 'flex', alignItems: 'center', gap: 8,
@@ -2609,7 +2607,7 @@ function StatisticsTab({
             style={{
               marginLeft: 'auto',
               fontSize: 'var(--font-size-xs)',
-              padding: '1px 8px', textTransform: 'none', letterSpacing: 0,
+              padding: '1px 8px',
             }}>
             Copy CSV
           </button>
@@ -2624,14 +2622,14 @@ function StatisticsTab({
         ) : (
           <table style={{
             width: '100%', borderCollapse: 'collapse',
-            fontSize: 'var(--font-size-label)', fontFamily: 'var(--font-mono)',
+            fontSize: 'var(--font-size-label)',
           }}>
             <thead>
               <tr style={{
                 background: 'var(--bg-secondary)', textAlign: 'left',
                 position: 'sticky', top: 0,
               }}>
-                <Th>Pulse N</Th><Th>ratio (N / 1)</Th><Th>n sweeps</Th>
+                <Th>Pulse N</Th><Th>Ratio (N / 1)</Th><Th>n sweeps</Th>
               </tr>
             </thead>
             <tbody>
@@ -2658,7 +2656,6 @@ function StatisticsTab({
         <div style={{
           padding: '4px 10px', fontSize: 'var(--font-size-label)',
           fontWeight: 600, color: 'var(--text-muted)',
-          textTransform: 'uppercase', letterSpacing: 0.4,
           borderBottom: '1px solid var(--border)',
           background: 'var(--bg-secondary)',
         }}>Trial sequence</div>
@@ -2672,6 +2669,7 @@ function StatisticsTab({
  *  series. Two scatter series (successes blue, failures red) drawn
  *  as points only. Reveals rundown / wash-in / drug effects. */
 function TrialSequencePlot({ trials }: { trials: PairedTrial[] }) {
+  const themeKey = useThemeKey()
   const containerRef = useRef<HTMLDivElement>(null)
   const plotRef = useRef<uPlot | null>(null)
   const menu = usePlotMenu({
@@ -2705,28 +2703,28 @@ function TrialSequencePlot({ trials }: { trials: PairedTrial[] }) {
           grid: { stroke: cssVar('--chart-grid'), width: 1 },
           ticks: { stroke: cssVar('--chart-tick'), width: 1 },
           label: 'Trial #', labelSize: 22,
-          font: `${cssVar('--font-size-label')} ${cssVar('--font-mono')}`,
+          font: `${cssVar('--font-size-label')} ${cssVar('--font-ui')}`,
           labelFont: `${cssVar('--font-size-sm')} ${cssVar('--font-ui')}` },
         { stroke: cssVar('--chart-axis'),
           grid: { stroke: cssVar('--chart-grid'), width: 1 },
           ticks: { stroke: cssVar('--chart-tick'), width: 1 },
-          label: 'amplitude', labelSize: 22,
-          font: `${cssVar('--font-size-label')} ${cssVar('--font-mono')}`,
+          label: 'Amplitude', labelSize: 22,
+          font: `${cssVar('--font-size-label')} ${cssVar('--font-ui')}`,
           labelFont: `${cssVar('--font-size-sm')} ${cssVar('--font-ui')}` },
       ],
       series: [
         {},
-        { stroke: '#64b5f6', width: 0, label: 'successes',
-          points: { show: true, size: 5, stroke: '#64b5f6', fill: '#64b5f6' } },
-        { stroke: '#e57373', width: 0, label: 'failures',
-          points: { show: true, size: 5, stroke: '#e57373', fill: '#e57373' } },
+        { stroke: cssVar('--trace-color-1'), width: 0, label: 'successes',
+          points: { show: true, size: 5, stroke: cssVar('--trace-color-1'), fill: cssVar('--trace-color-1') } },
+        { stroke: cssVar('--error'), width: 0, label: 'failures',
+          points: { show: true, size: 5, stroke: cssVar('--error'), fill: cssVar('--error') } },
       ],
     }
     plotRef.current = new uPlot(opts, [xs, ySucc, yFail] as any, containerRef.current)
     return () => {
       if (plotRef.current) { plotRef.current.destroy(); plotRef.current = null }
     }
-  }, [trials])
+  }, [trials, themeKey])
 
   useEffect(() => {
     const cont = containerRef.current
@@ -2751,6 +2749,7 @@ function TrialSequencePlot({ trials }: { trials: PairedTrial[] }) {
 }
 
 function STATab({ data }: { data: PairedData | null }) {
+  const themeKey = useThemeKey()
   const containerRef = useRef<HTMLDivElement>(null)
   const plotRef = useRef<uPlot | null>(null)
   type SeriesPick = 'all' | 'success' | 'failure'
@@ -2813,14 +2812,14 @@ function STATab({ data }: { data: PairedData | null }) {
         // out on dark backgrounds. uPlot draws series in order, so
         // failures (0.5) paint first and successes (0.6) layer on
         // top, with the bold mean drawn last.
-        stroke: r.success ? '#64b5f6' : '#e57373',
+        stroke: r.success ? cssVar('--trace-color-1') : cssVar('--error'),
         alpha: r.success ? 0.6 : 0.5,
         width: 1, points: { show: false },
       } as any)
       overlayValues.push(r.values)
     }
     series.push({
-      stroke: '#1976d2', width: 2.0,
+      stroke: cssVar('--trace-color-1'), width: 2.0,
       label: `Mean (n=${sta.n})`, points: { show: false },
     })
     // Optional monoexponential decay fit overlay. Drawn AFTER mean
@@ -2832,7 +2831,7 @@ function STATab({ data }: { data: PairedData | null }) {
         sta.fit!.fitCurveMask[i] ? v : null,
       )
       series.push({
-        stroke: '#ffb74d', width: 1.75,
+        stroke: cssVar('--trace-color-3'), width: 1.75,
         dash: [6, 4],
         label: `Fit (τ=${sta.fit.tauDecayMs.toFixed(2)} ms)`,
         points: { show: false },
@@ -2856,20 +2855,20 @@ function STATab({ data }: { data: PairedData | null }) {
       // the upper-SEM (series 1, top of band) and lower-SEM
       // (series 2, bottom of band) curves. Stroke on the boundary
       // series is fully transparent so only the fill shows.
-      bands: [{ series: [1, 2], fill: 'rgba(100,181,246,0.22)' }],
+      bands: [{ series: [1, 2], fill: withAlpha(cssVar('--trace-color-1'), 0.22) }],
       axes: [
         { stroke: cssVar('--chart-axis'),
           grid: { stroke: cssVar('--chart-grid'), width: 1 },
           ticks: { stroke: cssVar('--chart-tick'), width: 1 },
           values: (_u, splits) => splits.map((s) => fmtMs(s * 1000)),
           label: 'Time relative to pre-event (ms)', labelSize: 22,
-          font: `${cssVar('--font-size-label')} ${cssVar('--font-mono')}`,
+          font: `${cssVar('--font-size-label')} ${cssVar('--font-ui')}`,
           labelFont: `${cssVar('--font-size-sm')} ${cssVar('--font-ui')}` },
         { stroke: cssVar('--chart-axis'),
           grid: { stroke: cssVar('--chart-grid'), width: 1 },
           ticks: { stroke: cssVar('--chart-tick'), width: 1 },
           label: 'Post amplitude', labelSize: 22,
-          font: `${cssVar('--font-size-label')} ${cssVar('--font-mono')}`,
+          font: `${cssVar('--font-size-label')} ${cssVar('--font-ui')}`,
           labelFont: `${cssVar('--font-size-sm')} ${cssVar('--font-ui')}` },
       ],
       series,
@@ -2880,7 +2879,7 @@ function STATab({ data }: { data: PairedData | null }) {
     return () => {
       if (plotRef.current) { plotRef.current.destroy(); plotRef.current = null }
     }
-  }, [sta, showOverlay, overlayIncludesFailures, showFit])
+  }, [sta, showOverlay, overlayIncludesFailures, showFit, themeKey])
 
   if (!data) return <Empty msg="Run analysis to see the spike-triggered average." />
   return (
@@ -2888,33 +2887,27 @@ function STATab({ data }: { data: PairedData | null }) {
       padding: 8, display: 'flex', flexDirection: 'column',
       height: '100%', boxSizing: 'border-box',
     }}>
-      {/* Header strip — segmented picker + overlay toggles, mono
-          font, hairline border, same chrome as the viewer header. */}
+      {/* Header strip — segmented picker + overlay toggles, hairline
+          border, same chrome as the viewer header. */}
       <div style={{
         flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10,
         flexWrap: 'wrap',
         padding: '3px 8px',
         fontSize: 'var(--font-size-label)',
-        fontFamily: 'var(--font-mono)', color: 'var(--text-muted)',
+        color: 'var(--text-muted)',
         background: 'var(--bg-secondary)',
         border: '1px solid var(--border)', borderRadius: 4,
       }}>
         <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>STA / Average</span>
-        <span style={{ display: 'inline-flex', gap: 2 }}>
+        <span className="segmented" style={{ display: 'inline-flex' }}>
           {(['all', 'success', 'failure'] as SeriesPick[]).map((k) => {
             const active = seriesPick === k
             const label = k === 'all' ? 'All trials'
               : k === 'success' ? 'Successes only' : 'Failures only'
             return (
-              <button key={k} className="btn" onClick={() => setSeriesPick(k)}
-                style={{
-                  padding: '2px 10px',
-                  fontSize: 'var(--font-size-label)',
-                  background: active ? 'var(--bg-primary)' : 'transparent',
-                  borderColor: active ? 'var(--accent, #4a90e2)' : 'var(--border)',
-                  color: active ? 'var(--accent, #4a90e2)' : 'inherit',
-                  fontWeight: active ? 600 : 400,
-                }}>{label}</button>
+              <button key={k} className={active ? 'active' : undefined}
+                onClick={() => setSeriesPick(k)}
+                style={{ flex: 'none', padding: '0 10px', whiteSpace: 'nowrap' }}>{label}</button>
             )
           })}
         </span>
@@ -2953,7 +2946,7 @@ function STATab({ data }: { data: PairedData | null }) {
             onChange={(e) => setShowFit(e.target.checked)} />
           Show fit
         </label>
-        <span style={{ marginLeft: 'auto' }}>
+        <span style={{ marginLeft: 'auto', fontVariantNumeric: 'tabular-nums' }}>
           {sta?.fit
             ? `n = ${sta.n} · τ = ${sta.fit.tauDecayMs.toFixed(2)} ms · R² = ${sta.fit.r2.toFixed(2)}`
             : (sta ? `n = ${sta.n}` : 'no trials')}

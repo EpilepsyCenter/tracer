@@ -131,8 +131,9 @@ export function TreeNavigator() {
   }
 
   return (
-    <div style={{ fontSize: 'var(--font-size-sm)' }}>
-      <div style={{ padding: '8px 12px 4px', fontSize: 'var(--font-size-xs)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5, color: 'var(--text-muted)' }}>
+    <div role="tree" aria-label={recording.fileName}
+      style={{ fontSize: 'var(--font-size-base)', padding: '0 8px 12px', display: 'flex', flexDirection: 'column', gap: 1 }}>
+      <div title={recording.filePath} style={{ padding: '4px 8px 4px', fontSize: 'var(--font-size-xs)', fontWeight: 600, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         {recording.fileName}
       </div>
 
@@ -141,18 +142,17 @@ export function TreeNavigator() {
           <div
             onClick={() => toggleGroup(group.index)}
             style={{
-              padding: '4px 12px',
-              cursor: 'pointer',
+              height: 24,
+              padding: '0 8px 0 4px',
+              borderRadius: 5,
               display: 'flex',
               alignItems: 'center',
-              gap: 4,
+              gap: 6,
               userSelect: 'none',
             }}
             className="tree-row"
           >
-            <span style={{ fontSize: '0.7em', width: 12, color: 'var(--text-muted)' }}>
-              {expandedGroups.has(group.index) ? '\u25BC' : '\u25B6'}
-            </span>
+            <Chevron open={expandedGroups.has(group.index)} />
             <span style={{ fontWeight: 600 }}>{group.label || `Group ${group.index + 1}`}</span>
             <span style={{ color: 'var(--text-muted)', marginLeft: 'auto', fontSize: 'var(--font-size-label)' }}>
               {group.seriesCount} series
@@ -175,20 +175,19 @@ export function TreeNavigator() {
                   <div
                     onClick={() => handleSeriesClick(group.index, series.index)}
                     style={{
-                      padding: '3px 12px 3px 24px',
-                      cursor: 'pointer',
+                      minHeight: 24,
+                      padding: '0 8px 0 18px',
+                      borderRadius: 5,
                       display: 'flex',
                       alignItems: 'center',
-                      gap: 4,
-                      background: isSelected ? 'var(--bg-surface)' : 'transparent',
-                      borderLeft: `3px solid ${isSelected ? TYPE_COLORS[recType] : 'transparent'}`,
+                      gap: 6,
+                      background: isSelected ? 'var(--bg-active)' : 'transparent',
+                      fontWeight: isSelected ? 600 : 400,
                       userSelect: 'none',
                     }}
                     className="tree-row"
                   >
-                    <span style={{ fontSize: '0.7em', width: 12, color: 'var(--text-muted)' }}>
-                      {isExpanded ? '\u25BC' : '\u25B6'}
-                    </span>
+                    <Chevron open={isExpanded} />
 
                     <span style={{
                       width: 7, height: 7, borderRadius: '50%',
@@ -234,14 +233,11 @@ export function TreeNavigator() {
                                 display: 'inline-block',
                                 padding: '0 4px',
                                 borderRadius: 3,
-                                background: `${b.color}28`,
-                                color: b.color,
-                                fontFamily: 'var(--font-mono)',
-                                fontSize: '0.65em',
-                                fontWeight: 700,
-                                lineHeight: 1.5,
-                                letterSpacing: 0.3,
-                                border: `1px solid ${b.color}55`,
+                                background: 'var(--bg-active)',
+                                color: 'var(--text-secondary)',
+                                fontSize: 10,
+                                fontWeight: 600,
+                                lineHeight: '15px',
                               }}
                             >{b.code}</span>
                           ))}
@@ -268,10 +264,10 @@ export function TreeNavigator() {
                             maxWidth: 120,
                             padding: '0 5px',
                             borderRadius: 8,
-                            background: 'var(--accent-dim, rgba(100,150,200,0.18))',
+                            background: 'color-mix(in oklab, var(--accent) 14%, transparent)',
                             color: 'var(--text-primary)',
-                            fontFamily: 'var(--font-mono)',
-                            fontSize: '0.75em',
+                            fontSize: 11,
+                            fontWeight: 400,
                             lineHeight: 1.4,
                             whiteSpace: 'nowrap',
                             overflow: 'hidden',
@@ -295,10 +291,10 @@ export function TreeNavigator() {
                       <span
                         title={`${selectedList.length} sweep${selectedList.length === 1 ? '' : 's'} selected — click a sweep to clear`}
                         style={{
-                          fontSize: '0.7em', fontWeight: 700,
-                          color: '#1976d2',
-                          padding: '0 4px', borderRadius: 2,
-                          background: 'rgba(33, 150, 243, 0.18)',
+                          fontSize: 11, fontWeight: 600,
+                          color: 'var(--accent)',
+                          padding: '0 5px', borderRadius: 4,
+                          background: 'color-mix(in oklab, var(--accent) 14%, transparent)',
                         }}
                       >
                         {selectedList.length} sel
@@ -313,11 +309,10 @@ export function TreeNavigator() {
                         }}
                         title={`${excludedCount} sweep${excludedCount === 1 ? '' : 's'} excluded — click to restore all`}
                         style={{
-                          fontSize: '0.7em', fontWeight: 700,
-                          color: '#e65100',
-                          padding: '0 4px', borderRadius: 2,
-                          background: 'rgba(255, 152, 0, 0.18)',
-                          cursor: 'pointer',
+                          fontSize: 11, fontWeight: 600,
+                          color: 'var(--warning)',
+                          padding: '0 5px', borderRadius: 4,
+                          background: 'color-mix(in oklab, var(--warning) 16%, transparent)',
                         }}
                       >
                         {excludedCount}⊘
@@ -326,23 +321,24 @@ export function TreeNavigator() {
 
                     {TYPE_LABELS[recType] && (
                       <span style={{
-                        fontSize: '0.75em', fontWeight: 600, color: TYPE_COLORS[recType],
-                        padding: '0 4px', borderRadius: 2,
-                        background: `${TYPE_COLORS[recType]}18`,
+                        fontSize: 10, fontWeight: 600, color: TYPE_COLORS[recType],
+                        padding: '0 4px', borderRadius: 4,
+                        background: `color-mix(in oklab, ${TYPE_COLORS[recType]} 12%, transparent)`,
                       }}>
                         {TYPE_LABELS[recType]}
                       </span>
                     )}
 
-                    <span style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-label)', flexShrink: 0 }}>
-                      {series.sweepCount}sw
+                    <span title={`${series.sweepCount} sweeps`} style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-xs)', fontWeight: 400, fontVariantNumeric: 'tabular-nums', flexShrink: 0, minWidth: 16, textAlign: 'right' }}>
+                      {series.sweepCount}
                     </span>
                   </div>
 
                   {isSelected && (
                     <div style={{
-                      padding: '2px 12px 4px 44px',
-                      fontSize: 'var(--font-size-label)',
+                      padding: '1px 8px 3px 48px',
+                      fontSize: 'var(--font-size-xs)',
+                      fontVariantNumeric: 'tabular-nums',
                       color: 'var(--text-muted)',
                       display: 'flex',
                       gap: 10,
@@ -384,33 +380,30 @@ export function TreeNavigator() {
                           setHoveredSweep((cur) => (cur === hoverKey ? null : cur))
                         }
                         style={{
-                          padding: '2px 8px 2px 48px',
-                          cursor: 'pointer',
-                          fontSize: 'var(--font-size-xs)',
+                          minHeight: 22,
+                          padding: '0 8px 0 48px',
+                          borderRadius: 5,
+                          fontVariantNumeric: 'tabular-nums',
                           background: isSweepSelected
-                            ? 'var(--accent-dim)'
+                            ? 'var(--accent)'
                             : isMultiSelected
-                              ? 'rgba(33, 150, 243, 0.14)'
-                              : 'transparent',
+                              ? 'color-mix(in oklab, var(--accent) 16%, transparent)'
+                              : undefined,
                           color: isSweepSelected
-                            ? 'white'
+                            ? 'var(--on-accent)'
                             : isExcluded
-                              ? 'var(--text-muted)'
-                              : 'var(--text-secondary)',
-                          textDecoration: isExcluded ? 'line-through' : 'none',
-                          opacity: isExcluded && !isSweepSelected ? 0.55 : 1,
+                              ? 'var(--text-disabled)'
+                              : 'var(--text-primary)',
                           userSelect: 'none',
                           display: 'flex',
                           alignItems: 'center',
                           gap: 4,
-                          borderLeft: isMultiSelected
-                            ? '2px solid #2196f3'
-                            : '2px solid transparent',
                         }}
-                        className="tree-row"
+                        className={isSweepSelected ? undefined : 'tree-row'}
+                        aria-current={isSweepSelected ? 'true' : undefined}
                       >
                         <span className="tree-node-label"
-                          style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: isExcluded ? 'line-through' : 'none' }}>
                           {sweep.label || `Sweep ${sweep.index + 1}`}
                         </span>
                         {(isExcluded || isHovered) && (
@@ -429,27 +422,22 @@ export function TreeNavigator() {
                               display: 'inline-flex',
                               alignItems: 'center',
                               gap: 4,
-                              padding: '1px 7px',
-                              borderRadius: 8,
-                              fontSize: 'var(--font-size-label)',
-                              fontWeight: 600,
-                              lineHeight: 1.5,
-                              cursor: 'pointer',
-                              color: isExcluded
-                                ? (isSweepSelected ? 'white' : '#ff9800')
-                                : 'var(--text-secondary)',
-                              background: isExcluded
-                                ? 'rgba(255, 152, 0, 0.22)'
-                                : 'var(--bg-tertiary, rgba(120,120,120,0.20))',
-                              border: isExcluded
-                                ? '1px solid rgba(255, 152, 0, 0.5)'
-                                : '1px solid var(--border)',
+                              padding: '0 6px',
+                              borderRadius: 4,
+                              fontSize: 'var(--font-size-xs)',
+                              lineHeight: '17px',
+                              textDecoration: 'none',
+                              color: isSweepSelected
+                                ? 'var(--on-accent)'
+                                : isExcluded ? 'var(--warning)' : 'var(--text-secondary)',
+                              background: isSweepSelected
+                                ? 'color-mix(in oklab, var(--on-accent) 20%, transparent)'
+                                : isExcluded
+                                  ? 'color-mix(in oklab, var(--warning) 16%, transparent)'
+                                  : 'var(--bg-active)',
                             }}
                           >
-                            <span style={{ fontSize: '1.1em', lineHeight: 1 }}>
-                              {isExcluded ? '↩' : '⊘'}
-                            </span>
-                            <span>{isExcluded ? 'include' : 'exclude'}</span>
+                            <span>{isExcluded ? 'Include' : 'Exclude'}</span>
                           </span>
                         )}
                       </div>
@@ -461,8 +449,8 @@ export function TreeNavigator() {
                       visually stand out from recorded sweeps. */}
                   {isExpanded && averagedList.length > 0 && (
                     <div style={{
-                      margin: '3px 12px 3px 48px',
-                      borderTop: '1px dashed var(--border)',
+                      margin: '3px 8px 3px 48px',
+                      borderTop: '1px solid var(--border)',
                     }} />
                   )}
                   {isExpanded && averagedList.map((avg) => {
@@ -486,28 +474,23 @@ export function TreeNavigator() {
                         onMouseEnter={() => setHoveredAvg(hovKey)}
                         onMouseLeave={() => setHoveredAvg((cur) => (cur === hovKey ? null : cur))}
                         style={{
-                          padding: '2px 8px 2px 48px',
-                          cursor: isEditing ? 'text' : 'pointer',
-                          fontSize: 'var(--font-size-xs)',
-                          fontStyle: 'italic',
-                          background: isAvgSelected ? 'var(--accent-dim)' : 'transparent',
-                          color: isAvgSelected ? 'white' : 'var(--text-secondary)',
+                          minHeight: 22,
+                          padding: '0 8px 0 48px',
+                          borderRadius: 5,
+                          cursor: isEditing ? 'text' : undefined,
+                          background: isAvgSelected ? 'var(--accent)' : undefined,
+                          color: isAvgSelected ? 'var(--on-accent)' : 'var(--text-primary)',
                           userSelect: 'none',
                           display: 'flex',
                           alignItems: 'center',
-                          gap: 4,
+                          gap: 6,
                         }}
-                        className="tree-row"
+                        className={isAvgSelected ? undefined : 'tree-row'}
                       >
                         <span style={{
-                          fontSize: '0.7em', fontWeight: 700,
-                          color: isAvgSelected ? '#fff' : '#7b1fa2',
-                          padding: '0 4px', borderRadius: 2,
-                          background: isAvgSelected
-                            ? 'rgba(255,255,255,0.2)'
-                            : 'rgba(156, 39, 176, 0.16)',
+                          fontSize: 11, fontWeight: 600,
+                          color: isAvgSelected ? 'var(--on-accent)' : 'var(--cursor-fit)',
                           flexShrink: 0,
-                          fontStyle: 'normal',
                         }}>Σ</span>
                         {isEditing ? (
                           <input
@@ -529,9 +512,7 @@ export function TreeNavigator() {
                             onClick={(e) => e.stopPropagation()}
                             style={{
                               flex: 1, fontSize: 'inherit', fontFamily: 'inherit',
-                              padding: '0 2px', background: 'var(--bg-primary)',
-                              color: 'var(--text-primary)',
-                              border: '1px solid var(--accent)', borderRadius: 2,
+                              height: 20, padding: '0 4px',
                             }}
                           />
                         ) : (
@@ -555,7 +536,7 @@ export function TreeNavigator() {
                             title="Delete this averaged sweep"
                             style={{
                               flexShrink: 0,
-                              color: isAvgSelected ? '#fff' : 'var(--text-muted)',
+                              color: isAvgSelected ? 'var(--on-accent)' : 'var(--text-muted)',
                               fontSize: '0.9em',
                               padding: '0 4px',
                               lineHeight: 1,
@@ -574,5 +555,16 @@ export function TreeNavigator() {
         </div>
       ))}
     </div>
+  )
+}
+
+/** Disclosure chevron for tree rows. */
+function Chevron({ open }: { open: boolean }) {
+  return (
+    <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="var(--text-muted)"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
+      style={{ flexShrink: 0 }}>
+      <path d={open ? 'm4 6 4 4 4-4' : 'm6 4 4 4-4 4'} />
+    </svg>
   )
 }

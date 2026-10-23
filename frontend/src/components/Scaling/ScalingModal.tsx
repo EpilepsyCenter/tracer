@@ -127,7 +127,7 @@ export function ScalingModal({ onClose, focusKey }: Props) {
       onClick={onClose}
       style={{
         position: 'fixed', inset: 0, zIndex: 100,
-        background: 'rgba(0,0,0,0.5)',
+        background: 'rgba(0,0,0,0.18)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}
     >
@@ -135,28 +135,29 @@ export function ScalingModal({ onClose, focusKey }: Props) {
         onClick={(e) => e.stopPropagation()}
         style={{
           width: 'min(900px, 90vw)', maxHeight: '85vh',
-          background: 'var(--bg-primary)', color: 'var(--text-primary)',
-          border: '1px solid var(--border)', borderRadius: 6,
+          background: 'var(--bg-secondary)', color: 'var(--text-primary)',
+          borderRadius: 'var(--radius-lg)',
+          boxShadow: 'var(--shadow-popover), 0 24px 60px rgba(0,0,0,0.25)',
           display: 'flex', flexDirection: 'column', overflow: 'hidden',
           fontFamily: 'var(--font-ui)',
         }}
       >
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '8px 12px', background: 'var(--bg-secondary)',
+          padding: '10px 12px 10px 16px',
           borderBottom: '1px solid var(--border)',
         }}>
-          <strong>Channel scaling</strong>
-          <button className="btn" onClick={onClose} style={{ padding: '2px 8px' }}>×</button>
+          <span style={{ fontSize: 'var(--font-size-base)', fontWeight: 600 }}>Channel scaling</span>
+          <button className="icon-btn" onClick={onClose} title="Close">×</button>
         </div>
 
-        <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
+        <div style={{ padding: '8px 16px', borderBottom: '1px solid var(--border)', fontSize: 'var(--font-size-sm)', color: 'var(--text-muted)' }}>
           Override units and numeric scaling per channel. Applied before any analysis sees the data, across every series in the recording.
         </div>
 
         <div style={{ flex: 1, overflow: 'auto' }}>
           {error && (
-            <div style={{ padding: '8px 12px', color: '#c00', fontSize: 'var(--font-size-xs)' }}>{error}</div>
+            <div className="notice notice-error" style={{ margin: '8px 12px' }}>{error}</div>
           )}
           {channels === null && !error && (
             <div style={{ padding: 16, color: 'var(--text-muted)' }}>Loading channels…</div>
@@ -165,15 +166,9 @@ export function ScalingModal({ onClose, focusKey }: Props) {
             <div style={{ padding: 16, color: 'var(--text-muted)' }}>No channels found.</div>
           )}
           {rows.length > 0 && (
-            <table style={{
-              width: '100%', borderCollapse: 'collapse',
-              fontSize: 'var(--font-size-sm)',
-            }}>
+            <table className="data-table">
               <thead>
-                <tr style={{
-                  background: 'var(--bg-secondary)', textAlign: 'left',
-                  fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)',
-                }}>
+                <tr>
                   <th style={th}>Channel</th>
                   <th style={th}>File units</th>
                   <th style={th}>Override units</th>
@@ -198,14 +193,13 @@ export function ScalingModal({ onClose, focusKey }: Props) {
                       key={row.key}
                       ref={isFocus ? focusRowRef : null}
                       style={{
-                        borderTop: '1px solid var(--border)',
-                        background: isFocus ? 'var(--bg-secondary)' : (active ? 'var(--bg-tertiary, transparent)' : 'transparent'),
+                        background: isFocus ? 'var(--bg-selected)' : (active ? 'var(--bg-hover)' : 'transparent'),
                       }}
                     >
                       <td style={td}>
                         <div style={{ fontWeight: 500 }}>{row.channelLabel}</div>
                         {row.occurrences > 1 && (
-                          <div style={{ fontSize: 'var(--font-size-label)', color: 'var(--text-muted)' }}>
+                          <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
                             in {row.occurrences} sweeps
                           </div>
                         )}
@@ -231,7 +225,7 @@ export function ScalingModal({ onClose, focusKey }: Props) {
                             <button
                               key={p.label}
                               className="btn"
-                              style={{ padding: '1px 6px', fontSize: 'var(--font-size-label)' }}
+                              style={{ padding: '0 6px', height: 22, fontSize: 'var(--font-size-xs)' }}
                               onClick={() => update(row.key, {
                                 y_scale: o.y_scale * p.scale,
                                 units: p.units ?? o.units,
@@ -248,7 +242,7 @@ export function ScalingModal({ onClose, focusKey }: Props) {
                           className="btn"
                           onClick={() => reset(row.key)}
                           disabled={!active}
-                          style={{ padding: '1px 8px', fontSize: 'var(--font-size-xs)' }}
+                          style={{ padding: '0 8px', height: 22, fontSize: 'var(--font-size-xs)' }}
                           title="Reset this channel to file-reported values"
                         >
                           ↺
@@ -264,7 +258,7 @@ export function ScalingModal({ onClose, focusKey }: Props) {
 
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
-          gap: 8, padding: 8,
+          gap: 8, padding: '10px 12px',
           borderTop: '1px solid var(--border)', background: 'var(--bg-secondary)',
         }}>
           <button className="btn" onClick={onClose} disabled={busy}>Cancel</button>
@@ -277,16 +271,9 @@ export function ScalingModal({ onClose, focusKey }: Props) {
   )
 }
 
-const th: React.CSSProperties = { padding: '6px 10px', fontWeight: 500 }
-const td: React.CSSProperties = { padding: '6px 10px', verticalAlign: 'middle' }
+const th: React.CSSProperties = { padding: '6px 10px' }
+const td: React.CSSProperties = { padding: '5px 10px', verticalAlign: 'middle', fontFamily: 'var(--font-ui)' }
 
 function inputStyle(width: number): React.CSSProperties {
-  return {
-    width, padding: '2px 6px',
-    background: 'var(--bg-primary)',
-    color: 'var(--text-primary)',
-    border: '1px solid var(--border)',
-    borderRadius: 3,
-    fontSize: 'var(--font-size-sm)',
-  }
+  return { width }
 }

@@ -27,6 +27,7 @@ export type IconName =
   | 'book'
   | 'bug'
   | 'external'
+  | 'zoom-in'
 
 const PATHS: Record<IconName, React.ReactNode> = {
   folder: (
@@ -108,6 +109,12 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <path d="M11.5 7H13M11.5 9H13.5M11.5 11H13" />
     </>
   ),
+  'zoom-in': (
+    <>
+      <circle cx="7" cy="7" r="4.5" />
+      <path d="M10.3 10.3 14 14M5 7h4M7 5v4" />
+    </>
+  ),
   external: (
     <>
       <path d="M9 2h5v5" />
@@ -132,7 +139,7 @@ export function Icon({ name, size = 14, className }: IconProps) {
         viewBox="0 0 16 16"
         fill="none"
         stroke="currentColor"
-        strokeWidth="1.5"
+        strokeWidth="1.4"
         strokeLinecap="round"
         strokeLinejoin="round"
         aria-hidden="true"

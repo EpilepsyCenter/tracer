@@ -4,7 +4,7 @@ import 'uplot/dist/uPlot.min.css'
 import {
   CursorPositions, StimulusInfo, useAppStore,
 } from '../../stores/appStore'
-import { useThemeStore } from '../../stores/themeStore'
+import { useThemeStore, useThemeKey } from '../../stores/themeStore'
 import { NumInput } from '../common/NumInput'
 import { usePlotMenu } from '../common/PlotMenu'
 import { useRowSelection, buildTSV } from '../../utils/rowSelection'
@@ -68,6 +68,7 @@ export function ResistanceWindow({
   backendUrl, fileInfo, cursors, currentSweep,
   mainGroup, mainSeries, mainTrace,
 }: Props) {
+  const themeKey = useThemeKey()
   const theme = useThemeStore((s) => s.theme)
   const fontSize = useThemeStore((s) => s.fontSize)
 
@@ -850,16 +851,16 @@ export function ResistanceWindow({
             grid: { stroke: cssVar('--chart-grid'), width: 1 },
             ticks: { stroke: cssVar('--chart-tick'), width: 1 },
             label: 'Time (s)', labelSize: 14,
-            font: `${cssVar('--font-size-xs')} ${cssVar('--font-mono')}`,
-            labelFont: `${cssVar('--font-size-sm')} ${cssVar('--font-mono')}`,
+            font: `${cssVar('--font-size-xs')} ${cssVar('--font-ui')}`,
+            labelFont: `${cssVar('--font-size-sm')} ${cssVar('--font-ui')}`,
           },
           {
             stroke: cssVar('--chart-axis'),
             grid: { stroke: cssVar('--chart-grid'), width: 1 },
             ticks: { stroke: cssVar('--chart-tick'), width: 1 },
             label: 'pA', labelSize: 14,
-            font: `${cssVar('--font-size-xs')} ${cssVar('--font-mono')}`,
-            labelFont: `${cssVar('--font-size-sm')} ${cssVar('--font-mono')}`,
+            font: `${cssVar('--font-size-xs')} ${cssVar('--font-ui')}`,
+            labelFont: `${cssVar('--font-size-sm')} ${cssVar('--font-ui')}`,
             scale: 'y',
           },
         ],
@@ -1067,7 +1068,7 @@ export function ResistanceWindow({
       tracePlotRef.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [traceTime, traceValues, fitOverlayValues])
+  }, [traceTime, traceValues, fitOverlayValues, themeKey])
 
   // Redraw when cursors change (so the band overlays follow the drag
   // without rebuilding the whole plot).
@@ -1189,7 +1190,7 @@ export function ResistanceWindow({
               disabled={previewSweep <= 0 || totalSweeps === 0}
               title="Previous sweep"
               style={{ padding: '2px 8px' }}>←</button>
-            <span style={{
+            <span className="num" style={{
               minWidth: 58, textAlign: 'center',
               fontSize: 'var(--font-size-label)', color: 'var(--text-muted)',
             }}>
@@ -1233,15 +1234,14 @@ export function ResistanceWindow({
               borderRadius: 4,
               background: 'var(--bg-primary)',
               fontSize: 'var(--font-size-label)',
-              fontFamily: 'var(--font-mono)',
             }}>
               <span>
-                <span style={{ color: cssVar(BASELINE_COLOR_VAR) || '#4caf50', fontWeight: 600 }}>BL:</span>{' '}
-                {cursors.baselineStart.toFixed(3)} → {cursors.baselineEnd.toFixed(3)}s
+                <span style={{ color: `var(${BASELINE_COLOR_VAR})`, fontWeight: 600 }}>BL:</span>{' '}
+                <span className="num">{cursors.baselineStart.toFixed(3)} → {cursors.baselineEnd.toFixed(3)}s</span>
               </span>
               <span>
-                <span style={{ color: cssVar(PEAK_COLOR_VAR) || '#2196f3', fontWeight: 600 }}>PK:</span>{' '}
-                {cursors.peakStart.toFixed(3)} → {cursors.peakEnd.toFixed(3)}s
+                <span style={{ color: `var(${PEAK_COLOR_VAR})`, fontWeight: 600 }}>PK:</span>{' '}
+                <span className="num">{cursors.peakStart.toFixed(3)} → {cursors.peakEnd.toFixed(3)}s</span>
               </span>
             </div>
 
@@ -1326,7 +1326,7 @@ export function ResistanceWindow({
             {runMode === 'range' && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 6,
                 fontSize: 'var(--font-size-label)', color: 'var(--text-muted)' }}>
-                <span>from</span>
+                <span>From</span>
                 <NumInput value={avgFrom} step={1} min={1} max={Math.max(1, totalSweeps)}
                   onChange={(v) => setAvgFrom(Math.max(1, Math.round(v)))} style={{ width: 60 }} />
                 <span>to</span>
@@ -1338,7 +1338,7 @@ export function ResistanceWindow({
             {runMode === 'one' && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 6,
                 fontSize: 'var(--font-size-label)', color: 'var(--text-muted)' }}>
-                <span>sweep</span>
+                <span>Sweep</span>
                 <NumInput value={sweepOne} step={1} min={1} max={Math.max(1, totalSweeps)}
                   onChange={(v) => setSweepOne(Math.max(1, Math.round(v)))} style={{ width: 60 }} />
                 <span style={{ marginLeft: 'auto' }}>/ {totalSweeps || '—'}</span>
@@ -1362,17 +1362,12 @@ export function ResistanceWindow({
             </div>
           </div>
           {error && (
-            <div style={{
+            <div className="notice notice-error" style={{
               flexShrink: 0,
-              padding: '6px 10px',
-              background: 'var(--bg-error, #5c1b1b)',
-              color: '#fff', borderRadius: 3,
               display: 'flex', alignItems: 'center', gap: 8,
-              fontSize: 'var(--font-size-xs)',
             }}>
               <span style={{ flex: 1 }}>⚠ {error}</span>
-              <button className="btn" onClick={() => setError(null)}
-                style={{ padding: '1px 6px', fontSize: 'var(--font-size-label)' }}>dismiss</button>
+              <button className="btn btn-sm" onClick={() => setError(null)}>Dismiss</button>
             </div>
           )}
         </div>{/* close LEFT panel */}
@@ -1418,11 +1413,10 @@ export function ResistanceWindow({
             }}>
               <span>{traceLabel || 'No trace'}</span>
               {isPreviewExcluded && (
-                <span style={{
-                  fontSize: 'var(--font-size-label)', fontWeight: 600,
-                  color: '#fff', background: '#e65100',
-                  padding: '1px 6px', borderRadius: 3,
-                }}>
+                <span className="notice notice-warning" style={{
+            fontSize: 'var(--font-size-xs)', fontWeight: 600,
+            padding: '1px 8px', borderRadius: 'var(--radius-sm)', lineHeight: 1.4,
+          }}>
                   ⊘ Excluded
                 </span>
               )}
@@ -1435,7 +1429,7 @@ export function ResistanceWindow({
                 Zero offset
               </label>
               {fitTime && (
-                <span style={{ color: cssVar(FIT_COLOR_VAR) || '#9c27b0' }}>
+                <span style={{ color: `var(${FIT_COLOR_VAR})` }}>
                   ● Fit ({nExp === 1 ? 'mono' : 'bi'}-exp, {fitDurationMs}ms)
                 </span>
               )}
@@ -1468,7 +1462,7 @@ export function ResistanceWindow({
               fontSize: 'var(--font-size-label)', color: 'var(--text-muted)',
               fontStyle: 'italic', pointerEvents: 'none',
             }}>
-              scroll = zoom X · ⌥ scroll = zoom Y · drag empty = pan · drag band = move · drag edge = resize
+              Scroll = zoom X · ⌥ scroll = zoom Y · drag empty = pan · drag band = move · drag edge = resize
             </div>
           </div>
 
@@ -1502,11 +1496,11 @@ export function ResistanceWindow({
             marginTop: 6,
           }}>
             {measurements.length > 0 ? (
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--font-size-xs)' }}>
+              <table className="data-table">
                 <thead>
                   <tr>
                     {['Series', 'Sweep', 'Rs (MΩ)', 'Rin (MΩ)', 'Cm (pF)', 'τ (ms)', 'R²'].map((h) => (
-                      <th key={h} style={{ padding: '3px 5px', textAlign: 'left', borderBottom: '1px solid var(--border)', color: 'var(--text-secondary)', fontWeight: 500, position: 'sticky', top: 0, background: 'var(--bg-primary)', whiteSpace: 'nowrap' }}>{h}</th>
+                      <th key={h}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -1519,17 +1513,16 @@ export function ResistanceWindow({
                       })}
                       style={{
                         background: measSel.isSelected(i)
-                          ? 'var(--accent-muted, rgba(100,181,246,0.30))'
+                          ? 'var(--accent-muted)'
                           : (i % 2 === 0 ? 'transparent' : 'var(--bg-secondary)'),
-                        cursor: 'pointer',
                       }}>
-                      <td style={{ padding: '2px 5px', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis' }} title={row.series}>{row.series}</td>
-                      <td style={{ padding: '2px 5px', borderBottom: '1px solid var(--border)', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>{row.sweep}</td>
-                      <td style={{ padding: '2px 5px', borderBottom: '1px solid var(--border)', fontFamily: 'var(--font-mono)' }}>{fmt(row.rs, 1, '')}</td>
-                      <td style={{ padding: '2px 5px', borderBottom: '1px solid var(--border)', fontFamily: 'var(--font-mono)' }}>{fmt(row.rin, 1, '')}</td>
-                      <td style={{ padding: '2px 5px', borderBottom: '1px solid var(--border)', fontFamily: 'var(--font-mono)' }}>{fmt(row.cm, 1, '')}</td>
-                      <td style={{ padding: '2px 5px', borderBottom: '1px solid var(--border)', fontFamily: 'var(--font-mono)' }}>{fmt(row.tau, 2, '')}</td>
-                      <td style={{ padding: '2px 5px', borderBottom: '1px solid var(--border)', fontFamily: 'var(--font-mono)' }}>{row.fit_r_squared != null ? row.fit_r_squared.toFixed(3) : '—'}</td>
+                      <td style={{ fontFamily: 'var(--font-ui)', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis' }} title={row.series}>{row.series}</td>
+                      <td>{row.sweep}</td>
+                      <td>{fmt(row.rs, 1, '')}</td>
+                      <td>{fmt(row.rin, 1, '')}</td>
+                      <td>{fmt(row.cm, 1, '')}</td>
+                      <td>{fmt(row.tau, 2, '')}</td>
+                      <td>{row.fit_r_squared != null ? row.fit_r_squared.toFixed(3) : '—'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -1550,7 +1543,7 @@ export function ResistanceWindow({
 /** Small label / child wrapper used in the top selector row so
  *  Group / Series / Channel / Sweep all lay out the same way across
  *  analysis windows. The span gets ``className="selector-label"`` so
- *  the Telegraph palette's uppercase-mono treatment picks it up. */
+ *  the global selector-label style (muted colour) picks it up. */
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label style={{ display: 'flex', flexDirection: 'column', fontSize: 'var(--font-size-label)' }}>

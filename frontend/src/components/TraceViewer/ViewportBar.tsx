@@ -83,12 +83,13 @@ export function ViewportBar() {
               key={p.label}
               className="zoom-btn"
               onClick={() => setViewportWindowSize(p.seconds)}
+              aria-pressed={active}
               style={
                 active
                   ? {
-                      background: 'var(--accent)',
-                      borderColor: 'var(--accent)',
-                      color: '#fff',
+                      background: 'color-mix(in oklab, var(--accent) 14%, transparent)',
+                      color: 'var(--accent)',
+                      fontWeight: 600,
                     }
                   : undefined
               }
@@ -168,9 +169,9 @@ export function ViewportBar() {
 
       {/* Time readout */}
       <span
+        className="num"
         style={{
           marginLeft: 'auto',
-          fontFamily: 'var(--font-mono)',
           color: 'var(--text-muted)',
         }}
       >
@@ -254,7 +255,6 @@ export function ViewportSlider() {
         height: 12,
         background: 'var(--bg-primary)',
         borderTop: '1px solid var(--border)',
-        cursor: 'pointer',
         flexShrink: 0,
         userSelect: 'none',
       }}

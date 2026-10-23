@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react'
 import { useAppStore } from '../../stores/appStore'
-import { useThemeStore, FONT_FAMILIES, MONO_FONTS, FONT_SIZES, PaletteName, TRACE_COLOR_SLOT_COUNT } from '../../stores/themeStore'
+import { useThemeStore, FONT_SIZES, TRACE_COLOR_SLOT_COUNT, ThemePref } from '../../stores/themeStore'
+import { RecordingTitle } from '../RecordingHeader/RecordingHeader'
+import { SidebarIcon } from '../../App'
 import { NumInput } from '../common/NumInput'
 import { Icon } from '../common/Icon'
 import { TracesDropdown } from '../TraceViewer/TracesDropdown'
@@ -119,7 +121,14 @@ const TOOL_TYPES = [
   { type: 'trace_export', label: 'Export Traces…', icon: 'download', title: 'Build publication-ready figures from sweeps across one or more recordings' },
 ] as const
 
-export function Toolbar() {
+interface ToolbarProps {
+  leftHidden: boolean
+  rightHidden: boolean
+  onToggleLeft: () => void
+  onToggleRight: () => void
+}
+
+export function Toolbar({ leftHidden, rightHidden, onToggleLeft, onToggleRight }: ToolbarProps) {
   const {
     recording, openFile, loading,
     currentSweep, currentSeries, currentGroup, currentTrace,
@@ -134,10 +143,7 @@ export function Toolbar() {
   void toggleOverlay  // currently unused; reference retained to keep the prop picked
 
   const {
-    theme, setTheme,
-    palette, setPalette,
-    fontFamily, setFontFamily,
-    monoFont, setMonoFont,
+    themePref, setThemePref,
     fontSize, setFontSize,
     traceColors, setTraceColor, resetTraceColors,
   } = useThemeStore()
@@ -181,6 +187,17 @@ export function Toolbar() {
     window.addEventListener('welcome-open-text', onWelcomeText as EventListener)
     return () => window.removeEventListener('welcome-open-text', onWelcomeText as EventListener)
   }, [])
+  // Native menu: File ▸ Open… and Settings…
+  useEffect(() => {
+    const onOpenFile = () => { void handleOpenFile() }
+    const onSettings = () => setShowSettings(true)
+    window.addEventListener('menu-open-file', onOpenFile)
+    window.addEventListener('open-settings', onSettings)
+    return () => {
+      window.removeEventListener('menu-open-file', onOpenFile)
+      window.removeEventListener('open-settings', onSettings)
+    }
+  })
   const settingsRef = useRef<HTMLDivElement>(null)
   const analysesRef = useRef<HTMLDivElement>(null)
   const toolsRef = useRef<HTMLDivElement>(null)
@@ -344,41 +361,38 @@ export function Toolbar() {
 
   return (
     <>
-    <div className="toolbar">
+    <div className={`toolbar${leftHidden ? ' toolbar-mac-inset' : ''}`}>
+      {leftHidden && (
+        <button className="icon-btn" onClick={onToggleLeft} title="Show navigator (F1)" aria-label="Show navigator">
+          <SidebarIcon side="left" />
+        </button>
+      )}
+      <RecordingTitle />
+      <div className="toolbar-spacer" />
+
       <div className="toolbar-group" style={{ position: 'relative' }} ref={recentRef}>
-        <button className="btn" onClick={handleOpenFile} disabled={loading}>
-          <Icon name="folder" />
-          Open File
+        <button className="btn" onClick={handleOpenFile} disabled={loading} title="Open a recording (⌘O / Ctrl+O)">
+          <Icon name="folder" size={14} />
+          Open…
         </button>
         <button
-          className="btn btn-compact"
+          className="icon-btn"
+          style={{ width: 20 }}
           onClick={() => setShowRecent((v) => !v)}
           disabled={loading || recentFiles.length === 0}
           title={recentFiles.length === 0 ? 'No recent files' : 'Recent files'}
+          aria-label="Recent files"
         ><Icon name="chevron-down" size={12} /></button>
         {showRecent && recentFiles.length > 0 && (
           <div
-            style={{
-              position: 'absolute',
-              top: '100%',
-              left: 0,
-              marginTop: 2,
-              minWidth: 320,
-              maxWidth: 600,
-              background: 'var(--bg-secondary)',
-              border: '1px solid var(--border)',
-              borderRadius: 4,
-              boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
-              zIndex: 100,
-              padding: 4,
-            }}
+            className="settings-popover menu"
+            style={{ left: 0, right: 'auto', minWidth: 320, maxWidth: 600, width: 'auto' }}
           >
             <div style={{
               fontSize: 'var(--font-size-xs)',
+              fontWeight: 600,
               padding: '4px 8px',
               color: 'var(--text-muted)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.05em',
             }}>Recent files</div>
             {recentFiles.map((p) => {
               const fname = p.split('/').pop() || p
@@ -395,35 +409,31 @@ export function Toolbar() {
                     try { await openFile(p) } catch { /* ignore */ }
                   }}
                   title={p}
+                  className="analysis-menu-item"
                   style={{
                     padding: '4px 8px',
-                    cursor: 'pointer',
-                    borderRadius: 3,
+                    borderRadius: 4,
                     fontSize: 'var(--font-size-sm)',
                     whiteSpace: 'nowrap',
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
                   }}
-                  onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'var(--bg-tertiary)' }}
-                  onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'transparent' }}
                 >
-                  <span style={{ fontWeight: 500 }}>{fname}</span>
-                  <span style={{ color: 'var(--text-muted)', marginLeft: 8, fontSize: 'var(--font-size-xs)' }}>{dir}</span>
+                  <span>{fname}</span>
+                  <span style={{ opacity: 0.65, marginLeft: 8, fontSize: 'var(--font-size-xs)' }}>{dir}</span>
                 </div>
               )
             })}
             <div style={{ borderTop: '1px solid var(--border)', marginTop: 4, paddingTop: 4 }}>
               <div
                 onClick={() => { clearRecentFiles(); setShowRecent(false) }}
+                className="analysis-menu-item"
                 style={{
                   padding: '4px 8px',
-                  cursor: 'pointer',
-                  borderRadius: 3,
+                  borderRadius: 4,
                   fontSize: 'var(--font-size-sm)',
                   color: 'var(--text-muted)',
                 }}
-                onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'var(--bg-tertiary)' }}
-                onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'transparent' }}
               >Clear recent</div>
             </div>
           </div>
@@ -432,43 +442,28 @@ export function Toolbar() {
 
       <div className="toolbar-separator" />
 
-      <div className="toolbar-group">
-        <span className="toolbar-label">Sweep:</span>
-        <button className="btn btn-compact" onClick={handlePrevSweep} disabled={!recording || currentSweep === 0} title="Previous (Left)">
-          <Icon name="arrow-left" />
+      <div className="toolbar-group" role="group" aria-label="Sweep">
+        <button className="icon-btn" onClick={handlePrevSweep} disabled={!recording || currentSweep === 0} title="Previous sweep (←)" aria-label="Previous sweep">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M11 3.5v9L5 8z" /></svg>
         </button>
-        <span className="num" style={{ minWidth: 64, textAlign: 'center', fontSize: 'var(--fs-sm)', color: 'var(--text-secondary)' }}>
-          {recording ? `${currentSweep + 1} / ${totalSweeps}` : '-- / --'}
+        <span className="toolbar-readout" style={{ minWidth: 92, justifyContent: 'center', color: recording ? undefined : 'var(--text-muted)' }}>
+          {recording ? `Sweep ${currentSweep + 1} of ${totalSweeps}` : 'No sweep'}
         </span>
-        <button className="btn btn-compact" onClick={handleNextSweep} disabled={!recording || currentSweep >= totalSweeps - 1} title="Next (Right)">
-          <Icon name="arrow-right" />
+        <button className="icon-btn" onClick={handleNextSweep} disabled={!recording || currentSweep >= totalSweeps - 1} title="Next sweep (→)" aria-label="Next sweep">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M5 3.5v9L11 8z" /></svg>
         </button>
       </div>
 
       <div className="toolbar-separator" />
 
-      <div className="toolbar-group">
-        {/* Channel scaling — opens the unit-and-scaling override modal.
-            Sits immediately before "Traces" so unit fixes are reachable
-            from the same neighbourhood as the channel visibility list. */}
-        <button
-          className="btn"
-          onClick={() => { setScalingFocusKey(undefined); setShowScaling(true) }}
-          disabled={!recording}
-          title="Override per-channel units and numeric scaling"
-        >
-          <Icon name="ruler" />
-          Scaling
-        </button>
-
+      <div className="toolbar-group" style={{ gap: 4 }}>
         {/* Traces dropdown — front-and-centre so users discover the
             stimulus-overlay and multi-channel visibility controls
             without hunting. */}
         <TracesDropdown />
 
-        <button className={`btn ${showOverlay ? 'btn-primary' : ''}`} onClick={handleOverlayAll} disabled={!recording || loading} title="Overlay all sweeps (O)">
-          <Icon name="layers" />
-          Overlay
+        <button className="icon-btn" aria-pressed={showOverlay} onClick={handleOverlayAll} disabled={!recording || loading} title="Overlay all sweeps (O)" aria-label="Overlay all sweeps">
+          <Icon name="layers" size={16} />
         </button>
 
         {/* Average: click shows a popover to pick the sweeps to average.
@@ -476,14 +471,16 @@ export function Toolbar() {
             navigated to immediately. */}
         <div style={{ position: 'relative' }} ref={averageRef}>
           <button
-            className={`btn ${showAverageMenu ? 'btn-primary' : ''}`}
+            className="icon-btn"
+            style={{ width: 'auto', padding: '0 4px 0 6px', gap: 2 }}
+            aria-pressed={showAverageMenu}
+            aria-label="Average sweeps"
             onClick={() => setShowAverageMenu((v) => !v)}
             disabled={!recording || loading}
             title="Create an averaged trace from all / selected / range of sweeps (A)"
           >
-            <Icon name="sigma" />
-            Average
-            <Icon name="chevron-down" size={11} />
+            <Icon name="sigma" size={16} />
+            <Icon name="chevron-down" size={10} />
           </button>
 
           {showAverageMenu && (
@@ -539,12 +536,7 @@ export function Toolbar() {
                 type="text"
                 value={avgLabel} placeholder={defaultLabel}
                 onChange={(e) => setAvgLabel(e.target.value)}
-                style={{
-                  width: '100%', padding: '3px 6px', marginTop: 2,
-                  fontSize: 'var(--font-size-sm)',
-                  background: 'var(--bg-primary)', color: 'var(--text-primary)',
-                  border: '1px solid var(--border)', borderRadius: 3,
-                }}
+                style={{ width: '100%', marginTop: 2 }}
               />
               <div style={{
                 marginTop: 8, fontSize: 'var(--font-size-label)',
@@ -568,7 +560,9 @@ export function Toolbar() {
           )}
         </div>
 
-        <button className={`btn ${zoomMode ? 'btn-primary' : ''}`} onClick={toggleZoomMode} title="Drag-to-zoom mode (Z)">Zoom</button>
+        <button className="icon-btn" aria-pressed={zoomMode} onClick={toggleZoomMode} title="Drag-to-zoom mode (Z)" aria-label="Drag-to-zoom mode">
+          <Icon name="zoom-in" size={16} />
+        </button>
       </div>
 
       <div className="toolbar-separator" />
@@ -581,13 +575,13 @@ export function Toolbar() {
           disabled={!recording}
           title="Open an analysis window"
         >
-          <Icon name="chart" />
+          <Icon name="chart" size={14} />
           Analyses
           <Icon name="chevron-down" size={11} />
         </button>
 
         {showAnalyses && (
-          <div className="settings-popover" style={{ left: 0, right: 'auto', width: 200 }}>
+          <div className="settings-popover menu" style={{ left: 0, right: 'auto', width: 210 }}>
             {ANALYSIS_TYPES.map((a) => (
               <button
                 key={a.type}
@@ -601,8 +595,6 @@ export function Toolbar() {
                   textAlign: 'left',
                   color: 'var(--text-primary)',
                   fontSize: 'var(--font-size-sm)',
-                  fontFamily: 'var(--font-ui)',
-                  cursor: 'pointer',
                   borderRadius: 4,
                 }}
                 className="analysis-menu-item"
@@ -620,19 +612,19 @@ export function Toolbar() {
           All four operate across files, so the button is always
           enabled even with no recording open. Menu order mirrors the
           workflow: tag → batch → aggregate → export. */}
-      <div style={{ position: 'relative', marginLeft: 6 }} ref={toolsRef}>
+      <div style={{ position: 'relative' }} ref={toolsRef}>
         <button
           className="btn"
           onClick={() => setShowTools(!showTools)}
           title="Tagging and cross-recording tools"
         >
-          <Icon name="grid" />
+          <Icon name="grid" size={14} />
           Tools
           <Icon name="chevron-down" size={11} />
         </button>
 
         {showTools && (
-          <div className="settings-popover" style={{ left: 0, right: 'auto', width: 200 }}>
+          <div className="settings-popover menu" style={{ left: 'auto', right: 0, width: 210 }}>
             {TOOL_TYPES.map((t) => (
               <button
                 key={t.type}
@@ -649,8 +641,6 @@ export function Toolbar() {
                   textAlign: 'left',
                   color: 'var(--text-primary)',
                   fontSize: 'var(--font-size-sm)',
-                  fontFamily: 'var(--font-ui)',
-                  cursor: 'pointer',
                   borderRadius: 4,
                 }}
                 className="analysis-menu-item"
@@ -664,86 +654,39 @@ export function Toolbar() {
       </div>
 
       {loading && (
-        <span style={{ marginLeft: 'auto', color: 'var(--accent)', fontSize: 'var(--font-size-sm)' }}>Loading...</span>
+        <span style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-sm)' }}>Loading…</span>
       )}
 
-      {/* Help — opens the keyboard shortcut + manual modal */}
-      <button
-        className="btn btn-compact"
-        onClick={() => window.dispatchEvent(new CustomEvent('open-help'))}
-        title="Help — shortcuts and manual (?)"
-        style={{ marginLeft: 'auto' }}
-      >
-        <Icon name="help" size={15} />
-      </button>
-
-      {/* Report a bug — opens the in-app Tally form. Available to
-          users without GitHub accounts; submission lands in the
-          team's Tally inbox / webhook. */}
-      <button
-        className="btn btn-compact"
-        onClick={() => window.dispatchEvent(new CustomEvent('open-bug-report'))}
-        title="Report a bug or send feedback"
-      >
-        <Icon name="bug" size={15} />
-      </button>
+      <div className="toolbar-separator" />
 
       {/* Settings gear */}
       <div style={{ position: 'relative' }} ref={settingsRef}>
         <button
-          className="btn btn-compact"
+          className="icon-btn"
+          aria-pressed={showSettings}
           onClick={() => setShowSettings(!showSettings)}
           title="Settings"
+          aria-label="Settings"
         >
           <Icon name="gear" size={15} />
         </button>
 
         {showSettings && (
           <div className="settings-popover">
-            {/* Palette — two full colour sets, each with its own
-                dark / light sub-theme. Switching here flips the
-                ``data-palette`` attribute on <html>, which scopes the
-                Telegraph overrides in telegraph.css on or off. */}
             <div className="settings-section">
-              <div className="settings-label">Palette</div>
-              <div className="theme-toggle">
-                {(['precision', 'classic', 'telegraph'] as const).map((p) => (
-                  <button key={p}
-                    className={palette === p ? 'active' : ''}
-                    onClick={() => setPalette(p as PaletteName)}
-                    title={
-                      p === 'precision'
-                        ? 'Warm-paper light / blue-black dark, calm phosphor-cyan accent'
-                        : p === 'classic'
-                          ? 'Original blueish / neutral-grey palette'
-                          : 'Warm amber-on-near-black, mono-heavy, uppercase titles'
-                    }>
-                    {p === 'precision' ? 'Precision' : p === 'classic' ? 'Classic' : 'Telegraph'}
+              <div className="settings-label">Appearance</div>
+              <div className="theme-toggle" role="group" aria-label="Appearance">
+                {([['system', 'System'], ['light', 'Light'], ['dark', 'Dark']] as [ThemePref, string][]).map(([p, label]) => (
+                  <button key={p} className={themePref === p ? 'active' : ''} aria-pressed={themePref === p}
+                    onClick={() => setThemePref(p)}
+                    title={p === 'system' ? 'Follow the system light / dark setting' : undefined}>
+                    {label}
                   </button>
                 ))}
               </div>
             </div>
             <div className="settings-section">
-              <div className="settings-label">Theme</div>
-              <div className="theme-toggle">
-                <button className={theme === 'light' ? 'active' : ''} onClick={() => setTheme('light')}>{'\u2600'} Light</button>
-                <button className={theme === 'dark' ? 'active' : ''} onClick={() => setTheme('dark')}>{'\u263E'} Dark</button>
-              </div>
-            </div>
-            <div className="settings-section">
-              <div className="settings-label">UI Font</div>
-              <select value={fontFamily} onChange={(e) => setFontFamily(e.target.value)} style={{ width: '100%' }}>
-                {FONT_FAMILIES.map((f) => <option key={f.label} value={f.value}>{f.label}</option>)}
-              </select>
-            </div>
-            <div className="settings-section">
-              <div className="settings-label">Code Font</div>
-              <select value={monoFont} onChange={(e) => setMonoFont(e.target.value)} style={{ width: '100%' }}>
-                {MONO_FONTS.map((f) => <option key={f.label} value={f.value}>{f.label}</option>)}
-              </select>
-            </div>
-            <div className="settings-section">
-              <div className="settings-label">Font Size</div>
+              <div className="settings-label">Text size</div>
               <div className="font-size-row">
                 {FONT_SIZES.map((sz) => (
                   <button key={sz} className={fontSize === sz ? 'active' : ''} onClick={() => setFontSize(sz)} style={{ fontSize: sz - 1 }}>{sz}</button>
@@ -752,14 +695,13 @@ export function Toolbar() {
             </div>
             <div className="settings-section">
               <div className="settings-label" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span>Trace colors</span>
+                <span>Trace colours</span>
                 <button
-                  className="btn"
-                  style={{ padding: '1px 6px', fontSize: 'var(--font-size-label)' }}
+                  className="btn btn-sm"
                   onClick={resetTraceColors}
                   disabled={traceColors.every((c) => !c)}
-                  title="Restore palette defaults for every slot"
-                >reset all</button>
+                  title="Restore the default colour for every slot"
+                >Reset all</button>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', columnGap: 6, rowGap: 4, alignItems: 'center' }}>
                 {Array.from({ length: TRACE_COLOR_SLOT_COUNT }).map((_, i) => {
@@ -781,11 +723,11 @@ export function Toolbar() {
                         value={swatch}
                         onChange={(e) => setTraceColor(i, e.target.value)}
                         style={{ width: 28, height: 18, padding: 0, border: '1px solid var(--border)', borderRadius: 3, background: 'transparent' }}
-                        title={userVal ? 'Custom colour — click to change' : 'Palette default — click to override'}
+                        title={userVal ? 'Custom colour — click to change' : 'Default colour — click to override'}
                       />
                       <button
-                        className="btn"
-                        style={{ padding: '1px 6px', fontSize: 'var(--font-size-label)', visibility: userVal ? 'visible' : 'hidden' }}
+                        className="btn btn-sm"
+                        style={{ visibility: userVal ? 'visible' : 'hidden' }}
                         onClick={() => setTraceColor(i, '')}
                         title="Clear override"
                       >×</button>
@@ -795,13 +737,19 @@ export function Toolbar() {
               </div>
             </div>
 
-            <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10, marginTop: 4, fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
-              <div style={{ fontFamily: 'var(--font-ui)', marginBottom: 2 }}>UI preview: The quick brown fox</div>
-              <div style={{ fontFamily: 'var(--font-mono)' }}>Code: fn(x) =&gt; x * 2</div>
-            </div>
           </div>
         )}
       </div>
+
+      <button
+        className="icon-btn"
+        aria-pressed={!rightHidden}
+        onClick={onToggleRight}
+        title={rightHidden ? 'Show inspector (F2)' : 'Hide inspector (F2)'}
+        aria-label={rightHidden ? 'Show inspector' : 'Hide inspector'}
+      >
+        <SidebarIcon side="right" />
+      </button>
     </div>
     {showScaling && (
       <ScalingModal

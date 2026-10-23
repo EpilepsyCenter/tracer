@@ -383,10 +383,9 @@ export function TraceExportWindow({ backendUrl, fileInfo }: Props) {
           {showTemplates && (
             <div style={{
               position: 'absolute', top: '100%', left: 0, marginTop: 4,
-              background: 'var(--bg-primary)',
-              border: '1px solid var(--border)',
-              borderRadius: 4,
-              boxShadow: '0 4px 16px rgba(0,0,0,0.18)',
+              background: 'var(--bg-field)',
+              borderRadius: 'var(--radius-md)',
+              boxShadow: 'var(--shadow-popover)',
               minWidth: 220, zIndex: 30,
               fontSize: 'var(--font-size-sm)',
             }}>
@@ -399,7 +398,7 @@ export function TraceExportWindow({ backendUrl, fileInfo }: Props) {
               </div>
               <div style={{ borderTop: '1px solid var(--border)' }}>
                 {templates.length === 0 && (
-                  <div style={{ padding: 8, color: 'var(--text-muted)', fontSize: 11 }}>
+                  <div style={{ padding: 8, color: 'var(--text-muted)', fontSize: 'var(--font-size-xs)' }}>
                     No templates yet. Save the current figure's style as a template, then re-apply it later.
                   </div>
                 )}
@@ -419,7 +418,7 @@ export function TraceExportWindow({ backendUrl, fileInfo }: Props) {
                       className="btn"
                       onClick={() => deleteTemplate(t.name)}
                       title="Delete template"
-                      style={{ padding: '0 6px', fontSize: 11 }}
+                      style={{ padding: '0 6px', fontSize: 'var(--font-size-xs)' }}
                     >×</button>
                   </div>
                 ))}
@@ -430,10 +429,9 @@ export function TraceExportWindow({ backendUrl, fileInfo }: Props) {
 
         <span style={{ flex: 1 }} />
         <button
-          className="btn"
+          className={items.length > 0 ? 'btn btn-primary' : 'btn'}
           onClick={() => setShowExport(true)}
           disabled={items.length === 0}
-          style={{ background: items.length > 0 ? 'var(--accent)' : undefined, color: items.length > 0 ? 'white' : undefined }}
         >
           Export…
         </button>
@@ -484,26 +482,18 @@ export function TraceExportWindow({ backendUrl, fileInfo }: Props) {
           background: 'var(--bg-secondary)',
           fontFamily: 'var(--font-ui)',
         }}>
-          <div style={{ display: 'flex', borderBottom: '1px solid var(--border)' }}>
-            {(['trace', 'figure'] as const).map((t) => (
-              <button
-                key={t}
-                onClick={() => setTab(t)}
-                style={{
-                  flex: 1, padding: '6px 8px',
-                  background: tab === t ? 'var(--bg-active)' : 'var(--bg-secondary)',
-                  border: 'none',
-                  borderBottom: tab === t ? '2px solid var(--accent)' : 'none',
-                  color: 'var(--text-primary)',
-                  cursor: 'pointer',
-                  fontSize: 'var(--font-size-sm)',
-                  fontFamily: 'var(--font-ui)',
-                  fontWeight: tab === t ? 600 : 400,
-                }}
-              >
-                {t === 'trace' ? 'Trace' : 'Figure'}
-              </button>
-            ))}
+          <div style={{ padding: 6, borderBottom: '1px solid var(--border)' }}>
+            <div className="segmented" style={{ display: 'inline-flex' }}>
+              {(['trace', 'figure'] as const).map((t) => (
+                <button
+                  key={t}
+                  className={tab === t ? 'active' : undefined}
+                  onClick={() => setTab(t)}
+                >
+                  {t === 'trace' ? 'Trace' : 'Figure'}
+                </button>
+              ))}
+            </div>
           </div>
           <div
             // ``key`` on the scroll container forces a remount when
@@ -573,7 +563,7 @@ function BulkActions({
       display: 'flex', flexDirection: 'column', gap: 10,
     }}>
       <div style={{ fontWeight: 600 }}>{count} traces selected</div>
-      <div style={{ color: 'var(--text-muted)', fontSize: 11 }}>
+      <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-xs)' }}>
         Per-trace style is hidden in multi-select mode.
         Press <kbd>Delete</kbd> or use the button below to remove all selected traces.
         Use <kbd>↑</kbd>/<kbd>↓</kbd> to reorder, <kbd>R</kbd> to reset the zoom.

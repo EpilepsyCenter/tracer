@@ -90,8 +90,10 @@ export function ViewportBar({
           return (
             <button key={p.label} className="zoom-btn"
               onClick={() => setWindow(p.seconds)}
+              aria-pressed={active}
               style={active ? {
-                background: 'var(--accent)', borderColor: 'var(--accent)', color: '#fff',
+                background: 'color-mix(in oklab, var(--accent) 14%, transparent)',
+                color: 'var(--accent)', fontWeight: 600,
               } : undefined}
               title={p.seconds ? `Show a ${p.label} window` : 'Show the entire sweep'}>
               {p.label}
@@ -113,8 +115,8 @@ export function ViewportBar({
         <button className="zoom-btn" onClick={() => shiftViewport(2)} disabled={atEnd} title="Scroll forward 2 windows">⟫</button>
         <button className="zoom-btn" onClick={goEnd} disabled={atEnd} title="Jump to end">⟩⟩</button>
       </div>
-      <span style={{
-        marginLeft: 'auto', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)',
+      <span className="num" style={{
+        marginLeft: 'auto', color: 'var(--text-muted)',
       }}>
         {fmtViewportTime(start)} – {fmtViewportTime(end)}
         {sweepDuration > 0 ? ` / ${fmtViewportTime(sweepDuration)}` : ''}
@@ -178,7 +180,7 @@ export function ViewportSlider({
         position: 'relative', height: 12,
         background: 'var(--bg-primary)',
         borderTop: '1px solid var(--border)',
-        cursor: 'pointer', flexShrink: 0, userSelect: 'none',
+        flexShrink: 0, userSelect: 'none',
       }}
       title="Drag or click to scroll the viewport">
       <div style={{

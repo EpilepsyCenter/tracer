@@ -9,7 +9,6 @@ import { Toolbar } from './components/Toolbar/Toolbar'
 import { StatusBar } from './components/StatusBar/StatusBar'
 import { ResizeHandle } from './components/ResizeHandle/ResizeHandle'
 import { TagToast } from './components/TagToast/TagToast'
-import { RecordingHeader } from './components/RecordingHeader/RecordingHeader'
 import { CommandPalette } from './components/CommandPalette/CommandPalette'
 import { HelpModal } from './components/HelpModal/HelpModal'
 import { BugReportModal } from './components/BugReportModal/BugReportModal'
@@ -24,7 +23,8 @@ function clamp(val: number, min: number, max: number) {
 
 export default function App() {
   const { initBackend } = useAppStore()
-  const { initTheme } = useThemeStore()
+  const hasRecording = useAppStore((s) => !!s.recording)
+  const { initTheme, setThemePref } = useThemeStore()
   const {
     leftCollapsed, rightCollapsed, focusMode,
     leftWidth, rightWidth,
@@ -104,6 +104,32 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [toggleLeft, toggleRight, toggleFocus])
 
+  // Native menu bar: enable the Analysis items only with a recording
+  // open, and route menu commands into the app.
+  useEffect(() => {
+    window.electronAPI?.setMenuState?.({ hasRecording })
+  }, [hasRecording])
+
+  useEffect(() => {
+    const off = window.electronAPI?.onMenuAction?.((action, arg) => {
+      switch (action) {
+        case 'open-file': window.dispatchEvent(new CustomEvent('menu-open-file')); break
+        case 'open-settings': window.dispatchEvent(new CustomEvent('open-settings')); break
+        case 'open-scaling': window.dispatchEvent(new CustomEvent('open-scaling-modal', { detail: {} })); break
+        case 'open-help': setShowHelp(true); break
+        case 'open-bug-report': setShowBugReport(true); break
+        case 'command-palette': window.dispatchEvent(new CustomEvent('open-command-palette')); break
+        case 'toggle-left': toggleLeft(); break
+        case 'toggle-right': toggleRight(); break
+        case 'toggle-focus': toggleFocus(); break
+        case 'set-theme':
+          if (arg === 'system' || arg === 'light' || arg === 'dark') setThemePref(arg)
+          break
+      }
+    })
+    return () => { off?.() }
+  }, [toggleLeft, toggleRight, toggleFocus, setThemePref])
+
   const leftHidden = focusMode || leftCollapsed
   const rightHidden = focusMode || rightCollapsed
 
@@ -119,67 +145,60 @@ export default function App() {
 
   return (
     <div className="app">
-      <Toolbar />
       <div className="app-main">
-        {/* ---- Left sidebar ---- */}
-        {leftHidden ? (
-          <div
-            className="collapsed-strip collapsed-strip-v"
-            onClick={focusMode ? toggleFocus : toggleLeft}
-            title="Show navigator (F1)"
-          >
-            <span>Navigator</span>
-          </div>
-        ) : (
+        {/* ---- Left: recording tree, full window height ---- */}
+        {!leftHidden && (
           <>
-            <div className="app-sidebar" style={{ width: leftWidth, minWidth: MIN_SIDEBAR }}>
-              <div className="panel-header-bar">
+            <nav
+              className="app-sidebar"
+              aria-label="Recording navigator"
+              style={{ width: leftWidth, minWidth: MIN_SIDEBAR }}
+            >
+              <div className="app-sidebar-header">
+                <span className="app-wordmark">TRACER</span>
                 <button
                   className="collapse-btn"
                   onClick={toggleLeft}
-                  title="Collapse (F1)"
-                >{'\u25C0'}</button>
+                  title="Hide navigator (F1)"
+                  aria-label="Hide navigator"
+                >
+                  <SidebarIcon side="left" />
+                </button>
               </div>
-              <TreeNavigator />
-            </div>
+              <div className="app-sidebar-body">
+                <TreeNavigator />
+              </div>
+            </nav>
             <ResizeHandle direction="horizontal" onResize={onResizeLeft} onResizeEnd={persistLayout} />
           </>
         )}
 
-        {/* ---- Center: Trace viewer fills all remaining space ---- */}
+        {/* ---- Right: toolbar, viewer + inspector, status bar ---- */}
         <div className="app-center">
-          <RecordingHeader />
+          <Toolbar
+            leftHidden={leftHidden}
+            rightHidden={rightHidden}
+            onToggleLeft={focusMode ? toggleFocus : toggleLeft}
+            onToggleRight={focusMode ? toggleFocus : toggleRight}
+          />
           <div className="app-trace-area" style={{ minHeight: MIN_TRACE }}>
             <TraceViewer />
-
-            {/* ---- Right sidebar: cursors only ---- */}
-            {rightHidden ? (
-              <div
-                className="collapsed-strip collapsed-strip-v"
-                onClick={focusMode ? toggleFocus : toggleRight}
-                title="Show cursors (F2)"
-              >
-                <span>Cursors</span>
-              </div>
-            ) : (
+            {!rightHidden && (
               <>
                 <ResizeHandle direction="horizontal" onResize={onResizeRight} onResizeEnd={persistLayout} />
-                <div className="app-cursor-sidebar" style={{ width: rightWidth, minWidth: MIN_SIDEBAR }}>
-                  <div className="panel-header-bar" style={{ justifyContent: 'flex-end' }}>
-                    <button
-                      className="collapse-btn"
-                      onClick={toggleRight}
-                      title="Collapse (F2)"
-                    >{'\u25B6'}</button>
-                  </div>
+                <aside
+                  className="app-cursor-sidebar"
+                  aria-label="Inspector"
+                  style={{ width: rightWidth, minWidth: MIN_SIDEBAR }}
+                >
                   <CursorPanel />
-                </div>
+                </aside>
               </>
             )}
           </div>
+          <StatusBar />
         </div>
       </div>
-      <StatusBar />
       <TagToast />
       <CommandPalette />
       <HelpModal open={showHelp} onClose={() => setShowHelp(false)} />
@@ -189,5 +208,16 @@ export default function App() {
         view="main"
       />
     </div>
+  )
+}
+
+/** Sidebar / inspector toggle glyph (window with a side panel). */
+export function SidebarIcon({ side }: { side: 'left' | 'right' }) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor"
+      strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="1.5" y="2.5" width="13" height="11" rx="2" />
+      <path d={side === 'left' ? 'M6 2.5v11' : 'M10 2.5v11'} />
+    </svg>
   )
 }

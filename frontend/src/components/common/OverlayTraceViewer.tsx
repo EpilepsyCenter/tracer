@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef } from 'react'
 import uPlot from 'uplot'
 import 'uplot/dist/uPlot.min.css'
-import { useThemeStore } from '../../stores/themeStore'
+import { useThemeStore, useThemeKey } from '../../stores/themeStore'
 import { usePlotMenu } from './PlotMenu'
 
 /**
@@ -48,6 +48,7 @@ interface Props {
 export function OverlayTraceViewer({
   backendUrl, group, series, sweep, channel, xRange, heightSignal, color,
 }: Props) {
+  const themeKey = useThemeKey()
   const containerRef = useRef<HTMLDivElement>(null)
   const plotRef = useRef<uPlot | null>(null)
   const theme = useThemeStore((s) => s.theme)
@@ -165,13 +166,13 @@ export function OverlayTraceViewer({
           stroke: cssVar('--chart-axis'),
           grid: { stroke: cssVar('--chart-grid'), width: 1 },
           ticks: { stroke: cssVar('--chart-tick'), width: 1 },
-          font: `${cssVar('--font-size-label')} ${cssVar('--font-mono')}`,
+          font: `${cssVar('--font-size-label')} ${cssVar('--font-ui')}`,
         },
         {
           stroke: cssVar('--chart-axis'),
           grid: { stroke: cssVar('--chart-grid'), width: 1 },
           ticks: { stroke: cssVar('--chart-tick'), width: 1 },
-          font: `${cssVar('--font-size-label')} ${cssVar('--font-mono')}`,
+          font: `${cssVar('--font-size-label')} ${cssVar('--font-ui')}`,
           size: 55,
           label: channel.units || undefined,
           labelSize: 14,
@@ -186,7 +187,7 @@ export function OverlayTraceViewer({
     const payload: uPlot.AlignedData = [time, values]
     plotRef.current = new uPlot(opts, payload, el)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [time, values, channel.units, color])
+  }, [time, values, channel.units, color, themeKey])
 
   // React to xRange / yRange updates without a full rebuild.
   useEffect(() => {
@@ -226,8 +227,8 @@ export function OverlayTraceViewer({
     return (
       <div style={{
         height: '100%',
-        border: '1px solid var(--border)', borderRadius: 4,
-        background: 'var(--bg-primary)',
+        border: '1px solid var(--border)', borderRadius: 'var(--radius)',
+        background: 'var(--chart-bg)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         color: 'var(--text-muted)', fontStyle: 'italic',
         fontSize: 'var(--font-size-label)',
@@ -255,8 +256,8 @@ function OverlayBody({
       onContextMenu={onContextMenu}
       style={{
         height: '100%', minHeight: 0,
-        border: '1px solid var(--border)', borderRadius: 4,
-        background: 'var(--bg-primary)',
+        border: '1px solid var(--border)', borderRadius: 'var(--radius)',
+        background: 'var(--chart-bg)',
         position: 'relative',
       }}
     >

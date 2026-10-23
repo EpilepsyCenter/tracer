@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import uPlot from 'uplot'
 import 'uplot/dist/uPlot.min.css'
 import { useAppStore, BurstRecord, FieldBurstsData, FieldBurstsParams } from '../../stores/appStore'
-import { useThemeStore } from '../../stores/themeStore'
+import { useThemeStore, useThemeKey } from '../../stores/themeStore'
 import { NumInput } from '../common/NumInput'
 import { TrainOptions, defaultTrainParamsFor } from './TrainOptions'
 import { TrainSummary, TrainParams } from '../../utils/trains'
@@ -13,11 +13,13 @@ import { useRowCopyMenu } from '../common/RowCopyMenu'
 import { attachHoverCoords } from '../../utils/hoverCoords'
 import { sampleTraceYAt } from '../../utils/sampleTraceY'
 
+/** Burst marker colours as theme tokens. Canvas code resolves them
+ *  with ``cssVar`` at draw time; the legend uses ``var(...)``. */
 const MARKER_COLORS = {
-  baseline: '#9e9e9e',
-  peak: '#e57373',
-  decay: '#ffb74d',
-  end: '#81c784',
+  baseline: '--text-muted',
+  peak: '--marker-detected',
+  decay: '--warning',
+  end: '--success',
 }
 
 function cssVar(name: string): string {
@@ -507,7 +509,7 @@ export function FieldBurstWindow({
           display: 'flex', flexDirection: 'column', minHeight: 0, gap: 8,
           background: 'var(--bg-secondary)',
           padding: 8,
-          borderRadius: 4,
+          borderRadius: 'var(--radius-md)',
           border: '1px solid var(--border)',
         }}>
           {/* Scrollable param sections. Run controls + error banner
@@ -520,13 +522,7 @@ export function FieldBurstWindow({
             {/* Method + Baseline-mode dropdowns. These two drive which
                 params show in ParamsForm below, so they live at the
                 top of the left panel. */}
-            <div style={{
-              display: 'flex', flexDirection: 'column', gap: 6,
-              padding: 8,
-              border: '1px solid var(--border)',
-              borderRadius: 4,
-              background: 'var(--bg-primary)',
-            }}>
+            <div className="section-card">
               <label style={{ display: 'flex', flexDirection: 'column', fontSize: 'var(--font-size-label)', gap: 2 }}>
                 <span style={{ color: 'var(--text-muted)' }}>Method</span>
                 <select value={method} onChange={(e) => onMethodChange(e.target.value as Method)}>
@@ -575,18 +571,10 @@ export function FieldBurstWindow({
 
           {/* Pinned footer: Run + Sweeps dropdown (all/one), then
               secondary Clear + Export CSV below a separator. */}
-          <div style={{
-            flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 6,
-            padding: 8,
-            border: '1px solid var(--border)', borderRadius: 4,
-            background: 'var(--bg-primary)',
-          }}>
-            <button className="btn btn-primary" onClick={onRun}
+          <div className="section-card" style={{ flexShrink: 0 }}>
+            <button className="btn btn-primary btn-lg" onClick={onRun}
               disabled={loading || !fileInfo}
-              style={{
-                width: '100%', padding: '8px 0',
-                fontSize: 'var(--font-size-sm)', fontWeight: 600,
-              }}>
+              style={{ width: '100%' }}>
               {loading ? 'Running…' : 'Run'}
             </button>
             <div style={{
@@ -604,7 +592,7 @@ export function FieldBurstWindow({
             {runMode === 'one' && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 6,
                 fontSize: 'var(--font-size-label)', color: 'var(--text-muted)' }}>
-                <span>sweep</span>
+                <span>Sweep</span>
                 <NumInput value={sweepOne} step={1} min={1} max={Math.max(1, totalSweeps)}
                   onChange={(v) => setSweepOne(Math.max(1, Math.round(v)))} style={{ width: 60 }} />
                 <span style={{ marginLeft: 'auto' }}>/ {totalSweeps || '—'}</span>
@@ -632,17 +620,12 @@ export function FieldBurstWindow({
             </div>
           </div>
           {error && (
-            <div style={{
+            <div className="notice notice-error" style={{
               flexShrink: 0,
-              padding: '6px 10px',
-              background: 'var(--bg-error, #5c1b1b)',
-              color: '#fff', borderRadius: 3,
               display: 'flex', alignItems: 'center', gap: 8,
-              fontSize: 'var(--font-size-xs)',
             }}>
               <span style={{ flex: 1 }}>⚠ {error}</span>
-              <button className="btn" onClick={() => setError(null)}
-                style={{ padding: '1px 6px', fontSize: 'var(--font-size-label)' }}>dismiss</button>
+              <button className="btn btn-sm" onClick={() => setError(null)}>Dismiss</button>
             </div>
           )}
         </div>{/* close LEFT panel */}
@@ -722,23 +705,22 @@ export function FieldBurstWindow({
               flexShrink: 0,
               fontSize: 'var(--font-size-label)',
               color: 'var(--text-muted)',
-              fontFamily: 'var(--font-mono)',
-              background: 'var(--bg-primary)',
+              background: 'var(--bg-secondary)',
               padding: '4px 8px',
-              borderRadius: 3,
+              borderRadius: 'var(--radius-md)',
               border: '1px solid var(--border)',
               marginTop: 6,
               lineHeight: 1.6,
             }}>
-              <div>
+              <div className="num">
                 <strong style={{ color: 'var(--text-primary)' }}>{entry.bursts.length}</strong> bursts
                 {' · '}baseline = {entry.baselineValue.toFixed(3)}
                 {entry.thresholdHigh != null && ` · thr ↑ ${entry.thresholdHigh.toFixed(3)}`}
                 {entry.thresholdLow != null && ` · thr ↓ ${entry.thresholdLow.toFixed(3)}`}
               </div>
               {entry.diag && (
-                <div style={{ color: 'var(--text-muted)' }}>
-                  signal: median {entry.diag.median.toFixed(3)}, MAD {entry.diag.mad.toFixed(3)},
+                <div className="num" style={{ color: 'var(--text-muted)' }}>
+                  Signal: median {entry.diag.median.toFixed(3)}, MAD {entry.diag.mad.toFixed(3)},
                   range [{entry.diag.min.toFixed(3)}, {entry.diag.max.toFixed(3)}],
                   max |dev| {entry.diag.maxAbsDev.toFixed(3)} · {entry.diag.durationS.toFixed(1)} s
                   {' '}({entry.diag.nSamples.toString()} samples)
@@ -778,13 +760,9 @@ export function FieldBurstWindow({
                     {trainData.flatSummaries.length}
                   </strong> trains
                 </span>
-                <button className="btn"
+                <button className="btn btn-sm"
                   onClick={() => exportFieldBurstTrainsCSV()}
-                  style={{
-                    marginLeft: 'auto',
-                    fontSize: 'var(--font-size-label)',
-                    padding: '2px 10px',
-                  }}
+                  style={{ marginLeft: 'auto' }}
                   title="Export per-train summary to CSV">
                   Export trains CSV
                 </button>
@@ -797,7 +775,7 @@ export function FieldBurstWindow({
           <div style={{
             flex: 1, overflow: 'auto', minHeight: 0,
             marginTop: 6,
-            border: '1px solid var(--border)', borderRadius: 4,
+            border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
           }}>
             <BurstTable
               bursts={entry?.bursts ?? []}
@@ -841,7 +819,7 @@ function TopBar({
       display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', flexShrink: 0,
       background: 'var(--bg-secondary)',
       padding: '6px 10px',
-      borderRadius: 4,
+      borderRadius: 'var(--radius-md)',
       border: '1px solid var(--border)',
     }}>
       <Field label="Group">
@@ -867,14 +845,14 @@ function TopBar({
       </Field>
       <Field label="Sweep (preview)">
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-          <button className="btn" style={{ padding: '2px 8px' }}
+          <button className="btn btn-compact"
             onClick={() => setPreviewSweep((s) => Math.max(0, s - 1))}
             disabled={previewSweep <= 0 || totalSweeps === 0}
             title="Previous sweep">←</button>
-          <span style={{ minWidth: 58, textAlign: 'center', fontSize: 'var(--font-size-label)', color: 'var(--text-muted)' }}>
+          <span className="num" style={{ minWidth: 58, textAlign: 'center', fontSize: 'var(--font-size-label)', color: 'var(--text-muted)' }}>
             {totalSweeps > 0 ? `${previewSweep + 1} / ${totalSweeps}` : '— / —'}
           </span>
-          <button className="btn" style={{ padding: '2px 8px' }}
+          <button className="btn btn-compact"
             onClick={() => setPreviewSweep((s) => Math.min(totalSweeps - 1, s + 1))}
             disabled={previewSweep >= totalSweeps - 1 || totalSweeps === 0}
             title="Next sweep">→</button>
@@ -909,15 +887,7 @@ function ParamsForm({
   const peakDirection = String(params.peak_direction ?? 'auto')
 
   return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 6,
-      padding: 8,
-      border: '1px solid var(--border)',
-      borderRadius: 4,
-      background: 'var(--bg-primary)',
-    }}>
+    <div className="section-card">
       {/* --- Pre-detection filter --- */}
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 'var(--font-size-label)' }}>
@@ -941,7 +911,7 @@ function ParamsForm({
             </select>
             {(filterType === 'highpass' || filterType === 'bandpass') && (
               <label style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 'var(--font-size-label)' }}>
-                <span style={{ color: 'var(--text-muted)' }}>low</span>
+                <span style={{ color: 'var(--text-muted)' }}>Low</span>
                 <NumInput value={p('filter_low')} step={0.1} min={0}
                   onChange={(v) => onChange('filter_low', v)}
                   style={{ width: 60 }} />
@@ -950,7 +920,7 @@ function ParamsForm({
             )}
             {(filterType === 'lowpass' || filterType === 'bandpass') && (
               <label style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 'var(--font-size-label)' }}>
-                <span style={{ color: 'var(--text-muted)' }}>high</span>
+                <span style={{ color: 'var(--text-muted)' }}>High</span>
                 <NumInput value={p('filter_high')} step={1} min={1}
                   onChange={(v) => onChange('filter_high', v)}
                   style={{ width: 60 }} />
@@ -958,7 +928,7 @@ function ParamsForm({
               </label>
             )}
             <label style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 'var(--font-size-label)' }}>
-              <span style={{ color: 'var(--text-muted)' }}>order</span>
+              <span style={{ color: 'var(--text-muted)' }}>Order</span>
               <NumInput value={p('filter_order')} step={1} min={1} max={8}
                 onChange={(v) => onChange('filter_order', Math.max(1, Math.min(8, Math.round(v))))}
                 style={{ width: 40 }} />
@@ -993,53 +963,53 @@ function ParamsForm({
         <>
           <ParamRow label="n_sd" value={p('n_sd')} step={0.1} min={0}
             onChange={(v) => onChange('n_sd', v)} />
-          <ParamRow label="smooth (ms)" value={p('smooth_ms')} step={1} min={1}
+          <ParamRow label="Smooth (ms)" value={p('smooth_ms')} step={1} min={1}
             onChange={(v) => onChange('smooth_ms', v)} />
-          <ParamRow label="min dur (ms)" value={p('min_duration_ms')} step={1} min={1}
+          <ParamRow label="Min dur (ms)" value={p('min_duration_ms')} step={1} min={1}
             onChange={(v) => onChange('min_duration_ms', v)} />
-          <ParamRow label="min gap (ms)" value={p('min_gap_ms')} step={1} min={0}
+          <ParamRow label="Min gap (ms)" value={p('min_gap_ms')} step={1} min={0}
             onChange={(v) => onChange('min_gap_ms', v)} />
         </>
       )}
       {method === 'oscillation' && (
         <>
-          <ParamRow label="band low (Hz)" value={p('low_freq')} step={1} min={0}
+          <ParamRow label="Band low (Hz)" value={p('low_freq')} step={1} min={0}
             onChange={(v) => onChange('low_freq', v)} />
-          <ParamRow label="band high (Hz)" value={p('high_freq')} step={1} min={1}
+          <ParamRow label="Band high (Hz)" value={p('high_freq')} step={1} min={1}
             onChange={(v) => onChange('high_freq', v)} />
         </>
       )}
       {method === 'isi' && (
         <>
-          <ParamRow label="spike thr (abs)" value={p('spike_threshold')} step={0.1} min={0}
+          <ParamRow label="Spike thr (abs)" value={p('spike_threshold')} step={0.1} min={0}
             onChange={(v) => onChange('spike_threshold', v)} />
-          <ParamRow label="min dist (ms)" value={p('min_spike_dist_ms')} step={0.1} min={0}
+          <ParamRow label="Min dist (ms)" value={p('min_spike_dist_ms')} step={0.1} min={0}
             onChange={(v) => onChange('min_spike_dist_ms', v)} />
-          <ParamRow label="max ISI (ms)" value={p('max_isi_ms')} step={1} min={1}
+          <ParamRow label="Max ISI (ms)" value={p('max_isi_ms')} step={1} min={1}
             onChange={(v) => onChange('max_isi_ms', v)} />
-          <ParamRow label="min spikes/burst" value={p('min_spikes_per_burst')} step={1} min={2}
+          <ParamRow label="Min spikes/burst" value={p('min_spikes_per_burst')} step={1} min={2}
             onChange={(v) => onChange('min_spikes_per_burst', Math.max(2, Math.round(v)))} />
         </>
       )}
 
       {/* Baseline-mode-specific knobs */}
       {method !== 'isi' && baselineMode === 'percentile' && (
-        <ParamRow label="percentile (%)" value={p('baseline_percentile')} step={1} min={0} max={100}
+        <ParamRow label="Percentile (%)" value={p('baseline_percentile')} step={1} min={0} max={100}
           onChange={(v) => onChange('baseline_percentile', Math.max(0, Math.min(100, v)))} />
       )}
       {method !== 'isi' && baselineMode === 'rolling' && (
-        <ParamRow label="window (s)" value={p('baseline_window_s')} step={0.5} min={0.1}
+        <ParamRow label="Window (s)" value={p('baseline_window_s')} step={0.5} min={0.1}
           onChange={(v) => onChange('baseline_window_s', v)} />
       )}
       {method !== 'isi' && baselineMode === 'fixed_start' && (
-        <ParamRow label="baseline end (s)" value={p('baseline_end_s')} step={0.1} min={0.01}
+        <ParamRow label="Baseline end (s)" value={p('baseline_end_s')} step={0.1} min={0.01}
           onChange={(v) => onChange('baseline_end_s', v)} />
       )}
 
       {/* Pre-burst baseline window — applies to all methods (per-burst
           amplitude is computed as |signal − mean(pre-burst window)|). */}
       <ParamRow
-        label="pre-burst (ms)"
+        label="Pre-burst (ms)"
         value={p('pre_burst_window_ms')}
         step={10} min={1}
         onChange={(v) => onChange('pre_burst_window_ms', v)}
@@ -1051,7 +1021,7 @@ function ParamsForm({
           short initial downward spike is followed by a larger upward
           wave — pick "positive" to place the peak on the wave. */}
       <label style={{ display: 'flex', flexDirection: 'column', fontSize: 'var(--font-size-label)' }}>
-        <span style={{ color: 'var(--text-muted)', marginBottom: 2 }}>peak direction</span>
+        <span style={{ color: 'var(--text-muted)', marginBottom: 2 }}>Peak direction</span>
         <select
           value={peakDirection}
           onChange={(e) => onChangeRaw('peak_direction', e.target.value)}
@@ -1121,6 +1091,7 @@ function BurstSweepViewer({
    *  clusters in this sweep. */
   trainsForSweep: TrainSummary[]
 }) {
+  const themeKey = useThemeKey()
   const containerRef = useRef<HTMLDivElement>(null)
   const plotRef = useRef<uPlot | null>(null)
   const { onContextMenu: onBurstContextMenu, menu: burstPlotMenu } = usePlotMenu({
@@ -1220,13 +1191,13 @@ function BurstSweepViewer({
           stroke: cssVar('--chart-axis'),
           grid: { stroke: cssVar('--chart-grid'), width: 1 },
           ticks: { stroke: cssVar('--chart-tick'), width: 1 },
-          font: `${cssVar('--font-size-label')} ${cssVar('--font-mono')}`,
+          font: `${cssVar('--font-size-label')} ${cssVar('--font-ui')}`,
         },
         {
           stroke: cssVar('--chart-axis'),
           grid: { stroke: cssVar('--chart-grid'), width: 1 },
           ticks: { stroke: cssVar('--chart-tick'), width: 1 },
-          font: `${cssVar('--font-size-label')} ${cssVar('--font-mono')}`,
+          font: `${cssVar('--font-size-label')} ${cssVar('--font-ui')}`,
         },
       ],
       cursor: { drag: { x: false, y: false } },
@@ -1254,7 +1225,7 @@ function BurstSweepViewer({
       trainsForSweep,
     )
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data])
+  }, [data, themeKey])
 
   // Redraw overlays when the burst list or entry thresholds change
   // without a fresh fetch (e.g. manual add/remove on the same view).
@@ -1569,20 +1540,19 @@ function BurstSweepViewer({
       tabIndex={0}
       style={{
         display: 'flex', flexDirection: 'column', height: '100%',
-        border: '1px solid var(--border)', borderRadius: 4,
+        border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
         background: 'var(--bg-primary)', position: 'relative',
         outline: 'none',
       }}
     >
       {/* Sweep + burst info + legend — narrow strip, no controls. */}
-      <div style={{
-        padding: '3px 8px', fontSize: 'var(--font-size-label)',
-        color: 'var(--text-muted)', fontFamily: 'var(--font-mono)',
-        borderBottom: '1px solid var(--border)',
-        display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center',
+      <div className="viewer-header" style={{
+        fontSize: 'var(--font-size-label)',
+        color: 'var(--text-muted)',
+        borderRadius: 'var(--radius) var(--radius) 0 0',
       }}>
-        <span>sweep {sweep + 1}</span>
-        <span>{sweepBursts.length} bursts{manualCount > 0 ? ` (${manualCount} manual)` : ''}</span>
+        <span>Sweep <span className="num">{sweep + 1}</span></span>
+        <span><span className="num">{sweepBursts.length}</span> bursts{manualCount > 0 ? ` (${manualCount} manual)` : ''}</span>
         <span style={{ marginLeft: 'auto', display: 'flex', gap: 10, alignItems: 'center' }}>
           <label
             style={{ display: 'flex', alignItems: 'center', gap: 3 }}
@@ -1596,18 +1566,17 @@ function BurstSweepViewer({
             Zero offset
           </label>
           <button
-            className="btn"
+            className="btn btn-sm"
             onClick={fitYNow}
-            style={{ padding: '1px 8px', fontSize: 'var(--font-size-label)' }}
             title="Re-fit the y range to the trace currently inside the visible x window. Useful after toggling the filter or zero-offset shifts the baseline out of view."
           >
             Fit Y
           </button>
           <span style={{ width: 1, height: 14, background: 'var(--border)' }} />
-          <LegendDot color={MARKER_COLORS.baseline} label="baseline" />
-          <LegendDot color={MARKER_COLORS.peak} label="peak" />
-          <LegendDot color={MARKER_COLORS.decay} label="½ decay" />
-          <LegendDot color={MARKER_COLORS.end} label="return" />
+          <LegendDot color={`var(${MARKER_COLORS.baseline})`} label="Baseline" />
+          <LegendDot color={`var(${MARKER_COLORS.peak})`} label="Peak" />
+          <LegendDot color={`var(${MARKER_COLORS.decay})`} label="½ decay" />
+          <LegendDot color={`var(${MARKER_COLORS.end})`} label="Return" />
         </span>
       </div>
 
@@ -1652,14 +1621,15 @@ function BurstSweepViewer({
         color: 'var(--text-muted)', fontStyle: 'italic',
         background: 'var(--bg-secondary)',
         borderTop: '1px solid var(--border)',
+        borderRadius: '0 0 var(--radius) var(--radius)',
       }}>
-        scroll = zoom X · ⌥ scroll = zoom Y · drag = pan · left-click = add burst · right-click / double-click = remove
+        Scroll = zoom X · ⌥ scroll = zoom Y · drag = pan · left-click = add burst · right-click / double-click = remove
       </div>
       {err && (
         <div style={{
           position: 'absolute', top: 30, left: 10,
-          color: '#f44336', fontSize: 'var(--font-size-label)',
-        }}>fetch: {err}</div>
+          color: 'var(--error)', fontSize: 'var(--font-size-label)',
+        }}>Fetch: {err}</div>
       )}
     </div>
   )
@@ -1679,7 +1649,7 @@ function drawBurstOverlay(
    *  visibly shifted trace (mirrors the main viewer's overlay). */
   yOffset: number = 0,
   /** Index of the burst (within ``bursts``) the user has primed for
-   *  removal — drawn with a blue confirmation ring outside the dot.
+   *  removal — drawn with a confirmation ring outside the dot.
    *  ``null`` = no prime. Mirrors the AP / Events flow. */
   primedIdx: number | null = null,
   /** Train spans for THIS sweep, drawn as translucent shaded boxes
@@ -1725,34 +1695,37 @@ function drawBurstOverlay(
   // the user reads "this is a higher-level grouping of the bursts
   // below."
   if (trains.length > 0) {
-    const trainColor = 'rgba(255,167,38,0.13)'
-    const edgeColor = 'rgba(255,167,38,0.45)'
-    const labelColor = 'rgba(255,167,38,0.95)'
-    ctx.font = `${cssVar('--font-size-xs')} ${cssVar('--font-mono')}`
+    const trainColor = cssVar('--marker-manual')
+    ctx.font = `${cssVar('--font-size-xs')} ${cssVar('--font-ui')}`
     for (const t of trains) {
       const px0 = u.valToPos(t.startS, 'x', true) / dpr
       const px1 = u.valToPos(t.endS, 'x', true) / dpr
       if (!isFinite(px0) || !isFinite(px1)) continue
       const w = Math.max(1, px1 - px0)
       ctx.fillStyle = trainColor
+      ctx.globalAlpha = 0.13
       ctx.fillRect(px0, 0, w, cssH)
-      ctx.strokeStyle = edgeColor
+      ctx.strokeStyle = trainColor
+      ctx.globalAlpha = 0.45
       ctx.lineWidth = 1
       ctx.beginPath()
       ctx.moveTo(px0, 0); ctx.lineTo(px0, cssH)
       ctx.moveTo(px1, 0); ctx.lineTo(px1, cssH)
       ctx.stroke()
-      ctx.fillStyle = labelColor
+      ctx.globalAlpha = 0.95
       ctx.fillText(`T${t.id + 1}`, px0 + 3, 11)
+      ctx.globalAlpha = 1
     }
   }
 
   // Dashed horizontal lines: detection thresholds (once per view, not
   // per burst). Pre-burst-baseline varies per burst so we draw short
   // local marks at each burst's baseline dot instead.
-  const hLine = (y: number, color: string, label: string) => {
+  const hLine = (y: number, color: string, alpha: number, label: string) => {
     const py = u.valToPos(y - yOffset, 'y', true) / dpr
     if (!isFinite(py)) return
+    ctx.save()
+    ctx.globalAlpha = alpha
     ctx.strokeStyle = color
     ctx.lineWidth = 1
     ctx.setLineDash([5, 4])
@@ -1762,28 +1735,35 @@ function drawBurstOverlay(
     ctx.stroke()
     ctx.setLineDash([])
     ctx.fillStyle = color
-    ctx.font = `${cssVar('--font-size-label')} ${cssVar('--font-mono')}`
+    ctx.font = `${cssVar('--font-size-label')} ${cssVar('--font-ui')}`
     ctx.fillText(label, left + 4, py - 3)
+    ctx.restore()
   }
   // Global detection baseline (grey) + thresholds (red), same style as
   // the main viewer's burst overlay. `baselineValue` is 0 for entries
   // predating the field that was added later; skip the line then so
   // we don't draw a misleading y=0 guide.
   if (entry && entry.baselineValue !== 0) {
-    hLine(entry.baselineValue, 'rgba(158,158,158,0.8)', 'baseline')
+    hLine(entry.baselineValue, cssVar('--text-muted'), 0.8, 'baseline')
   }
-  if (entry?.thresholdHigh != null) hLine(entry.thresholdHigh, 'rgba(229,115,115,0.7)', 'thr ↑')
+  const thrColor = cssVar('--marker-detected')
+  if (entry?.thresholdHigh != null) hLine(entry.thresholdHigh, thrColor, 0.7, 'thr ↑')
   if (entry?.thresholdLow != null && entry.thresholdLow !== entry.thresholdHigh) {
-    hLine(entry.thresholdLow, 'rgba(229,115,115,0.7)', 'thr ↓')
+    hLine(entry.thresholdLow, thrColor, 0.7, 'thr ↓')
   }
 
+  const outlineColor = cssVar('--marker-outline')
+  const baselineColor = cssVar(MARKER_COLORS.baseline)
+  const peakColor = cssVar(MARKER_COLORS.peak)
+  const decayColor = cssVar(MARKER_COLORS.decay)
+  const endColor = cssVar(MARKER_COLORS.end)
   const drawDot = (px: number, py: number, color: string, ring: boolean = false) => {
     if (!isFinite(px) || !isFinite(py)) return
     ctx.beginPath()
     ctx.arc(px, py, 6, 0, 2 * Math.PI)
     ctx.fillStyle = color
     ctx.fill()
-    ctx.strokeStyle = '#fff'
+    ctx.strokeStyle = outlineColor
     ctx.lineWidth = 1.5
     ctx.stroke()
     if (ring) {
@@ -1809,18 +1789,18 @@ function drawBurstOverlay(
           b.preBurstBaseline + b.peakSigned * 0.5,
         )
       : null
-    drawDot(px0, py0, MARKER_COLORS.baseline)
-    drawDot(px1, py1, MARKER_COLORS.peak, !!b.manual)
-    if (decay) drawDot(decay[0], decay[1], MARKER_COLORS.decay)
-    drawDot(px3, py3, MARKER_COLORS.end)
+    drawDot(px0, py0, baselineColor)
+    drawDot(px1, py1, peakColor, !!b.manual)
+    if (decay) drawDot(decay[0], decay[1], decayColor)
+    drawDot(px3, py3, endColor)
     if (bi === primedIdx) primedPos = [px1, py1]
   }
   // Primed-remove confirmation ring around the peak dot, drawn last
   // so it sits over the manual-orange ring (which lands at radius
-  // ~9.5). Same hue / weight as the AP and Events windows.
+  // ~9.5). Same text-primary ring as the AP and Events windows.
   if (primedPos) {
     ctx.save()
-    ctx.strokeStyle = '#64b5f6'
+    ctx.strokeStyle = cssVar('--text-primary')
     ctx.lineWidth = 2
     ctx.beginPath()
     ctx.arc(primedPos[0], primedPos[1], 12, 0, 2 * Math.PI)
@@ -1834,7 +1814,7 @@ function LegendDot({ color, label }: { color: string; label: string }) {
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
       <span style={{
         width: 8, height: 8, borderRadius: '50%',
-        background: color, border: '1px solid rgba(255,255,255,0.6)',
+        background: color, border: '1px solid var(--marker-outline)',
       }} />
       {label}
     </span>
@@ -1894,7 +1874,7 @@ function BurstTable({
         fontStyle: 'italic',
         fontSize: 'var(--font-size-label)',
         border: '1px dashed var(--border)',
-        borderRadius: 4,
+        borderRadius: 'var(--radius-md)',
       }}>
         No bursts detected yet. Configure params above and run on a sweep or series.
       </div>
@@ -1903,19 +1883,12 @@ function BurstTable({
 
   return (
     <div style={{
-      border: '1px solid var(--border)',
-      borderRadius: 4,
       overflow: 'auto',
       height: '100%',
     }}>
-      <table style={{
-        width: '100%',
-        borderCollapse: 'collapse',
-        fontSize: 'var(--font-size-label)',
-        fontFamily: 'var(--font-mono)',
-      }}>
+      <table className="data-table">
         <thead>
-          <tr style={{ background: 'var(--bg-secondary)', textAlign: 'left', position: 'sticky', top: 0 }}>
+          <tr>
             <Th>#</Th>
             <Th>Sweep</Th>
             <Th>t_start (s)</Th>
@@ -1943,12 +1916,10 @@ function BurstTable({
               })}
               style={{
                 background: sel.isSelected(i)
-                  ? 'var(--accent-muted, rgba(100,181,246,0.30))'
+                  ? 'var(--accent-muted)'
                   : i === selectedIdx
-                    ? 'var(--bg-selected, rgba(100,181,246,0.2))'
+                    ? 'var(--bg-selected)'
                     : 'transparent',
-                cursor: 'pointer',
-                borderTop: '1px solid var(--border)',
                 // Italicize manually-added bursts so the user can tell
                 // at a glance which rows came from clicks vs auto
                 // detection. Matches the ring the overlay draws
@@ -1971,7 +1942,7 @@ function BurstTable({
               {showTrainCol && (
                 <Td>
                   {trainIdByIdx?.[i] != null
-                    ? <span style={{ color: 'rgba(255,167,38,0.95)' }}>T{(trainIdByIdx![i] as number) + 1}</span>
+                    ? <span style={{ color: 'var(--marker-manual)' }}>T{(trainIdByIdx![i] as number) + 1}</span>
                     : <span style={{ color: 'var(--text-muted)' }}>—</span>}
                 </Td>
               )}
@@ -1986,7 +1957,7 @@ function BurstTable({
 
 /** Compact summary table for detected trains. Shown below the bursts
  *  table when train-grouping is on. Mirrors the burst table's styling
- *  (mono font, sticky thead, copy menu) but only renders if there are
+ *  (data-table, sticky thead, copy menu) but only renders if there are
  *  any trains — empty data hides the whole block. */
 function TrainSummaryTable({ trains }: {
   trains: Array<TrainSummary & { sweep: number }>
@@ -2016,18 +1987,13 @@ function TrainSummaryTable({ trains }: {
   return (
     <div style={{
       border: '1px solid var(--border)',
-      borderRadius: 4,
+      borderRadius: 'var(--radius-md)',
       overflow: 'auto',
       maxHeight: 200,
     }}>
-      <table style={{
-        width: '100%',
-        borderCollapse: 'collapse',
-        fontSize: 'var(--font-size-label)',
-        fontFamily: 'var(--font-mono)',
-      }}>
+      <table className="data-table">
         <thead>
-          <tr style={{ background: 'var(--bg-secondary)', textAlign: 'left', position: 'sticky', top: 0 }}>
+          <tr>
             <Th>Train</Th>
             <Th>Sweep</Th>
             <Th>Start (s)</Th>
@@ -2048,13 +2014,11 @@ function TrainSummaryTable({ trains }: {
               })}
               style={{
                 background: sel.isSelected(i)
-                  ? 'var(--accent-muted, rgba(100,181,246,0.30))'
+                  ? 'var(--accent-muted)'
                   : 'transparent',
-                cursor: 'pointer',
-                borderTop: '1px solid var(--border)',
               }}
             >
-              <Td><span style={{ color: 'rgba(255,167,38,0.95)' }}>T{t.id + 1}</span></Td>
+              <Td><span style={{ color: 'var(--marker-manual)' }}>T{t.id + 1}</span></Td>
               <Td>{t.sweep + 1}</Td>
               <Td>{t.startS.toFixed(3)}</Td>
               <Td>{t.endS.toFixed(3)}</Td>
@@ -2072,10 +2036,10 @@ function TrainSummaryTable({ trains }: {
 }
 
 const Th = ({ children }: { children: React.ReactNode }) => (
-  <th style={{ padding: '4px 8px', fontWeight: 600, fontSize: 'var(--font-size-label)' }}>{children}</th>
+  <th>{children}</th>
 )
 const Td = ({ children }: { children: React.ReactNode }) => (
-  <td style={{ padding: '3px 8px', whiteSpace: 'nowrap' }}>{children}</td>
+  <td>{children}</td>
 )
 
 // ---------------------------------------------------------------------------
@@ -2171,10 +2135,11 @@ function BurstViewportBar({
               key={p.label}
               className="zoom-btn"
               onClick={() => setWindow(p.seconds)}
+              aria-pressed={active}
               style={active ? {
-                background: 'var(--accent)',
-                borderColor: 'var(--accent)',
-                color: '#fff',
+                background: 'color-mix(in oklab, var(--accent) 14%, transparent)',
+                color: 'var(--accent)',
+                fontWeight: 600,
               } : undefined}
               title={p.seconds ? `Show a ${p.label} window` : 'Show the entire sweep'}
             >
@@ -2212,9 +2177,8 @@ function BurstViewportBar({
           title="Jump to end (End)">⟩⟩</button>
       </div>
 
-      <span style={{
+      <span className="num" style={{
         marginLeft: 'auto',
-        fontFamily: 'var(--font-mono)',
         color: 'var(--text-muted)',
       }}>
         {fmtViewportTime(start)} – {fmtViewportTime(end)}
@@ -2287,7 +2251,6 @@ function BurstViewportSlider({
         height: 12,
         background: 'var(--bg-primary)',
         borderTop: '1px solid var(--border)',
-        cursor: 'pointer',
         flexShrink: 0, userSelect: 'none',
       }}
       title="Drag or click to scroll the viewport"

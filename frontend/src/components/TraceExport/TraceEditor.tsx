@@ -40,7 +40,7 @@ export function TraceEditor({ item }: Props) {
       padding: 10,
       fontSize: 'var(--font-size-sm)',
       fontFamily: 'var(--font-ui)',
-      display: 'flex', flexDirection: 'column', gap: 14,
+      display: 'flex', flexDirection: 'column', gap: 10,
       overflow: 'auto',
       // Match the side-panel background used by other analysis
       // windows (CursorAnalysisWindow, CohortWindow, etc.) so the
@@ -50,7 +50,7 @@ export function TraceEditor({ item }: Props) {
     }}>
       {/* Source */}
       <Section title="Source">
-        <div style={{ color: 'var(--text-muted)', fontSize: 11 }}>
+        <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-xs)' }}>
           {item.file_name}<br />
           group {item.group} · series {item.series} · channel {item.trace}
           <br />sweeps: {item.sweeps.map((s) => s + 1).join(', ')}
@@ -74,14 +74,14 @@ export function TraceEditor({ item }: Props) {
               type="checkbox"
               checked={item.show_mean}
               onChange={(e) => updateItem(item.id, { show_mean: e.target.checked })}
-            /> mean
+            /> Mean
           </label>
           <label>
             <input
               type="checkbox"
               checked={item.show_individuals}
               onChange={(e) => updateItem(item.id, { show_individuals: e.target.checked })}
-            /> individuals
+            /> Individuals
           </label>
         </Row>
         <Row label="Axis">
@@ -132,7 +132,7 @@ export function TraceEditor({ item }: Props) {
                 style={{
                   width: 14, height: 14, borderRadius: 2,
                   border: '1px solid var(--border)',
-                  background: c, cursor: 'pointer', padding: 0,
+                  background: c, padding: 0,
                 }}
               />
             ))}
@@ -203,7 +203,7 @@ export function TraceEditor({ item }: Props) {
                   style={{
                     width: 14, height: 14, borderRadius: 2,
                     border: '1px solid var(--border)',
-                    background: c, cursor: 'pointer', padding: 0,
+                    background: c, padding: 0,
                   }}
                 />
               ))}
@@ -236,20 +236,20 @@ export function TraceEditor({ item }: Props) {
 
       {/* Position */}
       <Section title="Position">
-        <Row label="x offset (s)">
+        <Row label="X offset (s)">
           <NumField
             value={item.x_offset}
             step={0.001}
             onChange={(v) => updateItem(item.id, { x_offset: v })}
           />
         </Row>
-        <Row label="y offset">
+        <Row label="Y offset">
           <NumField
             value={item.y_offset}
             step={1}
             onChange={(v) => updateItem(item.id, { y_offset: v })}
           />
-          <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>
+          <span style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-xs)' }}>
             drag the trace in the preview to set
           </span>
         </Row>
@@ -290,7 +290,7 @@ export function TraceEditor({ item }: Props) {
       {/* Series-level processing */}
       <Section title={`Filter / baseline / blanking ${shareCount > 1 ? `(applies to ${shareCount} traces)` : ''}`}>
         {shareCount > 1 && (
-          <div style={{ color: 'var(--text-muted)', fontSize: 11, marginBottom: 4 }}>
+          <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-xs)', marginBottom: 4 }}>
             Settings are keyed per series — every trace from <code>{item.file_name}</code> g{item.group}:s{item.series} shares them.
           </div>
         )}
@@ -304,7 +304,7 @@ export function TraceEditor({ item }: Props) {
                 onChange={(e) => updateSeriesCfg(cfgKey, {
                   filter: { ...(seriesCfg?.filter ?? { type: 'lowpass', low_hz: 0, high_hz: 1000, order: 4 }), enabled: e.target.checked, type: seriesCfg?.filter.type ?? 'lowpass', low_hz: seriesCfg?.filter.low_hz ?? 0, high_hz: seriesCfg?.filter.high_hz ?? 1000, order: seriesCfg?.filter.order ?? 4 },
                 })}
-              /> enabled
+              /> Enabled
             </label>
           </Row>
           {seriesCfg?.filter.enabled && (
@@ -320,7 +320,7 @@ export function TraceEditor({ item }: Props) {
                 </select>
               </Row>
               {seriesCfg.filter.type !== 'lowpass' && (
-                <Row label="low Hz">
+                <Row label="Low Hz">
                   <NumField
                     value={seriesCfg.filter.low_hz}
                     onChange={(v) => updateSeriesCfg(cfgKey, { filter: { ...seriesCfg.filter, low_hz: v } })}
@@ -328,14 +328,14 @@ export function TraceEditor({ item }: Props) {
                 </Row>
               )}
               {seriesCfg.filter.type !== 'highpass' && (
-                <Row label="high Hz">
+                <Row label="High Hz">
                   <NumField
                     value={seriesCfg.filter.high_hz}
                     onChange={(v) => updateSeriesCfg(cfgKey, { filter: { ...seriesCfg.filter, high_hz: v } })}
                   />
                 </Row>
               )}
-              <Row label="order">
+              <Row label="Order">
                 <NumField
                   value={seriesCfg.filter.order}
                   step={1}
@@ -356,7 +356,7 @@ export function TraceEditor({ item }: Props) {
                 onChange={(e) => updateSeriesCfg(cfgKey, {
                   baseline: { ...(seriesCfg?.baseline ?? { t0: 0, t1: 0.05 }), enabled: e.target.checked, t0: seriesCfg?.baseline.t0 ?? 0, t1: seriesCfg?.baseline.t1 ?? 0.05 },
                 })}
-              /> enabled
+              /> Enabled
             </label>
           </Row>
           {seriesCfg?.baseline.enabled && (
@@ -382,7 +382,7 @@ export function TraceEditor({ item }: Props) {
                 onChange={(e) => updateSeriesCfg(cfgKey, {
                   blanking: { ...(seriesCfg?.blanking ?? { t0: 0, t1: 0, mode: 'interp' }), enabled: e.target.checked, t0: seriesCfg?.blanking.t0 ?? 0, t1: seriesCfg?.blanking.t1 ?? 0, mode: seriesCfg?.blanking.mode ?? 'interp' },
                 })}
-              /> enabled
+              /> Enabled
             </label>
           </Row>
           {seriesCfg?.blanking.enabled && (
@@ -405,7 +405,7 @@ export function TraceEditor({ item }: Props) {
                   <option value="hide">Hide (gap in line)</option>
                 </select>
               </Row>
-              <div style={{ color: 'var(--text-muted)', fontSize: 11, paddingLeft: 8 }}>
+              <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-xs)', paddingLeft: 8 }}>
                 {seriesCfg.blanking.mode === 'interp'
                   ? 'Replaces the artifact window with a straight line bridging the values just before and after.'
                   : 'Drops the artifact window entirely — the trace shows a gap. Useful when you don\'t want to imply a continuous signal.'}
@@ -420,10 +420,8 @@ export function TraceEditor({ item }: Props) {
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div>
-      <div style={{ fontWeight: 600, marginBottom: 4, paddingBottom: 2, borderBottom: '1px solid var(--border)' }}>
-        {title}
-      </div>
+    <div className="section-card">
+      <div className="section-card-title">{title}</div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>{children}</div>
     </div>
   )
