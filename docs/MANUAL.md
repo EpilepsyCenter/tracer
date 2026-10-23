@@ -579,8 +579,8 @@ main trace as a way of inspecting the detection in context:
   each spike instead carries a small cluster of coloured dots at
   the points the AP analysis identified — red at the peak, grey at
   the threshold, two yellow dots at the half-amplitude crossings
-  joined by a dashed line, orange at the fAHP, and a darker orange
-  at the mAHP. Spikes you have added or kept by hand are drawn with
+  joined by a dashed line, amber at the fAHP, and purple at the
+  mAHP. Spikes you have added or kept by hand are drawn with
   an extra outer ring around the peak dot, so manual edits are
   visually distinct from auto-detections.
 - **Event markers** are dots placed at each detected event, colour-
@@ -2514,7 +2514,7 @@ choice), fits a biexponential to that average, and offers to
 **Apply** the new fit to the current template or **Save as new**.
 
 The right pane shows the average event in red and the fit in
-orange; the left pane carries the alignment controls and a
+purple; the left pane carries the alignment controls and a
 coefficient stepper for fine adjustments.
 
 This is the fastest route to a good template: run a permissive
@@ -2788,7 +2788,7 @@ inside the cluster (`1000 / mean_isi_ms`), which is a more
 faithful number than the peak-counting heuristic the other
 methods use.
 
-![ISI clustering — spike picks and burst grouping](screenshots/bursts-window-isi-method.png)
+![ISI clustering — parameters and the resulting bursts grouped into a train](screenshots/bursts-window-isi-method.png)
 
 ### Burst window extension
 

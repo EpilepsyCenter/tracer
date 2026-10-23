@@ -368,7 +368,6 @@ export function Toolbar({ leftHidden, rightHidden, onToggleLeft, onToggleRight }
         </button>
       )}
       <RecordingTitle />
-      <div className="toolbar-spacer" />
 
       <div className="toolbar-group" style={{ position: 'relative' }} ref={recentRef}>
         <button className="btn" onClick={handleOpenFile} disabled={loading} title="Open a recording (⌘O / Ctrl+O)">

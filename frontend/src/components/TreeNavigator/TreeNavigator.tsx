@@ -153,8 +153,8 @@ export function TreeNavigator() {
             className="tree-row"
           >
             <Chevron open={expandedGroups.has(group.index)} />
-            <span style={{ fontWeight: 600 }}>{group.label || `Group ${group.index + 1}`}</span>
-            <span style={{ color: 'var(--text-muted)', marginLeft: 'auto', fontSize: 'var(--font-size-label)' }}>
+            <span title={group.label || undefined} style={{ fontWeight: 600, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{group.label || `Group ${group.index + 1}`}</span>
+            <span style={{ color: 'var(--text-muted)', flexShrink: 0, whiteSpace: 'nowrap', fontSize: 'var(--font-size-xs)' }}>
               {group.seriesCount} series
             </span>
           </div>

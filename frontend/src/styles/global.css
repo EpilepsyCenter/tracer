@@ -620,9 +620,10 @@ body[data-platform="mac"] .toolbar.toolbar-mac-inset {
 .toolbar-title {
   display: flex;
   flex-direction: column;
-  flex: 0 1 auto;
-  min-width: 120px;
-  max-width: 360px;
+  /* Takes the free space and gives it up first (ellipsis), so a long
+     file name never pushes the controls onto a second row. */
+  flex: 1 1 140px;
+  min-width: 140px;
   margin-right: var(--space-3);
   user-select: none;
 }

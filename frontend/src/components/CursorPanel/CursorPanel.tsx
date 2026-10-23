@@ -682,22 +682,22 @@ function FilterSection(props: FilterSectionProps) {
             const v = e.target.value
             setSlot(v === 'default' ? 'default' : Number(v))
           }}
-          style={{ flex: 1 }}
+          style={{ flex: 1, minWidth: 0 }}
         >
           <option value="default">Default (all)</option>
           {channels.map((c) => (
             <option key={c.index} value={c.index}>
-              {c.label || `Ch ${c.index + 1}`}{c.units ? ` (${c.units})` : ''}
+              {c.label || `Ch ${c.index + 1}`}
+              {c.units && !(c.label || '').includes(`(${c.units})`) ? ` (${c.units})` : ''}
             </option>
           ))}
         </select>
         {isOverride && (
           <button
-            className="btn"
+            className="btn btn-sm"
             onClick={() => setFilterFor(slot as number, null)}
             title="Drop this channel's override and use the default filter"
-            style={{ padding: '1px 6px', fontSize: 'var(--font-size-label)' }}
-          >reset</button>
+          >Reset</button>
         )}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>

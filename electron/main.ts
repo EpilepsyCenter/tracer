@@ -501,7 +501,7 @@ function createWindow() {
     // renderer leaves room for them via ``[data-platform="mac"]``).
     // Windows / Linux keep the native title bar and menu bar.
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
-    trafficLightPosition: process.platform === 'darwin' ? { x: 14, y: 14 } : undefined,
+    trafficLightPosition: process.platform === 'darwin' ? { x: 18, y: 20 } : undefined,
     webPreferences: {
       preload: join(__dirname, 'preload.js'),
       contextIsolation: true,

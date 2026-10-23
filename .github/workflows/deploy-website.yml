@@ -8,6 +8,8 @@ on:
     branches: [main]
     paths:
       - 'website/**'
+      - 'docs/MANUAL.md'
+      - 'docs/screenshots/**'
       - '.github/workflows/deploy-website.yml'
   workflow_dispatch:
 
