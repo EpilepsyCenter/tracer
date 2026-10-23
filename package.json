@@ -1,6 +1,6 @@
 {
   "name": "tracer",
-  "version": "0.7.2",
+  "version": "1.0.0",
   "description": "Electrophysiology analysis software",
   "main": "dist-electron/main.js",
   "scripts": {
