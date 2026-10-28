@@ -2,7 +2,7 @@
 
 A modern electrophysiology analysis desktop app inspired by [Stimfit](https://github.com/neurodroid/stimfit). Electron shell + React/TypeScript/Vite frontend + Python FastAPI backend. All numerical work lives in Python; the frontend renders and handles interaction.
 
-Current release: **v1.0.0**. macOS Apple-Silicon DMG, Windows NSIS, and Linux AppImage installers are built automatically by GitHub Actions on each tag — see the [releases page](https://github.com/EpilepsyCenter/tracer/releases).
+Current release: **v1.0.1**. macOS Apple-Silicon DMG, Windows NSIS, and Linux AppImage installers are built automatically by GitHub Actions on each tag — see the [releases page](https://github.com/EpilepsyCenter/tracer/releases).
 
 ![TRACER](logo/TRACER-lockup-horizontal.png)
 
