@@ -17,7 +17,7 @@ No build required — pre-built installers for every supported platform are atta
     ```bash
     xattr -dr com.apple.quarantine /Applications/TRACER.app
     ```
-- **Windows (x64)** — `TRACER Setup <version>.exe` (NSIS installer). SmartScreen may warn the first time — click *More info* → *Run anyway*.
+- **Windows (x64)** — `TRACER-Setup-<version>.exe` (NSIS installer). SmartScreen may warn the first time — click *More info* → *Run anyway*.
 - **Linux (x64 / arm64)** — `TRACER-<version>.AppImage`. `chmod +x` it and double-click, or run it from a terminal. On Ubuntu 22.04+ you may need `sudo apt install libfuse2` (or use `--appimage-extract-and-run`).
 
 No separate Python or Node install is needed — the backend is bundled inside the installer.
