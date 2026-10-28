@@ -4,6 +4,11 @@ import 'uplot/dist/uPlot.min.css'
 import { useAppStore, BurstRecord, FieldBurstsData, FieldBurstsParams } from '../../stores/appStore'
 import { useThemeStore, useThemeKey } from '../../stores/themeStore'
 import { NumInput } from '../common/NumInput'
+import {
+  BaselineModeSelect, BaselineModeFields, NoiseMethodSelect,
+  PeakDirectionSelect, ThresholdEpochFields,
+  type NoiseMethod, type PeakDirection,
+} from '../common/NoiseThresholdFields'
 import { TrainOptions, defaultTrainParamsFor } from './TrainOptions'
 import { TrainSummary, TrainParams } from '../../utils/trains'
 import { computeBurstTrainIds } from '../../utils/burstTrains'
@@ -532,15 +537,7 @@ export function FieldBurstWindow({
                 </select>
               </label>
               {method !== 'isi' && (
-                <label style={{ display: 'flex', flexDirection: 'column', fontSize: 'var(--font-size-label)', gap: 2 }}>
-                  <span style={{ color: 'var(--text-muted)' }}>Baseline</span>
-                  <select value={baselineMode} onChange={(e) => onBaselineModeChange(e.target.value as BaselineMode)}>
-                    <option value="percentile">Percentile (default)</option>
-                    <option value="robust">Robust (median + MAD)</option>
-                    <option value="rolling">Rolling median</option>
-                    <option value="fixed_start">Fixed start</option>
-                  </select>
-                </label>
+                <BaselineModeSelect value={baselineMode} onChange={onBaselineModeChange} />
               )}
             </div>
 
@@ -935,19 +932,12 @@ function ParamsForm({
             </label>
           </>
         )}
-        <label style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 'var(--font-size-label)', marginLeft: 'auto' }}>
-          <span style={{ color: 'var(--text-muted)' }}>Noise</span>
-          <select
-            value={noiseMethod}
-            onChange={(e) => onChangeRaw('noise_method', e.target.value)}
-            style={{ fontSize: 'var(--font-size-label)' }}
-            title="SD: classical standard deviation. MAD: robust to outliers. MAD-diff: robust to outliers AND drift."
-          >
-            <option value="sd">SD</option>
-            <option value="mad">MAD</option>
-            <option value="mad_diff">MAD-diff</option>
-          </select>
-        </label>
+        <NoiseMethodSelect
+          layout="inline"
+          value={noiseMethod as NoiseMethod}
+          onChange={(v) => onChangeRaw('noise_method', v)}
+          style={{ marginLeft: 'auto' }}
+        />
       </div>
 
       {/* --- Method + baseline knobs --- */}
@@ -960,16 +950,13 @@ function ParamsForm({
       }}>
       {/* Method-specific knobs */}
       {(method === 'threshold' || method === 'oscillation') && (
-        <>
-          <ParamRow label="n_sd" value={p('n_sd')} step={0.1} min={0}
-            onChange={(v) => onChange('n_sd', v)} />
-          <ParamRow label="Smooth (ms)" value={p('smooth_ms')} step={1} min={1}
-            onChange={(v) => onChange('smooth_ms', v)} />
-          <ParamRow label="Min dur (ms)" value={p('min_duration_ms')} step={1} min={1}
-            onChange={(v) => onChange('min_duration_ms', v)} />
-          <ParamRow label="Min gap (ms)" value={p('min_gap_ms')} step={1} min={0}
-            onChange={(v) => onChange('min_gap_ms', v)} />
-        </>
+        <ThresholdEpochFields
+          params={{
+            n_sd: p('n_sd'), smooth_ms: p('smooth_ms'),
+            min_duration_ms: p('min_duration_ms'), min_gap_ms: p('min_gap_ms'),
+          }}
+          onChange={onChange}
+        />
       )}
       {method === 'oscillation' && (
         <>
@@ -993,17 +980,16 @@ function ParamsForm({
       )}
 
       {/* Baseline-mode-specific knobs */}
-      {method !== 'isi' && baselineMode === 'percentile' && (
-        <ParamRow label="Percentile (%)" value={p('baseline_percentile')} step={1} min={0} max={100}
-          onChange={(v) => onChange('baseline_percentile', Math.max(0, Math.min(100, v)))} />
-      )}
-      {method !== 'isi' && baselineMode === 'rolling' && (
-        <ParamRow label="Window (s)" value={p('baseline_window_s')} step={0.5} min={0.1}
-          onChange={(v) => onChange('baseline_window_s', v)} />
-      )}
-      {method !== 'isi' && baselineMode === 'fixed_start' && (
-        <ParamRow label="Baseline end (s)" value={p('baseline_end_s')} step={0.1} min={0.01}
-          onChange={(v) => onChange('baseline_end_s', v)} />
+      {method !== 'isi' && (
+        <BaselineModeFields
+          mode={baselineMode}
+          params={{
+            baseline_percentile: p('baseline_percentile'),
+            baseline_window_s: p('baseline_window_s'),
+            baseline_end_s: p('baseline_end_s'),
+          }}
+          onChange={onChange}
+        />
       )}
 
       {/* Pre-burst baseline window — applies to all methods (per-burst
@@ -1020,17 +1006,10 @@ function ParamsForm({
           which matters for spike-and-wave epileptiform events where a
           short initial downward spike is followed by a larger upward
           wave — pick "positive" to place the peak on the wave. */}
-      <label style={{ display: 'flex', flexDirection: 'column', fontSize: 'var(--font-size-label)' }}>
-        <span style={{ color: 'var(--text-muted)', marginBottom: 2 }}>Peak direction</span>
-        <select
-          value={peakDirection}
-          onChange={(e) => onChangeRaw('peak_direction', e.target.value)}
-        >
-          <option value="auto">Auto (|max dev|)</option>
-          <option value="positive">Positive</option>
-          <option value="negative">Negative</option>
-        </select>
-      </label>
+      <PeakDirectionSelect
+        value={peakDirection as PeakDirection}
+        onChange={(v) => onChangeRaw('peak_direction', v)}
+      />
       </div>{/* /method knobs grid */}
     </div>
   )

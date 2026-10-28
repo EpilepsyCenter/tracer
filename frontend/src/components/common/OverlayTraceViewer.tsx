@@ -43,10 +43,15 @@ interface Props {
   /** Optional — colour for the trace line. Defaults to a neutral hue
    *  distinct from the primary trace colour. */
   color?: string
+  /** Continuous recordings: fetch only this time window (seconds)
+   *  instead of the whole sweep, so a long trace keeps full detail at
+   *  short viewport lengths. Omit / null = fetch the whole sweep. */
+  fetchWindow?: { tStart: number; tEnd: number } | null
 }
 
 export function OverlayTraceViewer({
   backendUrl, group, series, sweep, channel, xRange, heightSignal, color,
+  fetchWindow,
 }: Props) {
   const themeKey = useThemeKey()
   const containerRef = useRef<HTMLDivElement>(null)
@@ -72,9 +77,14 @@ export function OverlayTraceViewer({
   // Fetch trace data. Re-fires on sweep or channel change. Stimulus is
   // always fetched as step segments and rasterised to a uniform sample
   // array so uPlot can draw it like any other trace.
+  const winStart = fetchWindow ? fetchWindow.tStart : null
+  const winEnd = fetchWindow ? fetchWindow.tEnd : null
   useEffect(() => {
     let cancelled = false
-    ;(async () => {
+    // Windowed fetches follow viewport scrolling — debounce so a drag
+    // doesn't fire one request per pixel. Whole-sweep fetches go at once.
+    const delay = winStart != null ? 80 : 0
+    const timer = setTimeout(async () => {
       try {
         if (channel.kind === 'stimulus') {
           const r = await fetch(
@@ -107,6 +117,10 @@ export function OverlayTraceViewer({
             sweep: String(sweep), trace: String(channel.index),
             max_points: '8000',
           })
+          if (winStart != null && winEnd != null) {
+            qs.set('t_start', String(winStart))
+            qs.set('t_end', String(winEnd))
+          }
           const r = await fetch(`${backendUrl}/api/traces/data?${qs}`)
           if (!r.ok) { if (!cancelled) { setTime(null); setValues(null) } ; return }
           const d = await r.json()
@@ -115,9 +129,9 @@ export function OverlayTraceViewer({
       } catch {
         if (!cancelled) { setTime(null); setValues(null) }
       }
-    })()
-    return () => { cancelled = true }
-  }, [backendUrl, group, series, sweep, channel.kind, (channel as any).index])
+    }, delay)
+    return () => { cancelled = true; clearTimeout(timer) }
+  }, [backendUrl, group, series, sweep, channel.kind, (channel as any).index, winStart, winEnd])
 
   // Y-range helper — auto-fit within the current X window so changes in
   // primary zoom also re-fit Y here (otherwise a tiny stim step looks

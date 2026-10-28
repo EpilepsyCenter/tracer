@@ -796,6 +796,9 @@ export function BatchWindow({ backendUrl }: Props) {
         p.rampParams ?? null,
         manualEdits,
         measureKinetics,
+        // Evoked / spontaneous follows the template (older templates
+        // have no mode = evoked).
+        p.mode === 'spontaneous' ? 'spontaneous' : 'evoked',
       )
       if (item.recipe.trainParams) {
         useAppStore.getState().setTrainParams('ap', g, s, item.recipe.trainParams as any)

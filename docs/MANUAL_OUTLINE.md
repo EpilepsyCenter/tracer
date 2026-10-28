@@ -726,6 +726,8 @@ Backend: `analysis/ap.py`.
     - **manual** — upward crossing of `manual_threshold_mv`, then within `width_ms` a downward crossing back; peak = argmax(Vm) between the two
     - **auto_spike** — `+dV/dt` crossing `pos_dvdt_mv_ms` opens a candidate; search up to `width_ms` for `−dV/dt` below `neg_dvdt_mv_ms`; peak = argmax(Vm) between them; reject when `peak − local_baseline < min_amplitude_mv`
     - **auto_rec** — same first pass as `auto_spike`, then re-runs detection with an adaptive level threshold `(median(peak_Vm) + median(threshold_Vm)) / 2`; helps catch lower-amplitude follow-on spikes during accommodation
+    - **noise_threshold** ("Threshold (noise-relative)") — Burst window's threshold detector (`detect_threshold_epochs`): baseline mode + noise estimator, smoothed |signal − baseline| > n_sd × noise, one spike per epoch; peak direction auto / positive / negative; viewer draws baseline + threshold lines; kinetics measured from the pre-spike baseline (Baseline window replaces Threshold method; table column Base, marker Onset)
+    - Kinetics card **Measure on**: unfiltered (default) / filtered trace; Kinetics-tab viewer + phase plot show that trace and label it
   - Min amplitude (mV)
   - Pos/neg dV/dt thresholds (mV/ms)
   - Spike width (ms) — search horizon from rising edge to fall
@@ -733,6 +735,13 @@ Backend: `analysis/ap.py`.
   - Bounds start / end (s)
   - Filter controls (lowpass / highpass / bandpass via `_apply_pre_detection_filter`)
 - Run mode: All sweeps / Range / Single sweep + Run / Clear buttons
+
+### Evoked / spontaneous
+- Top-bar switch; single sweep > 60 s opens in Spontaneous
+- Spontaneous: no Im source / rheobase / F–I / latency / SFA; windowed viewer (presets, slider, keyboard); numeric bounds + Use current view
+- Counting tab → Firing panel: per-sweep rate / ISI mean, median, CV / LV; rate over time (bin); ISI histogram (log / linear); CSV exports
+- Current traces: threshold / AHP hidden, I and dI/dt labels
+- Cohort type `ap_spont`; `ap` = evoked only
 
 ### Tab 1 — Counting
 - Per-sweep table — Sweep | Spike count | Latency | Mean ISI | SFA | Local variance

@@ -5,7 +5,8 @@ import {
   useAppStore,
   APData, APDetectionMethod, APDetectionParams, APKineticsParams,
   APThresholdMethod, APRampParams, APRheobaseMode, APManualEdits,
-  APPoint, APPerSweep,
+  APPoint, APPerSweep, APMode, APDetectionLines,
+  CONTINUOUS_SWEEP_THRESHOLD_S, DEFAULT_VIEWPORT_SECONDS,
 } from '../../stores/appStore'
 import { useThemeStore, useThemeKey } from '../../stores/themeStore'
 import { NumInput } from '../common/NumInput'
@@ -20,6 +21,17 @@ import { sampleTraceYAt } from '../../utils/sampleTraceY'
 import { TrainOptions, defaultTrainParamsFor } from './TrainOptions'
 import type { TrainParams, TrainSummary } from '../../utils/trains'
 import { computeApTrainIds } from '../../utils/apTrains'
+import {
+  ViewportBar, ViewportSlider, shiftViewportBy,
+  type Viewport as CViewport, type SetViewport as SetCViewport,
+} from '../common/ContinuousViewport'
+import {
+  BaselineModeSelect, BaselineModeFields, NoiseMethodSelect,
+  PeakDirectionSelect, ThresholdEpochFields,
+} from '../common/NoiseThresholdFields'
+import {
+  APFiringPanel, exportApFiringCSV, exportApRateCSV,
+} from './APFiringPanel'
 
 /**
  * Action Potentials analysis window.
@@ -47,6 +59,16 @@ interface FileInfo {
 
 function cssVar(name: string): string {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+}
+
+/** Axis labels for the recorded signal: Vm on voltage traces, I on
+ *  current traces (cell-attached / voltage-clamp action currents). */
+function signalLabels(units: string | undefined) {
+  const u = (units || 'mV').trim()
+  const voltage = /v$/i.test(u)
+  const sym = voltage ? 'Vm' : 'I'
+  const dsym = voltage ? 'dV/dt' : 'dI/dt'
+  return { sym, value: `${sym} (${u})`, deriv: `${dsym} (${u}/ms)`, dsym }
 }
 
 // Marker colours are theme tokens; canvas code resolves them with
@@ -84,6 +106,33 @@ const DEFAULT_DETECTION: APDetectionParams = {
   filter_low: 1,
   filter_high: 2000,
   filter_order: 2,
+  // ``noise_threshold`` method — same values the Burst window's
+  // threshold method was validated with on cell-attached spike
+  // recordings (6 × MAD, 10 ms smoothing, 20 ms min gap). Note the
+  // min gap caps resolvable firing at ~50 Hz: closer spikes merge.
+  baseline_mode: 'percentile',
+  baseline_percentile: 10,
+  baseline_window_s: 5,
+  baseline_end_s: 1,
+  noise_method: 'mad',
+  n_sd: 6,
+  smooth_ms: 10,
+  min_duration_ms: 1,
+  min_gap_ms: 20,
+  peak_direction: 'auto',
+  peak_snap_ms: 1,
+}
+
+/** Overlay viewers (spike overlay + phase plot) fetch one slice per
+ *  shown spike, so "Select all" on a long recording is capped. */
+const MAX_OVERLAY_SPIKES = 50
+
+/** True when the entry's kinetics were measured from the local
+ *  pre-spike baseline (noise-relative detection) rather than an AP
+ *  threshold — the "threshold" fields then hold that baseline level
+ *  and the spike's onset time. */
+function baselineReferenced(entry: APData | undefined): boolean {
+  return entry?.detection?.method === 'noise_threshold'
 }
 
 const DEFAULT_KINETICS: APKineticsParams = {
@@ -102,6 +151,24 @@ const DEFAULT_KINETICS: APKineticsParams = {
   mahp_search_end_ms: 100,
   max_slope_window_ms: 0.5,
   interpolate_to_200khz: true,
+  baseline_window_ms: 10,
+  measure_on: 'raw',
+}
+
+type TraceFilter = { type: 'lowpass' | 'highpass' | 'bandpass'; low: number; high: number; order: number }
+
+/** The filter applied to the trace kinetics are measured on, or null
+ *  for the unfiltered trace. */
+function kineticsFilter(det: APDetectionParams, kin: APKineticsParams): TraceFilter | null {
+  if (!det.filter_enabled || kin.measure_on !== 'filtered') return null
+  return { type: det.filter_type, low: det.filter_low, high: det.filter_high, order: det.filter_order }
+}
+
+/** Short description of a filter for viewer labels, e.g. "1–100 Hz band-pass". */
+function filterLabel(f: TraceFilter): string {
+  if (f.type === 'bandpass') return `${f.low}–${f.high} Hz band-pass`
+  if (f.type === 'lowpass') return `${f.high} Hz low-pass`
+  return `${f.low} Hz high-pass`
 }
 
 function channelsForSeries(fileInfo: FileInfo | null, group: number, series: number): any[] {
@@ -296,6 +363,40 @@ export function APWindow({
       } catch { /* ignore */ }
     })()
   }, [])
+  // Collapsed state of the left-panel settings cards, keyed by card
+  // title. Every card is shown on both tabs (Run uses all settings
+  // whichever tab is open); collapsing is how the user keeps the
+  // column short. Persisted under ``apWindowUI.collapsedCards``.
+  const [collapsedCards, setCollapsedCards] = useState<Record<string, boolean>>({})
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const api = window.electronAPI
+        if (!api?.getPreferences) return
+        const prefs = (await api.getPreferences()) as Record<string, any> | undefined
+        const saved = prefs?.apWindowUI?.collapsedCards
+        if (!cancelled && saved && typeof saved === 'object') setCollapsedCards(saved)
+      } catch { /* ignore */ }
+    })()
+    return () => { cancelled = true }
+  }, [])
+  const toggleCard = useCallback((title: string) => {
+    setCollapsedCards((prev) => {
+      const next = { ...prev }
+      if (prev[title]) delete next[title]; else next[title] = true
+      ;(async () => {
+        try {
+          const api = window.electronAPI
+          if (!api?.getPreferences || !api?.setPreferences) return
+          const prefs = (await api.getPreferences()) ?? {}
+          const ui = { ...(prefs.apWindowUI ?? {}), collapsedCards: next }
+          await api.setPreferences({ ...prefs, apWindowUI: ui })
+        } catch { /* ignore */ }
+      })()
+      return next
+    })
+  }, [])
   // Reset selection when the entry changes (new run, new series).
   useEffect(() => {
     setSelectedSpikeSet(new Set())
@@ -321,6 +422,87 @@ export function APWindow({
   useEffect(() => {
     setPreviewSweep((s) => Math.max(0, Math.min(s, totalSweeps - 1)))
   }, [totalSweeps])
+
+  // ---- Sweep length probe ----
+  // A one-sample fetch tells us the sweep duration + sampling rate
+  // before the viewer loads anything, so a long continuous recording
+  // never gets fetched whole. ``sweepInfoKey`` records which sweep the
+  // numbers belong to; the viewer waits until it matches.
+  const [sweepDurationS, setSweepDurationS] = useState(0)
+  const [sampleRate, setSampleRate] = useState(0)
+  const [sweepInfoKey, setSweepInfoKey] = useState<string | null>(null)
+  // Channel isn't part of the key: every channel of a sweep has the
+  // same length, so switching channel keeps the viewport where it is.
+  const probeKey = `${group}:${series}:${previewSweep}`
+  useEffect(() => {
+    if (!backendUrl || totalSweeps === 0) return
+    let cancelled = false
+    const qs = new URLSearchParams({
+      group: String(group), series: String(series),
+      sweep: String(previewSweep), trace: String(trace),
+      t_start: '0', t_end: '0', max_points: '0',
+    })
+    fetch(`${backendUrl}/api/traces/data?${qs}`)
+      .then((r) => r.ok ? r.json() : Promise.reject(new Error(String(r.status))))
+      .then((d) => {
+        if (cancelled) return
+        const sr = Number(d.sampling_rate ?? 0)
+        const n = Number(d.n_samples ?? 0)
+        setSampleRate(sr)
+        setSweepDurationS(sr > 0 ? n / sr : Number(d.duration ?? 0))
+        setSweepInfoKey(probeKey)
+      })
+      .catch(() => { if (!cancelled) setSweepInfoKey(probeKey) })
+    return () => { cancelled = true }
+  }, [backendUrl, group, series, trace, previewSweep, totalSweeps, probeKey])
+  const sweepInfoReady = sweepInfoKey === probeKey
+  /** Single sweep longer than the app-wide continuous threshold → the
+   *  viewer works on a scrollable time window (same rule as the main
+   *  viewer and the Events window). */
+  const longTrace = sweepInfoReady && totalSweeps === 1
+    && sweepDurationS > CONTINUOUS_SWEEP_THRESHOLD_S
+
+  // ---- Continuous viewport (long traces only; null = whole sweep) ----
+  const [viewport, setViewportRaw] = useState<CViewport>(null)
+  const setViewport: SetCViewport = useCallback((next) => {
+    setViewportRaw((prev) => {
+      const v = typeof next === 'function' ? (next as (p: CViewport) => CViewport)(prev) : next
+      if (!v) return v
+      // Clamp to the recording without changing the width.
+      const w = Math.max(1e-4, v.tEnd - v.tStart)
+      let a = v.tStart
+      if (sweepDurationS > 0) a = Math.min(a, Math.max(0, sweepDurationS - w))
+      a = Math.max(0, a)
+      return { tStart: a, tEnd: a + w }
+    })
+  }, [sweepDurationS])
+  useEffect(() => {
+    setViewportRaw(longTrace ? { tStart: 0, tEnd: DEFAULT_VIEWPORT_SECONDS } : null)
+  }, [longTrace, group, series, previewSweep])
+  const shiftViewport = useCallback((factor: number) => {
+    setViewport((v) => shiftViewportBy(v, sweepDurationS, factor))
+  }, [setViewport, sweepDurationS])
+  const goHome = useCallback(() => {
+    setViewport((v) => v ? { tStart: 0, tEnd: v.tEnd - v.tStart } : v)
+  }, [setViewport])
+  const goEnd = useCallback(() => {
+    setViewport((v) => {
+      if (!v || sweepDurationS <= 0) return v
+      const w = v.tEnd - v.tStart
+      return { tStart: Math.max(0, sweepDurationS - w), tEnd: sweepDurationS }
+    })
+  }, [setViewport, sweepDurationS])
+
+  // ---- Evoked vs spontaneous ----
+  // Spontaneous = continuous recording without a stimulus: Im source,
+  // rheobase, F-I and latency are hidden and the Counting tab shows
+  // firing statistics. Picked automatically for long single-sweep
+  // traces (see the effect below ``entry``); the switch in the top
+  // bar overrides it, and the choice is stored with the result.
+  const [mode, setMode] = useState<APMode>('evoked')
+  const spontaneous = mode === 'spontaneous'
+  // Rate-over-time bin for the Firing panel + its CSV export.
+  const [rateBinS, setRateBinS] = useState(10)
 
   // Zoom-to-spike request: bumped each time a kinetics row is
   // clicked OR when the kinetics tab becomes active with a spike
@@ -510,7 +692,19 @@ export function APWindow({
     if (entry.sweepFrom != null) setSweepFrom(entry.sweepFrom)
     if (entry.sweepTo != null) setSweepTo(entry.sweepTo)
     if (entry.sweepOne != null) setSweepOne(entry.sweepOne)
+    setMode(entry.mode ?? 'evoked')
   }, [entry, key])
+
+  // Pick evoked / spontaneous once per series from the trace shape,
+  // unless a stored result already says which it was.
+  const autoModeKeyRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!sweepInfoReady) return
+    if (autoModeKeyRef.current === key) return
+    autoModeKeyRef.current = key
+    if (apAnalyses[key]) return
+    setMode(longTrace ? 'spontaneous' : 'evoked')
+  }, [key, sweepInfoReady, longTrace, apAnalyses])
 
   // ---- Auto-seed series on window reopen from the saved AP entries
   // for this group, falling back to the main viewer's series if none. ----
@@ -546,15 +740,32 @@ export function APWindow({
   const [traceUnits, setTraceUnits] = useState<string>('mV')
   const [zeroOffset, setZeroOffset] = useState(false)
   const [zeroOffsetApplied, setZeroOffsetApplied] = useState(0)
+  // Short sweeps: fetched whole at full resolution. Long continuous
+  // traces: only the current viewport, debounced so scrolling / drag-
+  // pan doesn't fire one request per pixel. Full resolution while the
+  // window holds ≤ 400 k samples, LTTB-decimated beyond that (markers
+  // binary-search the returned time array, so non-uniform sampling is
+  // fine).
+  const vpStart = viewport ? viewport.tStart : null
+  const vpEnd = viewport ? viewport.tEnd : null
   useEffect(() => {
     if (!backendUrl || totalSweeps === 0) {
       setTraceTime(null); setTraceValues(null); return
     }
+    // Wait for the length probe so a long trace is never fetched whole.
+    if (!sweepInfoReady) return
+    if (longTrace && (vpStart == null || vpEnd == null)) return
     const qs = new URLSearchParams({
       group: String(group), series: String(series),
       sweep: String(previewSweep), trace: String(trace),
-      max_points: '0',  // full resolution — sweeps are short for AP
+      max_points: '0',
     })
+    if (longTrace && vpStart != null && vpEnd != null) {
+      qs.set('t_start', String(vpStart))
+      qs.set('t_end', String(vpEnd))
+      const nSamples = (vpEnd - vpStart) * (sampleRate || 0)
+      if (nSamples > 400_000) qs.set('max_points', '20000')
+    }
     if (zeroOffset) qs.set('zero_offset', 'true')
     if (detection.filter_enabled) {
       qs.set('filter_type', detection.filter_type)
@@ -563,21 +774,24 @@ export function APWindow({
       qs.set('filter_order', String(detection.filter_order))
     }
     let cancelled = false
-    fetch(`${backendUrl}/api/traces/data?${qs}`)
-      .then((r) => r.ok ? r.json() : Promise.reject(new Error(String(r.status))))
-      .then((d) => {
-        if (cancelled) return
-        setTraceTime(d.time ?? [])
-        setTraceValues(d.values ?? [])
-        setTraceUnits(d.units ?? 'mV')
-        setZeroOffsetApplied(Number(d.zero_offset ?? 0))
-      })
-      .catch(() => { if (!cancelled) { setTraceTime(null); setTraceValues(null) } })
-    return () => { cancelled = true }
+    const timer = setTimeout(() => {
+      fetch(`${backendUrl}/api/traces/data?${qs}`)
+        .then((r) => r.ok ? r.json() : Promise.reject(new Error(String(r.status))))
+        .then((d) => {
+          if (cancelled) return
+          setTraceTime(d.time ?? [])
+          setTraceValues(d.values ?? [])
+          setTraceUnits(d.units ?? 'mV')
+          setZeroOffsetApplied(Number(d.zero_offset ?? 0))
+        })
+        .catch(() => { if (!cancelled) { setTraceTime(null); setTraceValues(null) } })
+    }, longTrace ? 80 : 0)
+    return () => { cancelled = true; clearTimeout(timer) }
   }, [
     backendUrl, group, series, trace, previewSweep, totalSweeps, zeroOffset,
     detection.filter_enabled, detection.filter_type,
     detection.filter_low, detection.filter_high, detection.filter_order,
+    sweepInfoReady, longTrace, vpStart, vpEnd, sampleRate,
   ])
 
   // ---- Run ----
@@ -594,7 +808,8 @@ export function APWindow({
     await runAP(
       group, series, trace,
       {
-        manualEnabled: manualImEnabled,
+        // No stimulus in spontaneous mode — Im is never used.
+        manualEnabled: manualImEnabled && !spontaneous,
         manualStartS: manualImStartS,
         manualEndS: manualImEndS,
         manualStartPA: manualImStartPA,
@@ -606,6 +821,7 @@ export function APWindow({
       rheobaseMode === 'ramp' ? rampParams : null,
       manualEdits,
       true,
+      mode,
     )
     // Stamp the run-mode + sweep selection onto the entry so the
     // sidecar persists them and the form rehydrates them on reopen.
@@ -620,6 +836,21 @@ export function APWindow({
       }
     })
   }
+
+  // The Kinetics-tab viewers show the trace the kinetics were measured
+  // on — the last run's settings when there is a result, else the form.
+  // Memoised so the viewers only refetch when it really changes.
+  const kinSrc = entry ? { det: entry.detection, kin: entry.kinetics } : { det: detection, kin: kinetics }
+  const kinFilterRaw = kineticsFilter(kinSrc.det, kinSrc.kin)
+  const kinFilterKey = kinFilterRaw ? JSON.stringify(kinFilterRaw) : ''
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const kinTraceFilter = useMemo(() => kinFilterRaw, [kinFilterKey])
+  // Counting viewer: say so when the displayed trace (live pre-detection
+  // filter) isn't the one the markers' kinetics were measured on.
+  const countingKineticsNote = !entry ? null
+    : detection.filter_enabled && !kinTraceFilter ? 'Kinetics measured on the unfiltered trace'
+    : !detection.filter_enabled && kinTraceFilter ? `Kinetics measured on the filtered trace (${filterLabel(kinTraceFilter)})`
+    : null
 
   // Per-spike measurements for the current preview sweep — used by
   // the mini-viewer to overlay threshold / peak / fAHP / mAHP /
@@ -644,6 +875,23 @@ export function APWindow({
       manual: false,
     }))
   }, [entry, previewSweep])
+
+  // No stimulus overlay in spontaneous mode (there is no stimulus).
+  const visibleOverlays = spontaneous
+    ? overlayChannels.filter((ch) => ch !== STIMULUS_OVERLAY_KEY)
+    : overlayChannels
+  /** Centre the trace viewer on ``t`` (rate-plot click). Long traces
+   *  move the viewport, keeping its width; short sweeps zoom ±0.5 s. */
+  const jumpToTime = useCallback((t: number) => {
+    if (longTrace) {
+      setViewport((v) => {
+        const w = v ? v.tEnd - v.tStart : DEFAULT_VIEWPORT_SECONDS
+        return { tStart: t - w / 2, tEnd: t + w / 2 }
+      })
+    } else {
+      requestZoomToSpike(t, 500)
+    }
+  }, [longTrace, setViewport, requestZoomToSpike])
 
   return (
     <div style={{
@@ -686,7 +934,7 @@ export function APWindow({
           onPrimaryChange={(i) => setTrace(i)}
           overlay={overlayChannels}
           onOverlayChange={setOverlayChannels}
-          hasStimulus={hasStimulus}
+          hasStimulus={hasStimulus && !spontaneous}
         />
         <Field label="Sweep (preview)">
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
@@ -703,6 +951,23 @@ export function APWindow({
               title="Next sweep">→</button>
           </span>
         </Field>
+        {/* Evoked / spontaneous. A div rather than <Field> (a <label>)
+            so clicking the caption doesn't press the first button. */}
+        <div style={{ display: 'flex', flexDirection: 'column', fontSize: 'var(--font-size-label)' }}>
+          <span className="selector-label" style={{ color: 'var(--text-muted)', marginBottom: 2 }}>Recording</span>
+          <div className="segmented">
+            <button className={!spontaneous ? 'active' : undefined} aria-selected={!spontaneous}
+              onClick={() => setMode('evoked')}
+              title="Stimulus-driven sweeps: F-I curve, rheobase, first-spike latency">
+              Evoked
+            </button>
+            <button className={spontaneous ? 'active' : undefined} aria-selected={spontaneous}
+              onClick={() => setMode('spontaneous')}
+              title="Continuous recording without a stimulus: firing rate, ISI statistics, rate over time. Chosen automatically for single sweeps longer than 60 s.">
+              Spontaneous
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Tab bar — spans the full window width so it's visually above
@@ -752,7 +1017,7 @@ export function APWindow({
             {/* Im source — Auto reconstructs from the recording's
                 stimulus protocol; Manual falls back to start/step
                 values. Shared with the IV window via ImSourceCard. */}
-            <ImSourceCard
+            {!spontaneous && <ImSourceCard
               mode={manualImEnabled ? 'manual' : 'auto'}
               onModeChange={(m) => setManualImEnabled(m === 'manual')}
               manual={{
@@ -768,14 +1033,22 @@ export function APWindow({
                 if (p.stepPA !== undefined) setManualImStepPA(p.stepPA)
               }}
               detected={entry?.imSource ?? null}
-            />
+            />}
             {/* Detection params (filter + method + bounds) live here. */}
             <APDetectionPanel
               detection={detection} setDetection={setDetection}
               showBounds={showBounds} setShowBounds={setShowBoundsAndPersist}
+              viewport={longTrace ? viewport : null}
             />
-            {/* Tab-specific params. */}
-            {tab === 'counting' && (
+            {/* Kinetics + rheobase settings — shown on both tabs, since
+                every Run uses them; the tabs only switch the results
+                view on the right. Each card collapses from its header. */}
+            <APKineticsPanel kinetics={kinetics} setKinetics={setKinetics}
+              noiseMode={detection.method === 'noise_threshold'}
+              filterEnabled={detection.filter_enabled}
+              collapsed={!!collapsedCards['Kinetics']}
+              onToggle={() => toggleCard('Kinetics')} />
+            {!spontaneous && (
               <APRheobasePanel
                 rheobaseMode={rheobaseMode}
                 setRheobaseMode={setRheobaseMode}
@@ -783,10 +1056,9 @@ export function APWindow({
                 setRampParams={setRampParams}
                 backendUrl={backendUrl}
                 group={group} series={series}
+                collapsed={!!collapsedCards['Rheobase']}
+                onToggle={() => toggleCard('Rheobase')}
               />
-            )}
-            {tab === 'kinetics' && (
-              <APKineticsPanel kinetics={kinetics} setKinetics={setKinetics} />
             )}
             {/* Post-detection: optional grouping of closely-spaced
                 spikes into trains. Off by default; useful for picking
@@ -813,7 +1085,7 @@ export function APWindow({
               style={{ width: '100%' }}>
               {loading ? 'Running…' : 'Run'}
             </button>
-            <div style={{
+            {totalSweeps > 1 && <div style={{
               display: 'flex', alignItems: 'center', gap: 6,
               fontSize: 'var(--font-size-label)',
             }}>
@@ -825,8 +1097,8 @@ export function APWindow({
                 <option value="range">Range</option>
                 <option value="one">Single sweep</option>
               </select>
-            </div>
-            {runMode === 'range' && (
+            </div>}
+            {totalSweeps > 1 && runMode === 'range' && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 6,
                 fontSize: 'var(--font-size-label)', color: 'var(--text-muted)' }}>
                 <span>From</span>
@@ -838,7 +1110,7 @@ export function APWindow({
                 <span style={{ marginLeft: 'auto' }}>/ {totalSweeps || '—'}</span>
               </div>
             )}
-            {runMode === 'one' && (
+            {totalSweeps > 1 && runMode === 'one' && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 6,
                 fontSize: 'var(--font-size-label)', color: 'var(--text-muted)' }}>
                 <span>Sweep</span>
@@ -871,11 +1143,22 @@ export function APWindow({
                 stretch
                 placement="up"
                 disabled={!entry || (entry.perSweep.length === 0 && entry.perSpike.length === 0)}
-                onCounting={() => entry && exportApCountingCSV(
-                  entry.perSweep, fileInfo?.fileName ?? 'recording', group, series,
-                )}
+                onCounting={() => {
+                  if (!entry) return
+                  if (spontaneous) {
+                    exportApFiringCSV(entry, fileInfo?.fileName ?? 'recording', group, series)
+                  } else {
+                    exportApCountingCSV(entry.perSweep, fileInfo?.fileName ?? 'recording', group, series)
+                  }
+                }}
+                countingLabel={spontaneous ? 'Firing (per sweep)' : undefined}
+                onRate={spontaneous ? () => entry && exportApRateCSV(
+                  entry, fileInfo?.fileName ?? 'recording', group, series, rateBinS,
+                ) : undefined}
+                rateBinS={rateBinS}
                 onKinetics={() => entry && exportApKineticsCSV(
                   entry.perSpike, fileInfo?.fileName ?? 'recording', group, series,
+                  baselineReferenced(entry),
                 )}
                 countingCount={entry?.perSweep.length ?? 0}
                 kineticsCount={entry?.perSpike.length ?? 0}
@@ -942,7 +1225,7 @@ export function APWindow({
                   stay out of the way, tall enough to read off stim
                   amplitude and timing). */}
               <div style={{
-                flex: overlayChannels.length > 0 ? 5 : 1,
+                flex: visibleOverlays.length > 0 ? 5 : 1,
                 minHeight: 0,
               }}>
                 <APSweepViewer
@@ -971,6 +1254,12 @@ export function APWindow({
                   onRemoveSpikeAt={(t) => removeManualAPSpikeAt(group, series, previewSweep, t)}
                   showBounds={showBounds}
                   trainsForSweep={trainData.summariesBySweep.get(previewSweep) ?? []}
+                  viewport={longTrace ? viewport : null}
+                  setViewport={setViewport}
+                  shiftViewport={shiftViewport}
+                  goHome={goHome} goEnd={goEnd}
+                  sweepDuration={sweepDurationS}
+                  kineticsNote={countingKineticsNote}
                 />
               </div>
               {/* Overlay subplots — one per selected overlay channel.
@@ -978,7 +1267,7 @@ export function APWindow({
                   (overlay ≈ 29% of the viewer height when there's
                   one; halves from there if more are added). Display-
                   only, X-synced from primary. */}
-              {overlayChannels.map((ch) => {
+              {visibleOverlays.map((ch) => {
                 const label = ch === STIMULUS_OVERLAY_KEY
                   ? 'Stimulus'
                   : channels.find((c: any) => c.index === ch)?.label ?? `Ch ${ch}`
@@ -1003,6 +1292,7 @@ export function APWindow({
                         channel={overlayConfig}
                         xRange={primaryXRange}
                         heightSignal={topHeight}
+                        fetchWindow={longTrace ? viewport : null}
                       />
                     </div>
                   </React.Fragment>
@@ -1014,6 +1304,7 @@ export function APWindow({
             <>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <APSpikesOverlayViewer
+                  units={traceUnits}
                   backendUrl={backendUrl}
                   entry={entry}
                   group={group} series={series} trace={trace}
@@ -1033,12 +1324,7 @@ export function APWindow({
                       requestZoomToSpike(sp.peakT, 15)
                     }
                   }}
-                  filter={detection.filter_enabled ? {
-                    type: detection.filter_type,
-                    low: detection.filter_low,
-                    high: detection.filter_high,
-                    order: detection.filter_order,
-                  } : null}
+                  filter={kinTraceFilter}
                   zeroOffset={zeroOffset}
                   visibilitySignal={kineticsVis}
                   heightSignal={topHeight}
@@ -1046,6 +1332,8 @@ export function APWindow({
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <APPhasePlotPanel
+                  filter={kinTraceFilter}
+                  units={traceUnits}
                   backendUrl={backendUrl}
                   entry={entry}
                   group={group} series={series} trace={trace}
@@ -1076,20 +1364,46 @@ export function APWindow({
           <div style={{
             display: tab === 'counting' ? 'flex' : 'none', height: '100%',
           }}>
-            <APCountingPanel
-              entry={entry}
-              previewSweep={previewSweep}
-              setPreviewSweep={setPreviewSweep}
-              heightSignal={topHeight}
-              trainsEnabled={trainsEnabled}
-              trains={trainData.flatSummaries}
-              onExportTrains={() => exportApTrainsCSV(
-                trainData.flatSummaries,
-                effectiveTrainParams,
-                fileInfo?.fileName ?? 'recording',
-                group, series,
-              )}
-            />
+            {spontaneous ? (
+              <APFiringPanel
+                entry={entry}
+                previewSweep={previewSweep}
+                setPreviewSweep={setPreviewSweep}
+                heightSignal={topHeight}
+                trainsEnabled={trainsEnabled}
+                trainsCount={trainData.flatSummaries.length}
+                trainsSlot={(
+                  <APTrainsPanel
+                    trains={trainData.flatSummaries}
+                    enabled={trainsEnabled}
+                    onExport={() => exportApTrainsCSV(
+                      trainData.flatSummaries,
+                      effectiveTrainParams,
+                      fileInfo?.fileName ?? 'recording',
+                      group, series,
+                    )}
+                  />
+                )}
+                onJumpToTime={jumpToTime}
+                rateBinS={rateBinS}
+                onRateBinSChange={setRateBinS}
+              />
+            ) : (
+              <APCountingPanel
+                entry={entry}
+                previewSweep={previewSweep}
+                setPreviewSweep={setPreviewSweep}
+                heightSignal={topHeight}
+                trainsEnabled={trainsEnabled}
+                trains={trainData.flatSummaries}
+                onExportTrains={() => exportApTrainsCSV(
+                  trainData.flatSummaries,
+                  effectiveTrainParams,
+                  fileInfo?.fileName ?? 'recording',
+                  group, series,
+                )}
+              />
+            )}
           </div>
           <div style={{
             display: tab === 'kinetics' ? 'flex' : 'none', height: '100%',
@@ -1110,6 +1424,7 @@ export function APWindow({
               selectedSpikeSet={selectedSpikeSet}
               onToggleSpike={toggleSpikeSelected}
               trainIdByIdx={trainsEnabled ? trainData.idByGlobalIdx : null}
+              units={traceUnits}
             />
           </div>
         </div>
@@ -1127,14 +1442,24 @@ export function APWindow({
 function APDetectionPanel({
   detection, setDetection,
   showBounds, setShowBounds,
+  viewport,
 }: {
   detection: APDetectionParams
   setDetection: React.Dispatch<React.SetStateAction<APDetectionParams>>
   showBounds: boolean
   setShowBounds: (v: boolean) => void
+  /** Long traces: the viewer's current window, for "Use current view". */
+  viewport: CViewport
 }) {
   const set = <K extends keyof APDetectionParams>(k: K, v: APDetectionParams[K]) =>
     setDetection((d) => ({ ...d, [k]: v }))
+  // Generic setter for the shared noise-threshold field components,
+  // which report the backend param key by name.
+  const setNum = (name: string, v: number) =>
+    setDetection((d) => ({ ...d, [name]: v }))
+  const noiseMode = detection.method === 'noise_threshold'
+  // Older saves lack the noise fields — fall back to the defaults.
+  const nd = { ...DEFAULT_DETECTION, ...detection }
   return (
     <>
       {/* Pre-detection filter */}
@@ -1196,16 +1521,58 @@ function APDetectionPanel({
               onChange={(e) => set('method', e.target.value as APDetectionMethod)}>
               <option value="auto_rec">Auto (adaptive)</option>
               <option value="auto_spike">Auto (single pass)</option>
-              <option value="manual">Manual threshold</option>
+              <option value="manual">Threshold (fixed)</option>
+              <option value="noise_threshold">Threshold (noise-relative)</option>
             </select>
           </Field>
         </div>
+        {noiseMode && (
+          <>
+            <SubHeader>Baseline and noise</SubHeader>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <BaselineModeSelect
+                value={nd.baseline_mode ?? 'percentile'}
+                onChange={(v) => set('baseline_mode', v)} />
+            </div>
+            <NoiseMethodSelect
+              value={nd.noise_method ?? 'mad'}
+              onChange={(v) => set('noise_method', v)} />
+            <BaselineModeFields
+              mode={nd.baseline_mode ?? 'percentile'}
+              params={{
+                baseline_percentile: nd.baseline_percentile ?? 10,
+                baseline_window_s: nd.baseline_window_s ?? 5,
+                baseline_end_s: nd.baseline_end_s ?? 1,
+              }}
+              onChange={setNum} />
+            <SubHeader>Threshold</SubHeader>
+            <ThresholdEpochFields
+              params={{
+                n_sd: nd.n_sd ?? 6, smooth_ms: nd.smooth_ms ?? 10,
+                min_duration_ms: nd.min_duration_ms ?? 1, min_gap_ms: nd.min_gap_ms ?? 20,
+              }}
+              onChange={setNum} />
+            <PeakDirectionSelect
+              value={nd.peak_direction ?? 'auto'}
+              onChange={(v) => set('peak_direction', v)}
+              autoLabel="Auto (majority sign)"
+              title="Which way the spikes point. Detections pointing the other way are dropped. Auto picks the sign of most detections, once per sweep. Use Negative for inward action currents — and with a Percentile baseline set it to ~90 % for downward spikes (the 10 % default sits on the downward tail)." />
+            {!detection.filter_enabled && (
+              <div style={{
+                gridColumn: '1 / -1', fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)',
+              }}>
+                Tip: this method usually works best with a band-pass pre-detection
+                filter (e.g. 1–100 Hz) to remove drift and fast noise.
+              </div>
+            )}
+          </>
+        )}
         {detection.method === 'manual' && (
           <ParamRow label="Manual threshold (mV)"
             value={detection.manual_threshold_mv} step={5}
             onChange={(v) => set('manual_threshold_mv', v)} />
         )}
-        {detection.method !== 'manual' && (
+        {detection.method !== 'manual' && !noiseMode && (
           <>
             <SubHeader>Thresholds</SubHeader>
             <ParamRow label="Min amplitude (mV)"
@@ -1220,9 +1587,11 @@ function APDetectionPanel({
           </>
         )}
         <SubHeader>Spike shape</SubHeader>
-        <ParamRow label="Max width (ms)"
-          value={detection.width_ms} step={0.5} min={0.1}
-          onChange={(v) => set('width_ms', v)} />
+        {!noiseMode && (
+          <ParamRow label="Max width (ms)"
+            value={detection.width_ms} step={0.5} min={0.1}
+            onChange={(v) => set('width_ms', v)} />
+        )}
         <ParamRow label="Min distance (ms)"
           value={detection.min_distance_ms} step={0.5} min={0.1}
           onChange={(v) => set('min_distance_ms', v)} />
@@ -1250,6 +1619,29 @@ function APDetectionPanel({
         <ParamRow label="Bounds end (s)"
           value={detection.bounds_end_s} step={0.05} min={0}
           onChange={(v) => set('bounds_end_s', Math.max(0, v))} />
+        {viewport && (
+          <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 6 }}>
+            <button className="btn btn-sm" style={{ flex: 1 }}
+              title="Analyse only the time window currently shown in the viewer"
+              onClick={() => setDetection((d) => ({
+                ...d,
+                bounds_start_s: Math.max(0, Number(viewport.tStart.toFixed(4))),
+                bounds_end_s: Number(viewport.tEnd.toFixed(4)),
+              }))}>
+              Use current view
+            </button>
+            <button className="btn btn-sm" style={{ flex: 1 }}
+              title="Analyse the whole recording"
+              onClick={() => setDetection((d) => ({ ...d, bounds_start_s: 0, bounds_end_s: 0 }))}>
+              Whole recording
+            </button>
+          </div>
+        )}
+        {viewport && (
+          <div style={{ gridColumn: '1 / -1', fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
+            End 0 = to the end of the recording.
+          </div>
+        )}
       </div>
     </>
   )
@@ -1260,10 +1652,18 @@ function APDetectionPanel({
 // ---------------------------------------------------------------------------
 
 function APKineticsPanel({
-  kinetics, setKinetics,
+  kinetics, setKinetics, noiseMode, collapsed, onToggle, filterEnabled,
 }: {
+  /** Pre-detection filter on? "Measure on" only matters then. */
+  filterEnabled: boolean
+  collapsed: boolean
+  onToggle: () => void
   kinetics: APKineticsParams
   setKinetics: React.Dispatch<React.SetStateAction<APKineticsParams>>
+  /** Noise-relative detection: kinetics are measured from the local
+   *  pre-spike baseline, so the AP-threshold method fields are
+   *  replaced by the baseline window. */
+  noiseMode: boolean
 }) {
   const set = <K extends keyof APKineticsParams>(k: K, v: APKineticsParams[K]) =>
     setKinetics((kk) => ({ ...kk, [k]: v }))
@@ -1272,11 +1672,51 @@ function APKineticsPanel({
   const isSekerli = kinetics.threshold_method === 'sekerli_I'
     || kinetics.threshold_method === 'sekerli_II'
   return (
-    <div className="section-card" style={{
+    <div className="section-card">
+      <CardHeader title="Kinetics" collapsed={collapsed} onToggle={onToggle} />
+      {!collapsed && (
+    <div style={{
       display: 'grid',
       gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
       gap: 8,
     }}>
+      <div style={{ gridColumn: '1 / -1' }}
+        title="Which trace kinetics (peak, amplitude, rise, decay, FWHM, AHP, slopes) are measured on. Detection always runs on the filtered trace. The Kinetics-tab viewer and phase plot show the trace chosen here.">
+        <Field label="Measure on">
+          <select value={filterEnabled ? (kinetics.measure_on ?? 'raw') : 'raw'}
+            disabled={!filterEnabled}
+            onChange={(e) => set('measure_on', e.target.value as 'raw' | 'filtered')}>
+            <option value="raw">Unfiltered trace</option>
+            <option value="filtered">Filtered trace (pre-detection filter)</option>
+          </select>
+        </Field>
+        <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)', marginTop: 2 }}>
+          {!filterEnabled
+            ? 'No pre-detection filter is set, so kinetics use the recorded trace.'
+            : (kinetics.measure_on ?? 'raw') === 'filtered'
+              ? 'The filter changes spike shape: amplitudes shrink and widths grow, more so with a band-pass.'
+              : 'Detection runs on the filtered trace; spikes are measured on the recording as is.'}
+        </div>
+      </div>
+      {noiseMode && (
+        <>
+          <SubHeader>Pre-spike baseline</SubHeader>
+          <ParamRow label="Search before peak (ms)"
+            value={kinetics.threshold_search_ms_before_peak} step={0.5} min={0.1}
+            onChange={(v) => set('threshold_search_ms_before_peak', v)} />
+          <ParamRow label="Baseline window (ms)"
+            value={kinetics.baseline_window_ms ?? 10} step={1} min={0.5}
+            onChange={(v) => set('baseline_window_ms', v)} />
+          <div style={{
+            gridColumn: '1 / -1', fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)',
+          }}>
+            Amplitude, rise, FWHM and decay are measured from the median of the
+            baseline window just before the search window. The onset is the last
+            baseline crossing before the peak.
+          </div>
+        </>
+      )}
+      {!noiseMode && (<>
       <div style={{ gridColumn: '1 / -1' }}>
         <Field label="Threshold method">
           <select value={kinetics.threshold_method}
@@ -1305,6 +1745,7 @@ function APKineticsPanel({
       <ParamRow label="Search before peak (ms)"
         value={kinetics.threshold_search_ms_before_peak} step={0.5} min={0.1}
         onChange={(v) => set('threshold_search_ms_before_peak', v)} />
+      </>)}
 
       <SubHeader>Rise / decay</SubHeader>
       <ParamRow label="Rise low %" value={kinetics.rise_low_pct} step={5} min={0} max={100}
@@ -1319,7 +1760,7 @@ function APKineticsPanel({
         <Field label="Decay end">
           <select value={kinetics.decay_end}
             onChange={(e) => set('decay_end', e.target.value as 'to_threshold' | 'to_fahp')}>
-            <option value="to_threshold">To threshold</option>
+            <option value="to_threshold">{noiseMode ? 'To baseline' : 'To threshold'}</option>
             <option value="to_fahp">To fAHP</option>
           </select>
         </Field>
@@ -1351,6 +1792,8 @@ function APKineticsPanel({
         </label>
       </div>
     </div>
+      )}
+    </div>
   )
 }
 
@@ -1361,8 +1804,10 @@ function APKineticsPanel({
 function APRheobasePanel({
   rheobaseMode, setRheobaseMode,
   rampParams, setRampParams,
-  backendUrl, group, series,
+  backendUrl, group, series, collapsed, onToggle,
 }: {
+  collapsed: boolean
+  onToggle: () => void
   rheobaseMode: APRheobaseMode
   setRheobaseMode: (m: APRheobaseMode) => void
   rampParams: APRampParams
@@ -1401,11 +1846,13 @@ function APRheobasePanel({
   }
 
   return (
-    <div className="section-card" style={{
-      flexDirection: 'row', gap: 10, alignItems: 'center', flexWrap: 'wrap',
+    <div className="section-card">
+      <CardHeader title="Rheobase" collapsed={collapsed} onToggle={onToggle} />
+      {!collapsed && (
+    <div style={{
+      display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap',
       fontSize: 'var(--font-size-label)',
     }}>
-      <span style={{ color: 'var(--text-muted)' }}>Rheobase:</span>
       <label style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
         <input type="radio" name="ap-rheobase-mode" checked={rheobaseMode === 'record'}
           onChange={() => setRheobaseMode('record')} />
@@ -1448,6 +1895,8 @@ function APRheobasePanel({
             Auto-fill from protocol
           </button>
         </span>
+      )}
+    </div>
       )}
     </div>
   )
@@ -1667,9 +2116,15 @@ function APTrainsPanel({
 function APExportDropdown({
   disabled, onCounting, onKinetics, countingCount, kineticsCount,
   placement = 'down', stretch = false,
+  countingLabel, onRate, rateBinS,
 }: {
   disabled: boolean
   onCounting: () => void
+  /** Overrides the first item's label (spontaneous mode). */
+  countingLabel?: string
+  /** Spontaneous mode: rate-over-time bins export. */
+  onRate?: () => void
+  rateBinS?: number
   onKinetics: () => void
   countingCount: number
   kineticsCount: number
@@ -1723,10 +2178,22 @@ function APExportDropdown({
               textAlign: 'left',
               display: 'flex', justifyContent: 'space-between', gap: 12,
             }}
-            title="Per-sweep spike counts, rate, ISI, SFA, LV, Im">
-            <span>Counting (per sweep)</span>
+            title={countingLabel
+              ? 'Per-sweep spike count, rate, ISI mean / median / CV, LV'
+              : 'Per-sweep spike counts, rate, ISI, SFA, LV, Im'}>
+            <span>{countingLabel ?? 'Counting (per sweep)'}</span>
             <span className="num" style={{ color: 'var(--text-muted)' }}>{countingCount}</span>
           </button>
+          {onRate && (
+            <button className="btn btn-ghost"
+              onClick={() => { onRate(); setOpen(false) }}
+              disabled={countingCount === 0}
+              style={{ textAlign: 'left', display: 'flex', justifyContent: 'space-between', gap: 12 }}
+              title="Firing rate in consecutive bins (bin width from the Rate over time plot)">
+              <span>Rate over time</span>
+              <span className="num" style={{ color: 'var(--text-muted)' }}>{rateBinS} s bins</span>
+            </button>
+          )}
           <button className="btn btn-ghost"
             onClick={() => { onKinetics(); setOpen(false) }}
             disabled={kineticsCount === 0}
@@ -1781,11 +2248,15 @@ function exportApKineticsCSV(
   fileName: string,
   group: number,
   series: number,
+  /** Noise-relative run: the threshold fields hold the pre-spike
+   *  baseline and the onset time. */
+  baselineRef = false,
 ) {
   if (perSpike.length === 0) return
   const header = [
     'file', 'group', 'series', 'sweep', 'spike_index',
-    'threshold_vm', 'threshold_t_s', 'peak_vm', 'peak_t_s',
+    ...(baselineRef ? ['baseline', 'onset_t_s'] : ['threshold_vm', 'threshold_t_s']),
+    'peak_vm', 'peak_t_s',
     'amplitude_mv', 'rise_time_s', 'decay_time_s', 'half_width_s',
     'fahp_vm', 'fahp_t_s', 'mahp_vm', 'mahp_t_s',
     'max_rise_slope_mv_ms', 'max_decay_slope_mv_ms', 'manual',
@@ -2103,9 +2574,13 @@ function APFICurve({
 
 function APKineticsTable({
   entry, onSelectSpike, selectedSpikeSet, onToggleSpike,
-  trainIdByIdx,
+  trainIdByIdx, units,
 }: {
   entry: APData | undefined
+  /** Trace units. On current traces (cell-attached / voltage-clamp
+   *  action currents) threshold and AHP are membrane-voltage concepts
+   *  with no meaning, so those columns are hidden. */
+  units?: string
   onSelectSpike: (idx: number) => void
   /** Set of spike indices the user has checked for multi-spike
    *  overlay in the upper viewer / phase plot. Independent from the
@@ -2121,23 +2596,35 @@ function APKineticsTable({
 }) {
   const sel = useRowSelection(entry?.perSpike.length ?? 0)
   const showTrainCol = !!trainIdByIdx && trainIdByIdx.some((v) => v != null)
-  const baseHeaders = ['#', 'Sweep', 'Threshold (mV)', 'Peak (mV)', 'Amp (mV)',
-    'Rise (ms)', 'Decay (ms)', 'FWHM (ms)', 'fAHP (mV)', 'mAHP (mV)',
-    '+slope', '−slope']
+  const u = units || 'mV'
+  const voltage = /v$/i.test(u.trim())
+  // Noise-relative runs measure from the pre-spike baseline: show that
+  // level (any units) instead of the AP threshold (voltage only).
+  const baseRef = baselineReferenced(entry)
+  const showRef = baseRef || voltage
+  const refHeader = baseRef ? `Base (${u})` : `Threshold (${u})`
+  const baseHeaders = [
+    '#', 'Sweep', 'Peak t (s)',
+    ...(showRef ? [refHeader] : []),
+    `Peak (${u})`, `Amp (${u})`,
+    'Rise (ms)', 'Decay (ms)', 'FWHM (ms)',
+    ...(voltage ? [`fAHP (${u})`, `mAHP (${u})`] : []),
+    '+slope', '−slope',
+  ]
   const headers = showTrainCol ? [...baseHeaders, 'Train'] : baseHeaders
   const rowToCells = (i: number): Array<string | number | null> => {
     const sp = entry!.perSpike[i]
     const base: Array<string | number | null> = [
       (sp.manual ? '★ ' : '') + (i + 1),
       sp.sweep + 1,
-      sp.thresholdVm.toFixed(2),
+      sp.peakT.toFixed(4),
+      ...(showRef ? [sp.thresholdVm.toFixed(2)] : []),
       sp.peakVm.toFixed(2),
       sp.amplitudeMv.toFixed(2),
       sp.riseTimeS != null ? (sp.riseTimeS * 1000).toFixed(3) : null,
       sp.decayTimeS != null ? (sp.decayTimeS * 1000).toFixed(3) : null,
       sp.halfWidthS != null ? (sp.halfWidthS * 1000).toFixed(3) : null,
-      sp.fahpVm ?? null,
-      sp.mahpVm ?? null,
+      ...(voltage ? [sp.fahpVm ?? null, sp.mahpVm ?? null] : []),
       sp.maxRiseSlopeMvMs ?? null,
       sp.maxDecaySlopeMvMs ?? null,
     ]
@@ -2152,6 +2639,48 @@ function APKineticsTable({
     getTSV: () => sel.selectedIndexes.length === 0 ? null
       : buildTSV(headers, sel.selectedIndexes.map(rowToCells)),
   })
+
+  // ---- Row virtualisation ----
+  // A continuous recording can hold thousands of spikes; only the rows
+  // in (and just around) the scrolled-to window are rendered, with
+  // spacer rows standing in for the rest. Rows are single-line with
+  // fixed padding, so one measured height applies to all of them.
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const [scrollTop, setScrollTop] = useState(0)
+  const [viewH, setViewH] = useState(400)
+  const [rowH, setRowH] = useState(26)
+  const nRows = entry?.perSpike.length ?? 0
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const ro = new ResizeObserver(() => setViewH(el.clientHeight || 400))
+    ro.observe(el)
+    setViewH(el.clientHeight || 400)
+    return () => ro.disconnect()
+  }, [nRows > 0])
+  useEffect(() => {
+    const tr = scrollRef.current?.querySelector<HTMLTableRowElement>('tbody tr[data-row]')
+    const h = tr?.getBoundingClientRect().height
+    if (h && Math.abs(h - rowH) > 0.5) setRowH(h)
+  })
+  // Keep the active row in view when it changes from outside the table
+  // (Prev / Next in the overlay viewer, zoom-to-spike).
+  const selIdx = entry?.selectedSpikeIdx ?? null
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el || selIdx == null) return
+    const top = selIdx * rowH
+    const headerH = 28
+    if (top < el.scrollTop || top + rowH > el.scrollTop + el.clientHeight - headerH) {
+      el.scrollTop = Math.max(0, top - el.clientHeight / 2)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selIdx])
+  const OVERSCAN = 20
+  const first = Math.max(0, Math.floor(scrollTop / rowH) - OVERSCAN)
+  const last = Math.min(nRows, Math.ceil((scrollTop + viewH) / rowH) + OVERSCAN)
+  const colCount = headers.length + 1
+
   if (!entry || entry.perSpike.length === 0) {
     return (
       <div style={{
@@ -2164,10 +2693,13 @@ function APKineticsTable({
     )
   }
   return (
-    <div style={{
-      flex: 1, border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
-      overflow: 'auto', minHeight: 0,
-    }}>
+    <div
+      ref={scrollRef}
+      onScroll={(e) => setScrollTop((e.target as HTMLDivElement).scrollTop)}
+      style={{
+        flex: 1, border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
+        overflow: 'auto', minHeight: 0,
+      }}>
       <table className="data-table">
         <thead>
           <tr>
@@ -2176,12 +2708,17 @@ function APKineticsTable({
           </tr>
         </thead>
         <tbody>
-          {entry.perSpike.map((sp, i) => {
+          {first > 0 && (
+            <tr aria-hidden style={{ height: first * rowH }}><td colSpan={colCount} style={{ padding: 0, border: 0 }} /></tr>
+          )}
+          {entry.perSpike.slice(first, last).map((sp, j) => {
+            const i = first + j
             const selected = i === entry.selectedSpikeIdx
             const checked = selectedSpikeSet.has(i)
             return (
               <tr
                 key={i}
+                data-row
                 onClick={(ev) => {
                   sel.onRowClick(i, ev)
                   if (!ev.shiftKey && !ev.metaKey && !ev.ctrlKey) {
@@ -2208,14 +2745,15 @@ function APKineticsTable({
                 </td>
                 <Td>{sp.manual ? '★ ' : ''}{i + 1}</Td>
                 <Td>{sp.sweep + 1}</Td>
-                <Td>{sp.thresholdVm.toFixed(2)}</Td>
+                <Td>{sp.peakT.toFixed(4)}</Td>
+                {showRef && <Td>{sp.thresholdVm.toFixed(2)}</Td>}
                 <Td>{sp.peakVm.toFixed(2)}</Td>
                 <Td>{sp.amplitudeMv.toFixed(2)}</Td>
                 <Td>{sp.riseTimeS != null ? (sp.riseTimeS * 1000).toFixed(3) : '—'}</Td>
                 <Td>{sp.decayTimeS != null ? (sp.decayTimeS * 1000).toFixed(3) : '—'}</Td>
                 <Td>{sp.halfWidthS != null ? (sp.halfWidthS * 1000).toFixed(3) : '—'}</Td>
-                <Td>{sp.fahpVm != null ? sp.fahpVm.toFixed(2) : '—'}</Td>
-                <Td>{sp.mahpVm != null ? sp.mahpVm.toFixed(2) : '—'}</Td>
+                {voltage && <Td>{sp.fahpVm != null ? sp.fahpVm.toFixed(2) : '—'}</Td>}
+                {voltage && <Td>{sp.mahpVm != null ? sp.mahpVm.toFixed(2) : '—'}</Td>}
                 <Td>{sp.maxRiseSlopeMvMs != null ? sp.maxRiseSlopeMvMs.toFixed(1) : '—'}</Td>
                 <Td>{sp.maxDecaySlopeMvMs != null ? sp.maxDecaySlopeMvMs.toFixed(1) : '—'}</Td>
                 {showTrainCol && (
@@ -2228,6 +2766,9 @@ function APKineticsTable({
               </tr>
             )
           })}
+          {last < nRows && (
+            <tr aria-hidden style={{ height: (nRows - last) * rowH }}><td colSpan={colCount} style={{ padding: 0, border: 0 }} /></tr>
+          )}
         </tbody>
       </table>
       {copyMenu.menu}
@@ -2241,8 +2782,11 @@ function APKineticsTable({
 
 function APPhasePlotPanel({
   backendUrl, entry, group, series, trace, visibilitySignal, heightSignal,
-  selectedSpikeIndices, hideMarkers,
+  selectedSpikeIndices, hideMarkers, units, filter,
 }: {
+  /** Filter of the trace kinetics are measured on (null = unfiltered). */
+  filter: TraceFilter | null
+  units?: string
   backendUrl: string
   entry: APData | undefined
   group: number; series: number; trace: number
@@ -2283,6 +2827,7 @@ function APPhasePlotPanel({
     if (selectedSpikeIndices.size > 0) {
       return [...selectedSpikeIndices]
         .sort((a, b) => a - b)
+        .slice(0, MAX_OVERLAY_SPIKES)
         .map((i) => entry.perSpike[i])
         .filter((sp): sp is APPoint => !!sp)
     }
@@ -2310,6 +2855,12 @@ function APPhasePlotPanel({
         window_ms: String(windowMs),
         interp_factor: String(interp),
       })
+      if (filter) {
+        qs.set('filter_type', filter.type)
+        qs.set('filter_low', String(filter.low))
+        qs.set('filter_high', String(filter.high))
+        qs.set('filter_order', String(filter.order))
+      }
       try {
         const r = await fetch(`${backendUrl}/api/ap/phase_plot?${qs}`)
         if (!r.ok) return [key, null] as const
@@ -2326,7 +2877,7 @@ function APPhasePlotPanel({
       setPhaseSlices(next)
     })
     return () => { cancelled = true }
-  }, [backendUrl, group, series, trace, spikesToPlot, windowMs, interp])
+  }, [backendUrl, group, series, trace, spikesToPlot, windowMs, interp, filter])
 
   // Single representative slice for the legacy max-Vm/max-dV/dt
   // header readout (use the active row's slice).
@@ -2440,7 +2991,7 @@ function APPhasePlotPanel({
           grid: { stroke: cssVar('--chart-grid'), width: 1 },
           ticks: { stroke: cssVar('--chart-tick'), width: 1 },
           font: `${cssVar('--font-size-label')} ${cssVar('--font-ui')}`,
-          label: 'Vm (mV)', labelSize: 22,
+          label: signalLabels(units).value, labelSize: 22,
           labelFont: `${cssVar('--font-size-label')} ${cssVar('--font-ui')}`,
         },
         {
@@ -2448,7 +2999,7 @@ function APPhasePlotPanel({
           grid: { stroke: cssVar('--chart-grid'), width: 1 },
           ticks: { stroke: cssVar('--chart-tick'), width: 1 },
           font: `${cssVar('--font-size-label')} ${cssVar('--font-ui')}`,
-          label: 'dV/dt (mV/ms)', labelSize: 22,
+          label: signalLabels(units).deriv, labelSize: 22,
           labelFont: `${cssVar('--font-size-label')} ${cssVar('--font-ui')}`,
         },
       ],
@@ -2457,7 +3008,7 @@ function APPhasePlotPanel({
     }
     const payload: uPlot.AlignedData = [xData, ...yArrays] as any
     plotRef.current = new uPlot(opts, payload, el)
-  }, [phaseSlices, spikesToPlot, themeKey])
+  }, [phaseSlices, spikesToPlot, themeKey, units])
 
   useEffect(() => {
     const el = containerRef.current
@@ -2559,9 +3110,9 @@ function APPhasePlotPanel({
           }
           return (
             <span className="num" style={{ marginLeft: 'auto', color: 'var(--text-muted)' }}>
-              Max Vm {mv.toFixed(1)} ·
-              max dV/dt {mdv.toFixed(1)} ·
-              min dV/dt {mndv.toFixed(1)}
+              Max {signalLabels(units).sym} {mv.toFixed(1)} ·
+              max {signalLabels(units).dsym} {mdv.toFixed(1)} ·
+              min {signalLabels(units).dsym} {mndv.toFixed(1)}
             </span>
           )
         })()}
@@ -2602,6 +3153,61 @@ function APPhasePlotPanel({
 // AP sweep viewer — Vm trace + draggable bounds bands + spike markers
 // ---------------------------------------------------------------------------
 
+/** Dashed baseline + threshold guide lines of a noise-relative run, on
+ *  the uPlot canvas, clipped to the analysed span and the plot area.
+ *  ``offset`` = the zero-offset currently subtracted from the display. */
+function drawDetectionLines(u: uPlot, L: APDetectionLines, offset: number) {
+  const ctx = u.ctx
+  const dpr = devicePixelRatio || 1
+  const xMin = u.scales.x.min ?? 0, xMax = u.scales.x.max ?? 0
+  const t0 = Math.max(L.tStartS, xMin), t1 = Math.min(L.tEndS, xMax)
+  if (!(t1 > t0)) return
+  const thrOff = L.polarity < 0 ? -L.threshold : L.threshold
+  // Points (t, baseline) across [t0, t1]: two for a flat baseline, the
+  // visible part of the curve for a rolling one.
+  let pts: Array<[number, number]>
+  const c = L.curve
+  if (c && c.v.length > 1 && c.dt > 0) {
+    const i0 = Math.max(0, Math.floor((t0 - c.t0) / c.dt))
+    const i1 = Math.min(c.v.length - 1, Math.ceil((t1 - c.t0) / c.dt))
+    // At most ~2 points per pixel.
+    const step = Math.max(1, Math.floor((i1 - i0) / (u.bbox.width / dpr * 2)))
+    pts = []
+    for (let i = i0; i <= i1; i += step) pts.push([c.t0 + i * c.dt, c.v[i]])
+  } else {
+    pts = [[t0, L.baseline], [t1, L.baseline]]
+  }
+  if (pts.length < 2) return
+  const left = u.bbox.left, top = u.bbox.top
+  const stroke = (dy: number, color: string, label: string) => {
+    ctx.save()
+    ctx.beginPath()
+    ctx.rect(left, top, u.bbox.width, u.bbox.height)
+    ctx.clip()
+    ctx.strokeStyle = color
+    ctx.globalAlpha = 0.8
+    ctx.lineWidth = 1 * dpr
+    ctx.setLineDash([5 * dpr, 4 * dpr])
+    ctx.beginPath()
+    pts.forEach(([t, v], i) => {
+      const px = u.valToPos(t, 'x', true)
+      const py = u.valToPos(v + dy - offset, 'y', true)
+      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py)
+    })
+    ctx.stroke()
+    ctx.setLineDash([])
+    ctx.fillStyle = color
+    ctx.font = `${10 * dpr}px ${cssVar('--font-ui')}`
+    ctx.textAlign = 'left'
+    ctx.textBaseline = 'alphabetic'
+    const [lt, lv] = pts[0]
+    ctx.fillText(label, u.valToPos(lt, 'x', true) + 4 * dpr, u.valToPos(lv + dy - offset, 'y', true) - 3 * dpr)
+    ctx.restore()
+  }
+  stroke(0, cssVar('--text-muted'), 'baseline')
+  stroke(thrOff, cssVar('--marker-detected'), 'threshold')
+}
+
 function APSweepViewer({
   traceTime, traceValues, traceUnits,
   previewSweep, totalSweeps,
@@ -2617,7 +3223,12 @@ function APSweepViewer({
   onRemoveSpikeAt,
   showBounds,
   trainsForSweep,
+  viewport, setViewport, shiftViewport, goHome, goEnd, sweepDuration,
+  kineticsNote,
 }: {
+  /** Shown in the header when the displayed trace is not the one the
+   *  kinetics markers were measured on (filtered vs unfiltered). */
+  kineticsNote?: string | null
   traceTime: number[] | null
   traceValues: number[] | null
   traceUnits: string
@@ -2658,9 +3269,28 @@ function APSweepViewer({
   trainsForSweep: TrainSummary[]
   /** Changes when the recording slice shown changes; clears the saved zoom. */
   viewKey: string
+  /** Long continuous traces: the time window currently fetched and
+   *  shown. null = short sweep, whole trace loaded (classic mode). In
+   *  windowed mode pan / wheel-zoom move the viewport (the parent
+   *  refetches), and the viewport bar + slider + keyboard nav appear. */
+  viewport: CViewport
+  setViewport: SetCViewport
+  shiftViewport: (factor: number) => void
+  goHome: () => void
+  goEnd: () => void
+  sweepDuration: number
 }) {
   const themeKey = useThemeKey()
-  void previewSweep; void totalSweeps; void traceUnits
+  void totalSweeps
+  const previewSweepRef = useRef(previewSweep)
+  previewSweepRef.current = previewSweep
+  const windowed = viewport != null
+  const windowedRef = useRef(windowed)
+  windowedRef.current = windowed
+  const setViewportRef = useRef(setViewport)
+  setViewportRef.current = setViewport
+  const viewportRef = useRef(viewport)
+  viewportRef.current = viewport
   const containerRef = useRef<HTMLDivElement>(null)
   const plotRef = useRef<uPlot | null>(null)
   const overlayRef = useRef<HTMLCanvasElement>(null)
@@ -2671,6 +3301,11 @@ function APSweepViewer({
 
   const xRangeRef = useRef<[number, number] | null>(null)
   const yRangeRef = useRef<[number, number] | null>(null)
+  // Ends an in-progress pan (removes its window listeners). The pan
+  // lives outside the plot because in windowed mode every pan step
+  // fetches a new window and the plot is rebuilt mid-drag.
+  const endPanRef = useRef<(() => void) | null>(null)
+  useEffect(() => () => endPanRef.current?.(), [])
 
   // A different recording slice → once its trace arrives, drop the saved
   // zoom so it auto-fits instead of sitting in the old range. (Clearing
@@ -2721,6 +3356,17 @@ function APSweepViewer({
   const trainsRef = useRef<TrainSummary[]>(trainsForSweep)
   trainsRef.current = trainsForSweep
   useEffect(() => { plotRef.current?.redraw() }, [trainsForSweep])
+
+  // Windowed mode: the viewport owns the x range. Y is left alone so
+  // scrolling never resets a Y zoom (same as the Events window).
+  useEffect(() => {
+    if (!viewport) return
+    xRangeRef.current = [viewport.tStart, viewport.tEnd]
+    const u = plotRef.current
+    if (u) u.setScale('x', { min: viewport.tStart, max: viewport.tEnd })
+    emitXRange(viewport.tStart, viewport.tEnd)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewport?.tStart, viewport?.tEnd])
 
   const drawOverlays = (u: uPlot) => {
     const ctx = u.ctx
@@ -2802,7 +3448,23 @@ function APSweepViewer({
     // match the kinetics-table semantics and are tooltipped in the
     // legend strip.
     const offset = offsetRef.current
-    const spikes = spikesRef.current
+    const voltageTrace = /v$/i.test((traceUnits || 'mV').trim())
+    const baseRef = baselineReferenced(entryRef.current)
+
+    // Noise-relative runs: the detector's baseline and threshold as
+    // dashed guide lines across the analysed span (same style as the
+    // Burst window). Rolling baselines are drawn as curves.
+    const lines = entryRef.current?.perSweep
+      .find((p) => p.sweep === previewSweepRef.current)?.detLines
+    if (lines) drawDetectionLines(u, lines, offset)
+    // Only spikes inside (or just outside) the visible x range — a long
+    // recording has thousands, and the half-width scan below walks the
+    // trace once per spike.
+    const visLo = (u.scales.x.min ?? -Infinity) - 0.05
+    const visHi = (u.scales.x.max ?? Infinity) + 0.05
+    const spikes = spikesRef.current.filter((sp) => sp.peakT >= visLo && sp.peakT <= visHi)
+    const spikeIndex = new Map<APPoint, number>()
+    spikesRef.current.forEach((sp, i) => spikeIndex.set(sp, i))
     const overlayCanvas = overlayRef.current
     if (!overlayCanvas) return
     const oCtx = overlayCanvas.getContext('2d')
@@ -2864,15 +3526,7 @@ function APSweepViewer({
     // measured) so we can still place a peak dot on the trace.
     const tt = traceTime
     const tv = traceValues
-    const nearestY = (t: number): number | null => {
-      if (!tt || !tv || tt.length === 0) return null
-      let idx = 0; let best = Infinity
-      for (let i = 0; i < tt.length; i++) {
-        const d = Math.abs(tt[i] - t)
-        if (d < best) { best = d; idx = i }
-      }
-      return tv[idx]
-    }
+    const nearestY = (t: number): number | null => sampleTraceYAt(tt, tv, t)
 
     // Track the primed marker's screen position so we can stamp a
     // confirmation ring after the rest of the layer is drawn.
@@ -2893,82 +3547,41 @@ function APSweepViewer({
           dot(peakXY[0], peakXY[1], spikeColor, sp.manual)
         }
       }
-      if (peakXY && spi === primedIdx) primedPos = peakXY
-      // Threshold dot (foot of the spike).
-      if (sp.thresholdVm !== 0 || sp.thresholdT !== 0) {
+      if (peakXY && spikeIndex.get(sp) === primedIdx) primedPos = peakXY
+      // Threshold dot (foot of the spike). Voltage traces only — on a
+      // current trace (action currents) threshold has no meaning.
+      // Baseline-referenced runs mark the onset instead, on any trace.
+      if ((voltageTrace || baseRef) && (sp.thresholdVm !== 0 || sp.thresholdT !== 0)) {
         const [px, py] = toPx(sp.thresholdT, sp.thresholdVm)
         dot(px, py, thresholdColor)
       }
-      // Half-width markers — find the actual times where the trace
-      // crosses (threshold + amplitude/2) on the rising and falling
-      // sides of the spike. The backend returns half_width in
-      // duration only; positioning the markers via algebraic
-      // approximation drifted off the trace, so we walk the displayed
-      // samples here. Slightly more code, dots actually land on it.
-      if (sp.halfWidthS != null && sp.amplitudeMv > 0 && tt && tv) {
-        // ``thresholdVm`` / ``amplitudeMv`` are in raw signal space.
-        // ``halfVRaw`` keeps that frame for ``toPx`` (which applies
-        // ``- offset`` for the fallback path). ``halfV`` is the same
-        // value shifted into display space so the crossing scan
-        // against ``tv`` (already display-space) compares correctly.
-        const halfVRaw = sp.thresholdVm + sp.amplitudeMv / 2
-        const halfV = halfVRaw - offset
-        // Clip search to a sensible window: from threshold time to
-        // peak time + half-width-extra (so we catch the falling
-        // crossing even if it sits slightly past peak + halfWidth).
-        const tLo = sp.thresholdT
-        const tHi = sp.peakT + sp.halfWidthS + 0.005
-        // Linear-interp the rising crossing (between threshold and peak)
-        // and the falling crossing (between peak and tHi).
-        const findCrossing = (t0: number, t1: number, ascending: boolean): number | null => {
-          let prevT = -Infinity, prevV = NaN
-          for (let i = 0; i < tt.length; i++) {
-            const t = tt[i]
-            if (t < t0) { prevT = t; prevV = tv[i]; continue }
-            if (t > t1) break
-            const v = tv[i]
-            const above = v >= halfV
-            const wasAbove = isFinite(prevV) ? prevV >= halfV : null
-            if (wasAbove != null) {
-              if (ascending && !wasAbove && above) {
-                const frac = (halfV - prevV) / (v - prevV)
-                return prevT + frac * (t - prevT)
-              }
-              if (!ascending && wasAbove && !above) {
-                const frac = (halfV - prevV) / (v - prevV)
-                return prevT + frac * (t - prevT)
-              }
-            }
-            prevT = t; prevV = v
-          }
-          return null
-        }
-        const tLeft = findCrossing(tLo, sp.peakT, true)
-        const tRight = findCrossing(sp.peakT, tHi, false)
-        if (tLeft != null && tRight != null) {
-          const [pxL, pyL] = toPx(tLeft, halfVRaw)
-          const [pxR, pyR] = toPx(tRight, halfVRaw)
-          if (isFinite(pxL) && isFinite(pyL) && isFinite(pxR) && isFinite(pyR)) {
-            oCtx.save()
-            oCtx.strokeStyle = fwhmColor
-            oCtx.lineWidth = 1
-            oCtx.setLineDash([3, 3])
-            oCtx.beginPath()
-            oCtx.moveTo(pxL, pyL); oCtx.lineTo(pxR, pyR)
-            oCtx.stroke()
-            oCtx.setLineDash([])
-            oCtx.restore()
-            dot(pxL, pyL, fwhmColor); dot(pxR, pyR, fwhmColor)
-          }
+      // Half-width marks at the two crossing times the backend measured
+      // the FWHM between, riding the displayed trace like the other
+      // dots — so they sit at the same place on the waveform as in the
+      // Kinetics viewer. Older saves without the times get none.
+      if (sp.halfRiseT != null && sp.halfFallT != null) {
+        const [pxL, pyL] = toPx(sp.halfRiseT, sp.thresholdVm + sp.amplitudeMv / 2)
+        const [pxR, pyR] = toPx(sp.halfFallT, sp.thresholdVm + sp.amplitudeMv / 2)
+        if (isFinite(pxL) && isFinite(pyL) && isFinite(pxR) && isFinite(pyR)) {
+          oCtx.save()
+          oCtx.strokeStyle = fwhmColor
+          oCtx.lineWidth = 1
+          oCtx.setLineDash([3, 3])
+          oCtx.beginPath()
+          oCtx.moveTo(pxL, pyL); oCtx.lineTo(pxR, pyR)
+          oCtx.stroke()
+          oCtx.setLineDash([])
+          oCtx.restore()
+          dot(pxL, pyL, fwhmColor); dot(pxR, pyR, fwhmColor)
         }
       }
       // fAHP marker (post-peak fast undershoot).
-      if (sp.fahpVm != null && sp.fahpT != null) {
+      if (voltageTrace && sp.fahpVm != null && sp.fahpT != null) {
         const [px, py] = toPx(sp.fahpT, sp.fahpVm)
         dot(px, py, fahpColor)
       }
       // mAHP marker (slower medium undershoot).
-      if (sp.mahpVm != null && sp.mahpT != null) {
+      if (voltageTrace && sp.mahpVm != null && sp.mahpT != null) {
         const [px, py] = toPx(sp.mahpT, sp.mahpVm)
         dot(px, py, mahpColor)
       }
@@ -3004,7 +3617,11 @@ function APSweepViewer({
     for (const v of traceValues) {
       if (v < ymin) ymin = v; if (v > ymax) ymax = v
     }
-    if (isFinite(xmin) && isFinite(xmax) && xmax > xmin) {
+    // Windowed: the viewport keeps its x window; only Y re-fits.
+    const vp = viewportRef.current
+    if (vp) {
+      xRangeRef.current = [vp.tStart, vp.tEnd]
+    } else if (isFinite(xmin) && isFinite(xmax) && xmax > xmin) {
       u.setScale('x', { min: xmin, max: xmax })
       emitXRange(xmin, xmax)
     }
@@ -3079,7 +3696,7 @@ function APSweepViewer({
           { stroke: cssVar('--chart-axis'),
             grid: { stroke: cssVar('--chart-grid'), width: 1 },
             ticks: { stroke: cssVar('--chart-tick'), width: 1 },
-            label: 'mV', labelSize: 14,
+            label: traceUnits || 'mV', labelSize: 14,
             font: `${cssVar('--font-size-xs')} ${cssVar('--font-ui')}`,
             labelFont: `${cssVar('--font-size-sm')} ${cssVar('--font-ui')}` },
         ],
@@ -3105,12 +3722,6 @@ function APSweepViewer({
       type Drag =
         | { kind: 'bound-edge'; which: 'start' | 'end' }
         | { kind: 'bound-band'; startPxX: number; startStart: number; startEnd: number }
-        | {
-            kind: 'maybe-pan'
-            startPxX: number; startPxY: number
-            xMin: number; xMax: number; yMin: number; yMax: number
-            panning: boolean
-          }
       let drag: Drag | null = null
       const DRAG_THRESHOLD_PX = 3
       const MARKER_HIT_PX = 10
@@ -3120,6 +3731,10 @@ function APSweepViewer({
         // through the area should pan / add markers, not grab an
         // invisible cursor edge.
         if (!showBoundsRef.current) return null
+        // Long traces: bounds are edited numerically (the band usually
+        // spans the whole visible window, so grabbing it would swallow
+        // every click and pan).
+        if (windowedRef.current) return null
         const b = boundsRef.current
         const effEnd = b.end > b.start ? b.end : (u.scales.x.max ?? b.start)
         const pxStart = xToPx(b.start)
@@ -3141,8 +3756,10 @@ function APSweepViewer({
         const sps = spikesRef.current
         if (!sps || sps.length === 0) return null
         let best = -1, bestD = Infinity
+        const xLo = u.scales.x.min ?? -Infinity, xHi = u.scales.x.max ?? Infinity
         for (let i = 0; i < sps.length; i++) {
           const sp = sps[i]
+          if (sp.peakT < xLo || sp.peakT > xHi) continue
           const sampled = sampleTraceYAt(traceTime, traceValues, sp.peakT)
           const yUse = sampled != null
             ? sampled
@@ -3197,13 +3814,77 @@ function APSweepViewer({
         const xMin = u.scales.x.min, xMax = u.scales.x.max
         const yMin = u.scales.y.min, yMax = u.scales.y.max
         if (xMin == null || xMax == null || yMin == null || yMax == null) return
-        drag = {
-          kind: 'maybe-pan',
-          startPxX: pxX, startPxY: pxY,
-          xMin, xMax, yMin, yMax,
-          panning: false,
+        startPan(ev, xMin, xMax, yMin, yMax)
+      }
+
+      // Click-or-pan, tracked on ``window`` and against whichever plot
+      // is current, so a windowed refetch (which rebuilds the plot and
+      // its ``.u-over``) doesn't drop the drag.
+      const startPan = (
+        downEv: PointerEvent, xMin: number, xMax: number, yMin: number, yMax: number,
+      ) => {
+        endPanRef.current?.()
+        const bboxW = u.bbox.width / (devicePixelRatio || 1)
+        const bboxH = u.bbox.height / (devicePixelRatio || 1)
+        let panning = false
+        const onMove = (ev: PointerEvent) => {
+          if (ev.pointerId !== downEv.pointerId) return
+          const dxPx = ev.clientX - downEv.clientX
+          const dyPx = ev.clientY - downEv.clientY
+          if (!panning &&
+              (Math.abs(dxPx) > DRAG_THRESHOLD_PX || Math.abs(dyPx) > DRAG_THRESHOLD_PX)) {
+            panning = true
+            document.body.style.cursor = 'grabbing'
+          }
+          if (!panning) return
+          const dx = -(dxPx / bboxW) * (xMax - xMin)
+          const dy = (dyPx / bboxH) * (yMax - yMin)
+          const nx: [number, number] = [xMin + dx, xMax + dx]
+          const ny: [number, number] = [yMin + dy, yMax + dy]
+          xRangeRef.current = nx
+          yRangeRef.current = ny
+          const cur = plotRef.current
+          if (cur) {
+            cur.setScale('x', { min: nx[0], max: nx[1] })
+            cur.setScale('y', { min: ny[0], max: ny[1] })
+          }
+          emitXRange(nx[0], nx[1])
+          if (windowedRef.current) setViewportRef.current({ tStart: nx[0], tEnd: nx[1] })
         }
-        over.setPointerCapture(ev.pointerId)
+        const onUp = (ev: PointerEvent) => {
+          if (ev.pointerId !== downEv.pointerId) return
+          const wasClick = !panning
+          end()
+          if (!wasClick || ev.type === 'pointercancel') return
+          const cur = plotRef.current
+          const curOver = cur?.over
+          if (!cur || !curOver) return
+          const rect = curOver.getBoundingClientRect()
+          const tClick = cur.posToVal(ev.clientX - rect.left, 'x')
+          // Clear any primed-remove state — clicking empty space is
+          // a deliberate "no, don't delete that one" gesture.
+          if (primedRemoveIdxRef.current != null) {
+            primedRemoveIdxRef.current = null
+            cur.redraw()
+          }
+          if (isFinite(tClick)) onAddSpikeRef.current?.(tClick)
+        }
+        const end = () => {
+          window.removeEventListener('pointermove', onMove)
+          window.removeEventListener('pointerup', onUp)
+          window.removeEventListener('pointercancel', onUp)
+          document.body.style.cursor = ''
+          document.body.style.userSelect = ''
+          endPanRef.current = null
+        }
+        // Capture while this plot lives (no stray text selection); the
+        // window listeners carry on if a rebuild drops the capture.
+        try { over.setPointerCapture(downEv.pointerId) } catch { /* ignore */ }
+        document.body.style.userSelect = 'none'
+        window.addEventListener('pointermove', onMove)
+        window.addEventListener('pointerup', onUp)
+        window.addEventListener('pointercancel', onUp)
+        endPanRef.current = end
       }
       const onPointerMove = (ev: PointerEvent) => {
         if (!drag) {
@@ -3215,7 +3896,6 @@ function APSweepViewer({
         }
         const rect = over.getBoundingClientRect()
         const pxX = ev.clientX - rect.left
-        const pxY = ev.clientY - rect.top
         if (drag.kind === 'bound-edge') {
           const newT = pxToX(pxX)
           const b = boundsRef.current
@@ -3230,48 +3910,13 @@ function APSweepViewer({
             Math.max(0, drag.startStart + dx),
             Math.max(drag.startStart + dx + 0.001, drag.startEnd + dx),
           )
-        } else if (drag.kind === 'maybe-pan') {
-          const dxPx = pxX - drag.startPxX
-          const dyPx = pxY - drag.startPxY
-          if (!drag.panning &&
-              (Math.abs(dxPx) > DRAG_THRESHOLD_PX || Math.abs(dyPx) > DRAG_THRESHOLD_PX)) {
-            drag.panning = true
-            over.style.cursor = 'grabbing'
-          }
-          if (!drag.panning) return
-          const bboxW = u.bbox.width / (devicePixelRatio || 1)
-          const bboxH = u.bbox.height / (devicePixelRatio || 1)
-          const dx = -(dxPx / bboxW) * (drag.xMax - drag.xMin)
-          const dy = (dyPx / bboxH) * (drag.yMax - drag.yMin)
-          const nx: [number, number] = [drag.xMin + dx, drag.xMax + dx]
-          const ny: [number, number] = [drag.yMin + dy, drag.yMax + dy]
-          xRangeRef.current = nx
-          yRangeRef.current = ny
-          u.setScale('x', { min: nx[0], max: nx[1] })
-          u.setScale('y', { min: ny[0], max: ny[1] })
-          emitXRange(nx[0], nx[1])
         }
       }
       const onPointerUp = (ev: PointerEvent) => {
         if (!drag) return
-        // Capture click-or-pan resolution before clearing drag so the
-        // narrow type assertion holds when reading .panning below.
-        const clickCandidate = drag.kind === 'maybe-pan' && !drag.panning
         drag = null
         try { over.releasePointerCapture(ev.pointerId) } catch { /* ignore */ }
         over.style.cursor = ''
-        if (clickCandidate) {
-          const rect = over.getBoundingClientRect()
-          const pxX = ev.clientX - rect.left
-          const tClick = pxToX(pxX)
-          // Clear any primed-remove state — clicking empty space is
-          // a deliberate "no, don't delete that one" gesture.
-          if (primedRemoveIdxRef.current != null) {
-            primedRemoveIdxRef.current = null
-            plotRef.current?.redraw()
-          }
-          if (isFinite(tClick)) onAddSpikeRef.current?.(tClick)
-        }
       }
       const onWheel = (ev: WheelEvent) => {
         ev.preventDefault()
@@ -3296,6 +3941,7 @@ function APSweepViewer({
           xRangeRef.current = [newMin, newMax]
           u.setScale('x', { min: newMin, max: newMax })
           emitXRange(newMin, newMax)
+          if (windowedRef.current) setViewportRef.current({ tStart: newMin, tEnd: newMax })
         }
       }
       over.addEventListener('pointerdown', onPointerDown)
@@ -3350,11 +3996,17 @@ function APSweepViewer({
   // clicked a kinetics row and wants to inspect the markers up close.
   useEffect(() => {
     if (!zoomToSpikeRequest) return
-    const u = plotRef.current
-    if (!u) return
     const half = zoomToSpikeRequest.halfMs / 1000
     const lo = zoomToSpikeRequest.centerT - half
     const hi = zoomToSpikeRequest.centerT + half
+    if (windowedRef.current) {
+      // The parent refetches the new window; the viewport effect above
+      // applies the x range.
+      setViewportRef.current({ tStart: lo, tEnd: hi })
+      return
+    }
+    const u = plotRef.current
+    if (!u) return
     xRangeRef.current = [lo, hi]
     u.setScale('x', { min: lo, max: hi })
     u.redraw()
@@ -3371,20 +4023,57 @@ function APSweepViewer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [traceTime, traceValues])
 
+  // Keyboard navigation for long traces (viewer must have focus):
+  //   ←/→ = ±1 window · PgUp/PgDn = ±3 windows · Home/End = start / end.
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (!windowed) return
+    if (e.key === 'ArrowRight') { e.preventDefault(); shiftViewport(1) }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); shiftViewport(-1) }
+    else if (e.key === 'PageDown') { e.preventDefault(); shiftViewport(3) }
+    else if (e.key === 'PageUp') { e.preventDefault(); shiftViewport(-3) }
+    else if (e.key === 'Home') { e.preventDefault(); goHome() }
+    else if (e.key === 'End') { e.preventDefault(); goEnd() }
+  }
+  const visibleSpikeCount = windowed && viewport
+    ? previewSpikes.filter((sp) => sp.peakT >= viewport.tStart && sp.peakT <= viewport.tEnd).length
+    : previewSpikes.length
+
   return (
-    <div style={{
-      display: 'flex', flexDirection: 'column', height: '100%',
-      border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
-      background: 'var(--bg-primary)', position: 'relative',
-    }}>
+    <div
+      tabIndex={windowed ? 0 : undefined}
+      onKeyDown={onKeyDown}
+      style={{
+        display: 'flex', flexDirection: 'column', height: '100%',
+        border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
+        background: 'var(--bg-primary)', position: 'relative', outline: 'none',
+      }}>
+      {windowed && (
+        <ViewportBar
+          viewport={viewport}
+          sweepDuration={sweepDuration}
+          setViewport={setViewport}
+          shiftViewport={shiftViewport}
+          goHome={goHome} goEnd={goEnd}
+        />
+      )}
       <div className="viewer-header" style={{
         fontSize: 'var(--font-size-label)',
         color: 'var(--text-muted)',
-        borderRadius: 'var(--radius) var(--radius) 0 0',
+        borderRadius: windowed ? 0 : 'var(--radius) var(--radius) 0 0',
       }}>
         <span>Sweep <span className="num">{previewSweep + 1}</span></span>
-        <span><span className="num">{previewSpikes.length}</span> spike{previewSpikes.length === 1 ? '' : 's'}</span>
-        <APMarkerLegend />
+        <span>
+          <span className="num">{visibleSpikeCount}</span>
+          {windowed ? ` of ${previewSpikes.length}` : ''} spike{previewSpikes.length === 1 ? '' : 's'}
+          {windowed ? ' in view' : ''}
+        </span>
+        <APMarkerLegend units={traceUnits} baselineRef={baselineReferenced(entry)} />
+        {kineticsNote && (
+          <span style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-xs)' }}
+            title="The viewer shows the trace with the live pre-detection filter setting; the kinetics markers come from the trace chosen under Kinetics → Measure on.">
+            · {kineticsNote}
+          </span>
+        )}
         <label style={{
           display: 'flex', alignItems: 'center', gap: 3, marginLeft: 'auto',
         }} title="Subtract per-sweep baseline (first ~3 ms) from the displayed trace">
@@ -3404,6 +4093,9 @@ function APSweepViewer({
         <canvas ref={overlayRef}
           style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 5, width: '100%', height: '100%' }} />
       </div>
+      {windowed && (
+        <ViewportSlider viewport={viewport} sweepDuration={sweepDuration} setViewport={setViewport} />
+      )}
       <div style={{
         padding: '2px 8px', fontSize: 'var(--font-size-label)',
         color: 'var(--text-muted)', fontStyle: 'italic',
@@ -3411,7 +4103,9 @@ function APSweepViewer({
         borderTop: '1px solid var(--border)',
         borderRadius: '0 0 var(--radius) var(--radius)',
       }}>
-        Scroll = zoom X · ⌥ scroll = zoom Y · drag = pan · drag bounds edge / band to move
+        {windowed
+          ? 'Scroll = zoom X · ⌥ scroll = zoom Y · drag = pan · ←/→ PgUp/PgDn Home/End = move window · click = add spike'
+          : 'Scroll = zoom X · ⌥ scroll = zoom Y · drag = pan · drag bounds edge / band to move'}
       </div>
     </div>
   )
@@ -3457,6 +4151,26 @@ function ParamRow({
  *  full grid width via gridColumn. Small semibold label + a hairline
  *  top border gives the panel a scannable structure without stealing
  *  vertical space. */
+/** Clickable title row of a collapsible left-panel card (same look as
+ *  the Event Detection window's cards). */
+function CardHeader({ title, collapsed, onToggle }: {
+  title: string; collapsed: boolean; onToggle: () => void
+}) {
+  return (
+    <div className="section-card-title" onClick={onToggle}
+      style={{ cursor: 'pointer' }}
+      title={collapsed ? 'Show settings' : 'Hide settings'}>
+      <span>{title}</span>
+      <span aria-hidden="true" style={{
+        marginLeft: 'auto', color: 'var(--text-muted)',
+        display: 'inline-block', width: 10, textAlign: 'center', lineHeight: 1,
+        transform: collapsed ? 'rotate(-90deg)' : 'rotate(0deg)',
+        transformOrigin: 'center', transition: 'transform 0.15s',
+      }}>▾</span>
+    </div>
+  )
+}
+
 function SubHeader({ children }: { children: React.ReactNode }) {
   return (
     <div style={{
@@ -3505,8 +4219,9 @@ function APSpikesOverlayViewer({
   selectedSpikeIndices, hideMarkers, onHideMarkersChange,
   onSelectAll, onClearSelection, onSelectSpike,
   filter, zeroOffset,
-  visibilitySignal, heightSignal,
+  visibilitySignal, heightSignal, units,
 }: {
+  units?: string
   backendUrl: string
   entry: APData | undefined
   group: number; series: number; trace: number
@@ -3545,6 +4260,7 @@ function APSpikesOverlayViewer({
     if (selectedSpikeIndices.size > 0) {
       return [...selectedSpikeIndices]
         .sort((a, b) => a - b)
+        .slice(0, MAX_OVERLAY_SPIKES)
         .map((i) => entry.perSpike[i])
         .filter((sp): sp is APPoint => !!sp)
     }
@@ -3664,66 +4380,28 @@ function APSpikesOverlayViewer({
       }
       // x is time-relative-to-peak (s).
       dotAt(0, sliceY(0, sp.peakVm), peakColor)                 // peak
-      if (sp.thresholdT !== 0 || sp.thresholdVm !== 0) {
+      const voltageTrace = /v$/i.test((units || 'mV').trim())
+      // Baseline-referenced runs: this dot is the spike onset (any units).
+      if ((voltageTrace || baselineReferenced(entry)) && (sp.thresholdT !== 0 || sp.thresholdVm !== 0)) {
         const xR = sp.thresholdT - sp.peakT
         dotAt(xR, sliceY(xR, sp.thresholdVm), thresholdColor)   // threshold
       }
-      if (sp.fahpT != null && sp.fahpVm != null) {
+      if (voltageTrace && sp.fahpT != null && sp.fahpVm != null) {
         const xR = sp.fahpT - sp.peakT
         dotAt(xR, sliceY(xR, sp.fahpVm), fahpColor)             // fAHP
       }
-      if (sp.mahpT != null && sp.mahpVm != null) {
+      if (voltageTrace && sp.mahpT != null && sp.mahpVm != null) {
         const xR = sp.mahpT - sp.peakT
         dotAt(xR, sliceY(xR, sp.mahpVm), mahpColor)             // mAHP
       }
-      // FWHM crossings — walk the per-spike slice to find the two
-      // times the trace actually crosses half-amplitude. Derive
-      // halfV from sampled values so it stays in the same frame as
-      // ``slice.values`` (display space when zero-offset is on,
-      // raw otherwise) — going through ``sp.thresholdVm`` /
-      // ``sp.peakVm`` directly would put halfV in raw space and
-      // misplace the crossing dots whenever zero-offset is on.
-      if (sp.halfWidthS != null && sp.amplitudeMv > 0) {
-        const slice = slicesRef.current[`${sp.sweep}:${sp.peakT}`]
-        if (slice && slice.time.length > 1) {
-          const peakYFrame = sampleTraceYAt(slice.time, slice.values, sp.peakT) ?? sp.peakVm
-          const thrYFrame = sampleTraceYAt(slice.time, slice.values, sp.thresholdT) ?? sp.thresholdVm
-          const halfV = thrYFrame + (peakYFrame - thrYFrame) / 2
-          // Bound the search to threshold → peak (rising) and
-          // peak → peak+halfWidth+slop (falling), in absolute time.
-          const tLo = sp.thresholdT
-          const tHi = sp.peakT + sp.halfWidthS + 0.005
-          const findCross = (t0: number, t1: number, ascending: boolean): number | null => {
-            let prevT = -Infinity, prevV = NaN
-            for (let i = 0; i < slice.time.length; i++) {
-              const t = slice.time[i]
-              if (t < t0) { prevT = t; prevV = slice.values[i]; continue }
-              if (t > t1) break
-              const v = slice.values[i]
-              if (isFinite(prevV)) {
-                const above = v >= halfV
-                const wasAbove = prevV >= halfV
-                if (ascending && !wasAbove && above) {
-                  const frac = (halfV - prevV) / (v - prevV)
-                  return prevT + frac * (t - prevT)
-                }
-                if (!ascending && wasAbove && !above) {
-                  const frac = (halfV - prevV) / (v - prevV)
-                  return prevT + frac * (t - prevT)
-                }
-              }
-              prevT = t; prevV = v
-            }
-            return null
-          }
-          const tLeft = findCross(tLo, sp.peakT, true)
-          const tRight = findCross(sp.peakT, tHi, false)
-          if (tLeft != null && tRight != null) {
-            // Rel-to-peak x for the overlay's time-aligned axis.
-            dotAt(tLeft - sp.peakT, halfV, fwhmColor)
-            dotAt(tRight - sp.peakT, halfV, fwhmColor)
-          }
-        }
+      // FWHM marks at the crossing times the backend measured between,
+      // on the displayed slice — same placement as the Counting viewer.
+      if (sp.halfRiseT != null && sp.halfFallT != null) {
+        const half = sp.thresholdVm + sp.amplitudeMv / 2
+        const xL = sp.halfRiseT - sp.peakT
+        const xR = sp.halfFallT - sp.peakT
+        dotAt(xL, sliceY(xL, half), fwhmColor)
+        dotAt(xR, sliceY(xR, half), fwhmColor)
       }
     })
   }
@@ -3798,7 +4476,7 @@ function APSpikesOverlayViewer({
           grid: { stroke: cssVar('--chart-grid'), width: 1 },
           ticks: { stroke: cssVar('--chart-tick'), width: 1 },
           font: `${cssVar('--font-size-label')} ${cssVar('--font-ui')}`,
-          label: 'Vm (mV)', labelSize: 22,
+          label: signalLabels(units).value, labelSize: 22,
           labelFont: `${cssVar('--font-size-label')} ${cssVar('--font-ui')}` },
       ],
       cursor: { drag: { x: false, y: false } },
@@ -3887,7 +4565,7 @@ function APSpikesOverlayViewer({
     over.addEventListener('pointermove', onMove)
     over.addEventListener('pointerup', onUp)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [slices, spikesToShow, hideMarkers, themeKey])
+  }, [slices, spikesToShow, hideMarkers, themeKey, units])
 
   useEffect(() => { plotRef.current?.redraw() }, [hideMarkers])
 
@@ -3958,14 +4636,23 @@ function APSpikesOverlayViewer({
             </>
           )
         })()}
-        <span><span className="num">{spikesToShow.length}</span> shown</span>
+        <span title={selectedSpikeIndices.size > MAX_OVERLAY_SPIKES
+          ? `Overlay is capped at the first ${MAX_OVERLAY_SPIKES} selected spikes (${selectedSpikeIndices.size} selected).`
+          : undefined}>
+          <span className="num">{spikesToShow.length}</span> shown
+          {selectedSpikeIndices.size > MAX_OVERLAY_SPIKES ? ` (first ${MAX_OVERLAY_SPIKES} of ${selectedSpikeIndices.size})` : ''}
+        </span>
         <span style={{ color: 'var(--text-muted)' }}>· Window ±</span>
         <NumInput value={windowMs} step={1} min={1}
           onChange={(v) => setWindowMs(Math.max(1, v))} style={{ width: 56 }} />
         <span style={{ color: 'var(--text-muted)' }}>ms</span>
+        <span style={{ color: 'var(--text-muted)' }}
+          title="The trace kinetics are measured on — set under Kinetics → Measure on.">
+          · {filter ? `Filtered (${filterLabel(filter)})` : 'Unfiltered'}
+        </span>
         {!hideMarkers && (
           <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            <APMarkerLegend />
+            <APMarkerLegend units={units} baselineRef={baselineReferenced(entry)} />
           </span>
         )}
         <span style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
@@ -4010,13 +4697,21 @@ function APSpikesOverlayViewer({
  *  both the Counting-tab sweep viewer and the Kinetics-tab overlay
  *  viewer so the color → quantity mapping is consistent and
  *  discoverable without a separate help popup. */
-function APMarkerLegend() {
+function APMarkerLegend({ units, baselineRef = false }: { units?: string; baselineRef?: boolean }) {
+  // Threshold / AHP markers are only drawn on voltage traces. Runs
+  // measured from the pre-spike baseline mark the onset instead (any
+  // units).
+  const voltage = /v$/i.test((units || 'mV').trim())
   const items: { color: string; label: string }[] = [
     { color: `var(${AP_MARKER.peak})`, label: 'Peak' },
-    { color: `var(${AP_MARKER.threshold})`, label: 'Threshold' },
+    ...(baselineRef
+      ? [{ color: `var(${AP_MARKER.threshold})`, label: 'Onset' }]
+      : voltage ? [{ color: `var(${AP_MARKER.threshold})`, label: 'Threshold' }] : []),
     { color: `var(${AP_MARKER.fwhm})`, label: 'FWHM' },
-    { color: `var(${AP_MARKER.fahp})`, label: 'fAHP' },
-    { color: `var(${AP_MARKER.mahp})`, label: 'mAHP' },
+    ...(voltage ? [
+      { color: `var(${AP_MARKER.fahp})`, label: 'fAHP' },
+      { color: `var(${AP_MARKER.mahp})`, label: 'mAHP' },
+    ] : []),
   ]
   return (
     <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>

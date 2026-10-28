@@ -33,7 +33,10 @@ from pydantic import BaseModel
 from api.files import get_current_recording
 from api.fpsp import _stim_for_series, _detect_stim_onset_s
 from utils.scaling import scaled
-from analysis.ap import run_ap, phase_plot_for_spike, _Spike, _measure_spike
+from analysis.ap import (
+    run_ap, phase_plot_for_spike, _Spike, measure_spike_polar, kinetics_for_method,
+    kinetics_on_filtered,
+)
 from analysis.bursts import _apply_pre_detection_filter
 
 router = APIRouter()
@@ -71,6 +74,10 @@ class APRunRequest(BaseModel):
     manual_im_end_s: float = 0.0
     manual_im_start_pa: float = 0.0
     manual_im_step_pa: float = 0.0
+    # 'evoked' (default — stimulus-driven sweeps) or 'spontaneous'
+    # (continuous recording, no stimulus: Im / F-I / rheobase /
+    # latency are skipped).
+    mode: str = "evoked"
 
 
 @router.post("/run")
@@ -105,7 +112,8 @@ async def ap_run(req: APRunRequest):
     # The response's ``im_source`` field reports which path was taken
     # (and which channel the protocol picked) so the UI can surface
     # it in the ImSourceCard info line.
-    use_manual = bool(req.manual_im_enabled)
+    spontaneous = req.mode == "spontaneous"
+    use_manual = bool(req.manual_im_enabled) and not spontaneous
     sweeps_vm: list[np.ndarray] = []
     # Im is always fetched — we need it for F-I curves, rheobase, and
     # latency-to-first-spike. Manual fills from the formula; auto fills
@@ -118,7 +126,7 @@ async def ap_run(req: APRunRequest):
     # (older Patchmaster versions don't write one; other file formats
     # may not either once we add them).
     synth_channel = None
-    if not use_manual:
+    if not use_manual and not spontaneous:
         target = _stim_for_series(rec, req.group, req.series)
         if target is not None:
             # Layered current-channel pick:
@@ -225,7 +233,7 @@ async def ap_run(req: APRunRequest):
     # Stim onset (used for first-spike latency only; rheobase 'exact'
     # uses the actual Im channel sample rather than this).
     im_onset_s: Optional[float] = None
-    target = _stim_for_series(rec, req.group, req.series)
+    target = None if spontaneous else _stim_for_series(rec, req.group, req.series)
     if target is not None:
         try:
             im_onset_s = float(_detect_stim_onset_s(target))
@@ -250,6 +258,7 @@ async def ap_run(req: APRunRequest):
         im_onset_s=im_onset_s,
         manual_edits=req.manual_edits,
         measure_kinetics=req.measure_kinetics,
+        mode="spontaneous" if spontaneous else "evoked",
     )
 
     # Auto/protocol Im patch: for step protocols the per-sweep Im mean
@@ -300,7 +309,9 @@ async def ap_run(req: APRunRequest):
     # Report back which Im source got used, so the UI's ImSourceCard
     # info line can say "detected: X" or "manual values" rather than
     # leaving the user guessing. Format matches IV for consistency.
-    if use_manual:
+    if spontaneous:
+        im_source = {"mode": "disabled", "label": None}
+    elif use_manual:
         im_source = {"mode": "manual", "label": None}
     elif synth_channel is not None:
         unit = getattr(synth_channel, "stim_unit_label", None) or "pA"
@@ -327,6 +338,10 @@ async def ap_phase_plot(
     peak_t_s: float = Query(..., description="Time of the spike's peak (seconds within sweep)"),
     window_ms: float = Query(5.0, description="Half-width of the slice around the peak"),
     interp_factor: int = Query(10, ge=1, le=200, description="1 = no upsampling; 10 = 10× cubic-style interp"),
+    filter_type: str = Query("", description="Optional filter (the kinetics trace): lowpass / highpass / bandpass"),
+    filter_low: float = Query(0),
+    filter_high: float = Query(0),
+    filter_order: int = Query(4),
 ):
     rec = get_current_recording()
     try:
@@ -340,9 +355,19 @@ async def ap_phase_plot(
     if trace < 0 or trace >= sw.trace_count:
         raise HTTPException(status_code=400, detail="Trace out of range")
     tr = sw.traces[trace]
+    sr = float(tr.sampling_rate)
+    vm = np.asarray(scaled(tr), dtype=float)
+    if filter_type:
+        # Same filter as the pre-detection filter, so the loop matches a
+        # run that measured kinetics on the filtered trace.
+        vm = _apply_pre_detection_filter(vm, sr, {
+            "filter_enabled": True, "filter_type": filter_type,
+            "filter_low": filter_low, "filter_high": filter_high,
+            "filter_order": filter_order,
+        })
     return phase_plot_for_spike(
-        np.asarray(scaled(tr), dtype=float),
-        float(tr.sampling_rate),
+        vm,
+        sr,
         peak_t_s=peak_t_s,
         window_ms=window_ms,
         interp_factor=interp_factor,
@@ -468,6 +493,10 @@ class MeasureOneRequest(BaseModel):
     # peak-snap window). Kinetics drives the measurement itself.
     detection: dict = {}
     kinetics: dict = {}
+    # +1 = upward spike (default), -1 = downward (e.g. inward action
+    # currents). Sent from the last run's detected polarity so a click
+    # snaps and measures the same way the detector did.
+    polarity: int = 1
 
 
 @router.post("/measure_one")
@@ -475,14 +504,14 @@ async def ap_measure_one(req: MeasureOneRequest):
     """Measure full kinetics for a single spike at ``peak_t_s``.
 
     Strategy:
-      1. Apply the same pre-detection filter the auto-detector used so
-         the measurement matches what the user is looking at.
-      2. Snap the click to the nearest local Vm max within ±half the
-         configured ``min_distance_ms``. Same snap helper logic as the
-         /run endpoint's manual-edits replay so the result is
-         deterministic relative to a Run.
-      3. Wrap the snapped peak in a ``_Spike`` and call ``_measure_spike``
-         with the user's kinetics params.
+      1. Apply the same pre-detection filter the auto-detector used and
+         snap the click to the nearest local max within ±half the
+         configured ``min_distance_ms`` — same as the /run endpoint's
+         manual-edits replay (noise-relative runs then snap once more
+         onto the unfiltered trace, as /run does).
+      2. Measure kinetics on the unfiltered trace (or the filtered one
+         with ``measure_on: 'filtered'``) with the user's kinetics
+         params — again as /run does.
     """
     rec = get_current_recording()
     try:
@@ -513,34 +542,29 @@ async def ap_measure_one(req: MeasureOneRequest):
     i1 = min(vm_for_measure.size, click_idx + snap + 1)
     if i1 <= i0:
         raise HTTPException(status_code=400, detail="Click out of sweep range")
+    polarity = -1 if req.polarity < 0 else 1
     seg = vm_for_measure[i0:i1]
-    peak_idx = i0 + int(np.argmax(seg))
+    peak_idx = i0 + int(np.argmax(polarity * seg))
+    method = str(req.detection.get("method", "auto_rec"))
+    # Kinetics on the same trace /run measures on (unfiltered by
+    # default), so a clicked spike is measured exactly like a detected one.
+    vm_meas = vm_for_measure if kinetics_on_filtered(req.kinetics or {}) else vm
+    if method == "noise_threshold":
+        # Same final snap as /run: onto the measured trace.
+        w = max(1, int(round(float(req.detection.get("peak_snap_ms", 1.0)) / dt_ms)))
+        lo, hi = max(0, peak_idx - w), min(vm_meas.size, peak_idx + w + 1)
+        peak_idx = lo + int(np.argmax(polarity * vm_meas[lo:hi]))
 
     spike = _Spike(
         onset_idx=peak_idx,
         peak_idx=peak_idx,
         fall_idx=peak_idx,
-        peak_vm=float(vm_for_measure[peak_idx]),
+        peak_vm=float(vm_meas[peak_idx]),
         manual=True,
     )
 
-    m = _measure_spike(
-        vm_for_measure, sr, spike,
-        threshold_method=str(req.kinetics.get("threshold_method", "first_deriv_cutoff")),
-        threshold_cutoff_mv_ms=float(req.kinetics.get("threshold_cutoff_mv_ms", 20.0)),
-        threshold_search_ms_before_peak=float(req.kinetics.get("threshold_search_ms_before_peak", 5.0)),
-        sekerli_lower_bound_mv_ms=float(req.kinetics.get("sekerli_lower_bound_mv_ms", 5.0)),
-        rise_low_pct=float(req.kinetics.get("rise_low_pct", 10.0)),
-        rise_high_pct=float(req.kinetics.get("rise_high_pct", 90.0)),
-        decay_low_pct=float(req.kinetics.get("decay_low_pct", 10.0)),
-        decay_high_pct=float(req.kinetics.get("decay_high_pct", 90.0)),
-        decay_end=str(req.kinetics.get("decay_end", "to_threshold")),
-        fahp_search_start_ms=float(req.kinetics.get("fahp_search_start_ms", 0.0)),
-        fahp_search_end_ms=float(req.kinetics.get("fahp_search_end_ms", 5.0)),
-        mahp_search_start_ms=float(req.kinetics.get("mahp_search_start_ms", 5.0)),
-        mahp_search_end_ms=float(req.kinetics.get("mahp_search_end_ms", 100.0)),
-        max_slope_window_ms=float(req.kinetics.get("max_slope_window_ms", 0.5)),
-        interpolate=bool(req.kinetics.get("interpolate_to_200khz", True)),
+    m = measure_spike_polar(
+        vm_meas, sr, spike, polarity, kinetics_for_method(req.kinetics or {}, method),
     )
     if not m:
         raise HTTPException(status_code=400, detail="Could not measure spike at click point")

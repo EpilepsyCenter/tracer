@@ -84,6 +84,7 @@ interface AggregateResponse {
 const ANALYSIS_LABELS: Record<string, string> = {
   events: 'Events (spontaneous PSCs / minis)',
   ap: 'Action Potentials',
+  ap_spont: 'Action Potentials — spontaneous',
   iv_curves: 'I-V Curve',
   bursts: 'Bursts',
   cursors: 'Cursor Measurements',

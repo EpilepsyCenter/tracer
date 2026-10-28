@@ -1815,11 +1815,14 @@ two tabs:
 - **Kinetics** — per-spike measurements with a phase plot.
 
 Below the tabs, the body is a left/right split. The **left panel**
-holds the parameters: detection method and thresholds at the top,
-filter, kinetics options (visible on the Kinetics tab), the
-rheobase block (visible on the Counting tab), and a pinned
-footer with the run mode and the **Run / Clear / Clear edits**
-buttons. A vertical splitter lets you widen the panel.
+holds the parameters: the pre-detection filter, detection method
+and thresholds, the **Kinetics** and **Rheobase** cards (rheobase
+in evoked mode only), train grouping, and a pinned footer with the
+run mode and the **Run / Clear / Clear edits** buttons. Every Run
+uses all of these settings, so they are shown on both tabs — the
+tabs only switch the results view on the right. Click a card's
+title to collapse it; the window remembers which cards are
+collapsed. A vertical splitter lets you widen the panel.
 
 The **right panel** is split horizontally. On the **Counting**
 tab, the top half is a full-sweep mini-viewer with a draggable
@@ -1857,7 +1860,7 @@ hidden automatically.
 
 ### Choosing a detection method
 
-The first decision is which of three detectors to run; the
+The first decision is which of four detectors to run; the
 **Detection method** dropdown picks one. The default is
 `auto_rec`, which is appropriate for most well-clamped current-
 clamp recordings.
@@ -1883,7 +1886,7 @@ clamp recordings.
   is the default for current-clamp experiments where firing
   amplitude declines through the train.
 
-- **Manual threshold (`manual`)** — opens a candidate at every
+- **Threshold (fixed) (`manual`)** — opens a candidate at every
   upward crossing of the **Manual threshold (mV)** value, looks
   ahead for a downward crossing of the same threshold within
   **Max width** samples, and takes the peak in between. The
@@ -1891,6 +1894,54 @@ clamp recordings.
   with stable AP amplitude and a sharp foot, or for matching the
   conventions of another tool that defines spike onset by voltage
   crossing rather than by derivative.
+
+- **Threshold (noise-relative) (`noise_threshold`)** — the Burst
+  Detection window's *Threshold* detector (chapter 14), run on
+  spikes: the signal's distance from a baseline is smoothed and
+  compared with **n_sd × noise**, and every stretch above it
+  becomes one spike, peaked at its most extreme sample (then moved
+  onto the unfiltered trace within ±1 ms). The baseline modes
+  (*Percentile*, *Robust*, *Rolling median*, *Fixed start*), noise
+  estimators (*SD*, *MAD*, *MAD-diff*), **Smooth**, **Min dur**
+  and **Min gap** behave exactly as in the Burst window — both
+  windows run the same code. Because the threshold follows the
+  noise rather than a fixed voltage, this is the method to use on
+  long recordings with drift, and on **current traces** (cell-
+  attached or voltage-clamp action currents), where the mV-based
+  auto detectors don't apply. **Peak direction** sets which way
+  spikes point; *Auto* takes the sign of most detections, once per
+  sweep, so every spike is measured the same way — choose
+  *Negative* for inward action currents. The detector looks at
+  deflections in both directions, so events whose largest
+  deflection points against the chosen direction are dropped (with
+  *Positive*, a downward-only event is not a spike). Defaults:
+  percentile baseline (10 %), MAD noise, n_sd 6, smooth 10 ms, min
+  duration 1 ms, min gap 20 ms. Things to keep in mind: spikes
+  closer than **Min gap** are merged (20 ms caps resolvable firing
+  at ~50 Hz); for downward spikes with a *Percentile* baseline, set
+  the percentile to ~90 % (10 % sits on the downward tail); and
+  the noise estimate is one value for the whole analysis window —
+  *Rolling median* makes the baseline follow drift, but the
+  threshold does not rise where the noise grows. A band-pass
+  pre-detection filter (e.g. 1–100 Hz) usually helps.
+
+  After a run the viewer draws the detector's **baseline** (grey)
+  and **threshold** (red) as dashed lines across the analysed span
+  — a curve that follows the drift with *Rolling median*. The
+  threshold is applied to the *smoothed* distance from the
+  baseline, so treat the line as a guide: a short spike can poke
+  above it without being detected, and vice versa.
+
+  Kinetics for this method are measured from the **local pre-spike
+  baseline** instead of an AP threshold, so the *Threshold method*
+  options are replaced by **Baseline window (ms)** (default 10) and
+  **Search before peak (ms)**. The baseline is the median of the
+  baseline window that ends where the search window starts
+  (*Search before peak* ms before the peak); the spike's **onset**
+  is the last baseline crossing before the peak. Amplitude is peak
+  − baseline, and rise, FWHM and decay (*Decay end: To baseline*)
+  use the same reference. The kinetics table shows the level as
+  **Base**, and the viewers mark the onset (legend: *Onset*).
 
 ### Detection parameters
 
@@ -2037,15 +2088,15 @@ analysis and restored on reopening.
 
 ### The Kinetics tab
 
-The Kinetics tab is where the per-spike measurements live, and
-where you do all the fine-tuning of how the threshold, the rise,
-the decay, and the AHPs are detected on each spike.
+The Kinetics tab is where the per-spike measurements live. How the
+threshold, the rise, the decay, and the AHPs are found on each
+spike is set in the **Kinetics** card of the left panel.
 
 ![AP Kinetics tab](screenshots/ap-window-kinetics-tab.png)
 
 #### Choosing a threshold method
 
-The single most important parameter on this tab is the **Threshold
+The single most important kinetics parameter is the **Threshold
 method** — how TRACER decides where the AP threshold is on
 each spike. Eight methods are offered, grouped by family.
 
@@ -2092,6 +2143,27 @@ it gives sub-sample-rate resolution on the rise and decay times
 without altering the underlying signal. Slopes, peak Vm, AHP
 amplitudes, and threshold are all measured on the original signal.
 
+#### Measuring on the filtered or unfiltered trace
+
+Detection always runs on the pre-detection-filtered trace. Kinetics
+are measured on the **unfiltered** trace by default — the
+recording as it is — because a filter changes spike shape: a
+band-pass in particular shrinks amplitudes and widens spikes (on a
+1 ms action current, a 1–100 Hz band-pass roughly halves the
+amplitude and more than doubles the FWHM). To measure on the
+filtered trace instead, set **Measure on** in the Kinetics card to
+*Filtered trace*; it only applies while a pre-detection filter is
+set. A filtered spike rises more slowly, so raise **Search before
+peak** if many rise times come out blank.
+
+The Kinetics-tab spike viewer and phase plot always show the trace
+the kinetics were measured on, labelled *Unfiltered* or *Filtered
+(…)* in the viewer header, so the markers sit on the waveform they
+were measured from. The Counting viewer keeps following the live
+pre-detection filter checkbox; when that differs from the measured
+trace its header says *Kinetics measured on the unfiltered
+(filtered) trace*.
+
 #### The per-spike table
 
 The Kinetics table has one row per detected (or manually added)
@@ -2100,8 +2172,11 @@ spike. Columns:
 - **#** — spike index within the run; manual spikes are marked
   with a leading ★.
 - **Sweep** — 1-based sweep index.
+- **Peak t (s)** — time of the peak from the start of the sweep.
 - **Threshold (mV)** — Vm at the threshold sample chosen by the
-  selected method.
+  selected method. With *Threshold (noise-relative)* detection this
+  column is **Base** — the pre-spike baseline amplitude is measured
+  from.
 - **Peak (mV)** — Vm at the peak sample.
 - **Amplitude (mV)** — peak minus threshold.
 - **Rise (ms)** — time from the *Rise low %* crossing to the
@@ -2109,7 +2184,9 @@ spike. Columns:
 - **Decay (ms)** — time from the *Decay high %* crossing on the
   decay phase down to the *Decay low %* crossing, with the
   amplitude reference set by **Decay end**.
-- **FWHM (ms)** — half-width at 50 % of (peak − threshold).
+- **FWHM (ms)** — half-width at 50 % of (peak − threshold). Both
+  viewers mark the two half-amplitude crossings at the times the
+  measurement found them.
 - **fAHP (mV)** — minimum Vm in the fAHP search window, expressed
   as Vm directly (not as the fAHP amplitude relative to threshold).
 - **mAHP (mV)** — minimum Vm in the mAHP search window.
@@ -2188,6 +2265,56 @@ The **Clear edits** button on the run footer clears every recorded
 addition and removal in one go, returning the run to "what the
 detector said".
 
+### Spontaneous recordings (continuous traces)
+
+The window also analyses spontaneous firing in long continuous
+recordings with no stimulus. The **Recording** switch in the top
+bar picks *Evoked* (stimulus-driven sweeps — everything described
+above) or *Spontaneous*. A series that is a single sweep longer
+than 60 s opens in *Spontaneous* automatically (the same rule the
+main viewer uses for continuous data); the switch overrides it,
+and the choice is saved with the result.
+
+In *Spontaneous* mode:
+
+- **Stimulus-only controls are hidden**: Im source, rheobase, the
+  F–I curve, the stimulus overlay, and the first-spike latency and
+  SFA columns.
+- **The viewer works on a time window** for long traces, like the
+  Burst and Event windows: presets (*Full*, *5 min* … *1 s*,
+  *Custom*), the arrow buttons, the scroll slider underneath, and
+  with the viewer focused ←/→ (one window), PgUp/PgDn (three
+  windows) and Home/End. Only the visible window is loaded, so a
+  long recording opens instantly. Click to add a spike and click a
+  marker twice to remove it, as before.
+- **Analysis bounds** are edited as numbers (dragging the band is
+  off on long traces); **Use current view** copies the visible
+  window into the bounds and **Whole recording** resets them.
+- **The Counting tab shows firing statistics** instead of F–I and
+  rheobase. On the left, a per-sweep table — spikes, analysed
+  duration, rate, mean and median ISI, ISI CV, local variance —
+  with the usual *Trains* sub-tab. On the right, **Rate over
+  time** (spikes / s in bins; set the bin width in the header and
+  click the plot to jump the viewer to that time) and the **ISI
+  distribution** (log or linear ms axis). These numbers are
+  computed live from the detected spikes, so manual additions and
+  removals update them without re-running.
+- **Export CSV** offers *Firing (per sweep)*, *Rate over time*
+  (using the current bin width) and *Kinetics (per spike)*.
+
+On current traces (units in A, e.g. pA), threshold, fAHP and mAHP
+are membrane-voltage measures with no meaning, so the kinetics
+table and the viewer leave them out and axes are labelled *I* and
+*dI/dt*. Peak, amplitude, rise, decay, half-width and slopes are
+still measured — from the pre-spike baseline when the detection
+method is *Threshold (noise-relative)*.
+
+In Cohort, spontaneous results appear under their own analysis
+type, **Action Potentials — spontaneous** (firing rate, ISI mean /
+median / CV, local variance, spike shape, ISI distribution, and the
+train metrics when grouping is on). The **Action Potentials** type
+covers evoked results only. Batch runs use the template's mode.
+
 ### Persistence
 
 AP results, the form parameters (detection method and thresholds,
@@ -2197,7 +2324,7 @@ edits are stored per *(group, series)* pair in the recording's
 sidecar. The window's left-panel width, splitter height, and
 *Show bounds* state live in the global preferences file. Reopening
 the recording brings the window back exactly as you left it: the
-same parameters, the same detected spikes, the same manual
+same mode (evoked / spontaneous), the same parameters, the same detected spikes, the same manual
 additions and removals, and the same row highlighted in the
 kinetics table.
 

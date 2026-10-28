@@ -513,6 +513,113 @@ def extract_ap(slice_data: dict, sidecar: dict) -> CellExtraction:
     return CellExtraction(scalars=scalars, distributions=distributions, meta=meta)
 
 
+def _ap_window(slice_data: dict, ps: dict) -> tuple[float, float]:
+    """Analysed time window of one AP sweep — detection bounds, with the
+    end from the backend-reported ``durationS`` when bounds_end is 0
+    ("whole sweep"). Mirrors ``firingWindowFor`` in APFiringPanel.tsx."""
+    det = slice_data.get('detection') or {}
+    t0 = max(0.0, float(det.get('bounds_start_s') or 0.0))
+    dur = ps.get('durationS')
+    if dur is not None and float(dur) > 0:
+        return t0, t0 + float(dur)
+    end = float(det.get('bounds_end_s') or 0.0)
+    if end > t0:
+        return t0, end
+    peaks = [float(t) for t in (ps.get('peakTimes') or [])]
+    return t0, max([t0] + peaks)
+
+
+def extract_ap_spontaneous(slice_data: dict, sidecar: dict) -> CellExtraction:
+    """Per-cell spontaneous firing (AP window in spontaneous mode).
+
+    Rate and ISI statistics are recomputed from ``perSpike`` inside each
+    sweep's analysed window — the same numbers the AP window's Firing
+    panel shows (``utils/apSpontaneous.ts``), so manual edits made after
+    the last Run are reflected. ISIs never span two sweeps.
+    """
+    per_sweep = slice_data.get('perSweep') or []
+    per_spike = slice_data.get('perSpike') or []
+
+    total_spikes = 0
+    total_duration = 0.0
+    isis_s: list[float] = []
+    lv_terms: list[float] = []
+    for ps in per_sweep:
+        sw = ps.get('sweep')
+        t0, t1 = _ap_window(slice_data, ps)
+        times = sorted(
+            float(sp['peakT']) for sp in per_spike
+            if sp.get('sweep') == sw and sp.get('peakT') is not None
+            and t0 <= float(sp['peakT']) <= t1
+        )
+        total_spikes += len(times)
+        total_duration += max(0.0, t1 - t0)
+        sweep_isis = [b - a for a, b in zip(times, times[1:])]
+        isis_s.extend(sweep_isis)
+        for a, b in zip(sweep_isis, sweep_isis[1:]):
+            if a + b > 0:
+                lv_terms.append(3.0 * ((a - b) / (a + b)) ** 2)
+
+    isi_ms = [x * 1000.0 for x in isis_s]
+    amps = [s.get('amplitudeMv') for s in per_spike]
+    peaks = [s.get('peakVm') for s in per_spike]
+    thresholds = [s.get('thresholdVm') for s in per_spike]
+    fwhm_ms = [(s.get('halfWidthS') * 1000.0) if s.get('halfWidthS') is not None else None
+               for s in per_spike]
+    rise_ms = [(s.get('riseTimeS') * 1000.0) if s.get('riseTimeS') is not None else None
+               for s in per_spike]
+    decay_ms = [(s.get('decayTimeS') * 1000.0) if s.get('decayTimeS') is not None else None
+                for s in per_spike]
+
+    scalars: dict[str, Optional[float]] = {
+        'n_spikes_total': float(total_spikes),
+        'duration_s': float(total_duration),
+        'firing_rate_hz': (total_spikes / total_duration) if total_duration > 0 else None,
+        'isi_mean_ms': _mean(isi_ms),
+        'isi_median_ms': _median(isi_ms),
+        'isi_cv': _cv(isi_ms),
+        'local_variance': float(np.mean(lv_terms)) if lv_terms else None,
+        'ap_amp_mean': _mean(amps),
+        'ap_peak_mean': _mean(peaks),
+        'threshold_mean': _mean(thresholds),
+        'fwhm_mean_ms': _mean(fwhm_ms),
+        'rise_mean_ms': _mean(rise_ms),
+        'decay_mean_ms': _mean(decay_ms),
+    }
+    distributions: dict[str, list[float]] = {
+        'isi_ms': _clean(isi_ms),
+        'amp': _clean(amps),
+        'fwhm_ms': _clean(fwhm_ms),
+    }
+    meta: dict[str, Any] = {
+        'n_sweeps': len(per_sweep),
+        'n_spikes_total': total_spikes,
+        'distribution_counts': {k: len(v) for k, v in distributions.items()},
+    }
+
+    cfg = _train_params_for(sidecar, 'ap',
+                            slice_data.get('group'), slice_data.get('series'))
+    if cfg is not None:
+        train_ids, train_summaries = _trains_per_sweep(
+            per_spike, sweep_key='sweep', t_key='peakT', cfg=cfg,
+        )
+        # Continuous recording: train rate is per analysed minute.
+        t_scalars, t_dists = _train_metrics(
+            train_summaries, train_ids, len(per_spike), float(total_duration),
+        )
+        scalars.update(t_scalars)
+        distributions.update(t_dists)
+        meta['distribution_counts'] = {k: len(v) for k, v in distributions.items()}
+        meta['train_params'] = {
+            'metric': cfg['metric'], 'max_iei_ms': cfg['max_iei_ms'],
+            'min_count': cfg['min_count'],
+            'min_duration_ms': cfg['min_duration_ms'],
+            'min_inter_train_ms': cfg['min_inter_train_ms'],
+        }
+
+    return CellExtraction(scalars=scalars, distributions=distributions, meta=meta)
+
+
 # ---------------------------------------------------------------------
 # I-V curve extractor
 # ---------------------------------------------------------------------
@@ -1399,6 +1506,10 @@ def extract_paired(slice_data: dict, sidecar: dict) -> CellExtraction:
 EXTRACTORS: dict[str, ExtractorFn] = {
     'events': extract_events,
     'ap': extract_ap,
+    # Spontaneous AP runs (continuous recordings) get their own type:
+    # rate / ISI metrics instead of rheobase / F-I. ``MODE_FILTER``
+    # splits the shared ``ap`` sidecar slice by each entry's ``mode``.
+    'ap_spont': extract_ap_spontaneous,
     'iv_curves': extract_iv,
     'bursts': extract_bursts,
     'cursors': extract_cursors,
@@ -1420,6 +1531,7 @@ EXTRACTORS: dict[str, ExtractorFn] = {
 SIDECAR_KEY: dict[str, str] = {
     'events': 'events',
     'ap': 'ap',
+    'ap_spont': 'ap',
     'iv_curves': 'iv_curves',
     'bursts': 'bursts',
     'cursors': 'cursor_analyses',
@@ -1439,6 +1551,15 @@ MODE_FILTER: dict[str, str] = {
     'fpsp_io': 'io',
     'fpsp_ppr': 'ppr',
     'fpsp_ltp': 'ltp',
+    'ap': 'evoked',
+    'ap_spont': 'spontaneous',
+}
+
+# Mode assumed for slices saved without one. AP entries from before
+# spontaneous mode existed are all evoked.
+MODE_DEFAULT: dict[str, str] = {
+    'ap': 'evoked',
+    'ap_spont': 'evoked',
 }
 
 
@@ -1471,6 +1592,13 @@ DEFAULT_METRICS: dict[str, dict[str, list[str]]] = {
             'fwhm_mean_ms', 'fi_slope_hz_per_pa', 'max_rate_hz',
         ],
         'distributions': [],
+    },
+    'ap_spont': {
+        'scalars': [
+            'firing_rate_hz', 'isi_mean_ms', 'isi_cv', 'local_variance',
+            'ap_amp_mean', 'fwhm_mean_ms',
+        ],
+        'distributions': ['isi_ms'],
     },
     'iv_curves': {
         'scalars': ['iv_slope', 'reversal_potential', 'sag_amp_mean'],
@@ -1661,9 +1789,10 @@ def aggregate_folder(
         # ``skipped_no_analysis`` for the PPR cohort instead of
         # silently contributing nothing.
         if mode_filter is not None:
+            mode_default = MODE_DEFAULT.get(analysis_type, '')
             slices = {
                 k: v for k, v in all_slices.items()
-                if (v.get('mode') or '').lower() == mode_filter
+                if (v.get('mode') or mode_default).lower() == mode_filter
             }
         else:
             slices = all_slices
@@ -1686,7 +1815,8 @@ def aggregate_folder(
                 )
             elif mode_filter is not None:
                 modes_present = sorted({
-                    (v.get('mode') or '<missing>') for v in all_slices.values()
+                    (v.get('mode') or MODE_DEFAULT.get(analysis_type) or '<missing>')
+                    for v in all_slices.values()
                 })
                 slice_keys = list(all_slices.keys())
                 reason = (

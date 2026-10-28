@@ -156,6 +156,95 @@ def _estimate_baseline(
     return signal, baseline, noise
 
 
+def _extract_epochs(above: np.ndarray, min_dur: int, min_gap: int, sr: float) -> list[dict]:
+    """Extract contiguous True-epochs from a boolean mask; merge close ones
+    within ``min_gap`` samples and drop any shorter than ``min_dur``."""
+    diff = np.diff(above.astype(np.int8))
+    starts = np.where(diff == 1)[0] + 1
+    ends = np.where(diff == -1)[0] + 1
+
+    if above[0]:
+        starts = np.concatenate(([0], starts))
+    if above[-1]:
+        ends = np.concatenate((ends, [len(above)]))
+
+    if len(starts) == 0 or len(ends) == 0:
+        return []
+
+    n = min(len(starts), len(ends))
+    pairs = list(zip(starts[:n], ends[:n]))
+
+    # Merge near-neighbours.
+    merged: list[tuple[int, int]] = []
+    for start, end in pairs:
+        if merged and (start - merged[-1][1]) < min_gap:
+            merged[-1] = (merged[-1][0], end)
+        else:
+            merged.append((start, end))
+
+    bursts: list[dict] = []
+    for start, end in merged:
+        duration = end - start
+        if duration >= min_dur:
+            bursts.append({
+                "start_idx": int(start),
+                "end_idx": int(end),
+                "start_s": float(start / sr),
+                "end_s": float(end / sr),
+                "duration_ms": float(duration / sr * 1000.0),
+            })
+    return bursts
+
+
+def detect_threshold_epochs(data: np.ndarray, sr: float, params: dict) -> dict:
+    """Noise-relative threshold detection, shared by the Burst window's
+    ``threshold`` method and the AP window's ``noise_threshold`` method.
+
+    Pipeline: optional pre-detection filter → baseline + noise estimate
+    (``baseline_mode`` / ``noise_method``) → |signal − baseline| →
+    moving-average smoothing (``smooth_ms``) → epochs where the smoothed
+    trace exceeds ``n_sd × noise`` → merge epochs closer than
+    ``min_gap_ms`` → drop epochs shorter than ``min_duration_ms``.
+
+    Returns the epochs (start/end idx + seconds + duration) together with
+    the filtered signal and the scalar baseline / noise / threshold so
+    callers can measure on the same trace the detector saw.
+    """
+    n_sd = float(params.get("n_sd", 2.0))
+    smooth_ms = float(params.get("smooth_ms", 10.0))
+    min_duration_ms = float(params.get("min_duration_ms", 50.0))
+    min_gap_ms = float(params.get("min_gap_ms", 100.0))
+    baseline_mode = params.get("baseline_mode", "percentile")
+
+    smooth_samples = max(1, int(smooth_ms / 1000 * sr))
+    min_dur_samples = int(min_duration_ms / 1000 * sr)
+    min_gap_samples = int(min_gap_ms / 1000 * sr)
+
+    # Pre-detection filter: clean up drift + high-freq noise before we
+    # threshold.
+    filtered = _apply_pre_detection_filter(data, sr, params)
+
+    # Baseline on the filtered signal, then rectify+smooth for detection.
+    detrended, baseline_value, noise_value = _estimate_baseline(
+        filtered, sr, baseline_mode, params,
+    )
+    rectified = np.abs(detrended - baseline_value)
+    smoothed = uniform_filter1d(rectified, smooth_samples)
+
+    threshold_value = n_sd * noise_value
+    above = smoothed > threshold_value
+    epochs = _extract_epochs(above, min_dur_samples, min_gap_samples, sr)
+    return {
+        "epochs": epochs,
+        "filtered": filtered,
+        "detrended": detrended,
+        "baseline_mode": baseline_mode,
+        "baseline_value": float(baseline_value),
+        "noise_value": float(noise_value),
+        "threshold_value": float(threshold_value),
+    }
+
+
 class BurstDetection(AnalysisBase):
     name = "bursts"
     description = (
@@ -197,32 +286,13 @@ class BurstDetection(AnalysisBase):
     # ------------------------------------------------------------------
     def _threshold_method(self, data, sr, params):
         """Detect bursts on a smoothed |signal − baseline| trace."""
-        n_sd = float(params.get("n_sd", 2.0))
-        smooth_ms = float(params.get("smooth_ms", 10.0))
-        min_duration_ms = float(params.get("min_duration_ms", 50.0))
-        min_gap_ms = float(params.get("min_gap_ms", 100.0))
-        baseline_mode = params.get("baseline_mode", "percentile")
-
-        smooth_samples = max(1, int(smooth_ms / 1000 * sr))
-        min_dur_samples = int(min_duration_ms / 1000 * sr)
-        min_gap_samples = int(min_gap_ms / 1000 * sr)
-
-        # Pre-detection filter: clean up drift + high-freq noise before we
-        # threshold. Per-burst peak amplitudes (computed later by
-        # _populate_burst_fields) still use the RAW data so reported values
-        # reflect true physiological amplitudes rather than filter output.
-        filtered = _apply_pre_detection_filter(data, sr, params)
-
-        # Baseline on the filtered signal, then rectify+smooth for detection.
-        detrended, baseline_value, noise_value = _estimate_baseline(
-            filtered, sr, baseline_mode, params,
-        )
-        rectified = np.abs(detrended - baseline_value)
-        smoothed = uniform_filter1d(rectified, smooth_samples)
-
-        threshold_value = n_sd * noise_value
-        above = smoothed > threshold_value
-        bursts = self._extract_epochs(above, min_dur_samples, min_gap_samples, sr)
+        det = detect_threshold_epochs(data, sr, params)
+        bursts = det["epochs"]
+        filtered = det["filtered"]
+        baseline_mode = det["baseline_mode"]
+        baseline_value = det["baseline_value"]
+        noise_value = det["noise_value"]
+        threshold_value = det["threshold_value"]
 
         # Measure amplitudes on the FILTERED signal so viewer markers line up
         # with what the user sees when the mini-viewer displays the filtered
@@ -414,43 +484,7 @@ class BurstDetection(AnalysisBase):
     # Helpers
     # ------------------------------------------------------------------
     def _extract_epochs(self, above: np.ndarray, min_dur: int, min_gap: int, sr: float) -> list[dict]:
-        """Extract contiguous True-epochs from a boolean mask; merge close ones
-        within ``min_gap`` samples and drop any shorter than ``min_dur``."""
-        diff = np.diff(above.astype(np.int8))
-        starts = np.where(diff == 1)[0] + 1
-        ends = np.where(diff == -1)[0] + 1
-
-        if above[0]:
-            starts = np.concatenate(([0], starts))
-        if above[-1]:
-            ends = np.concatenate((ends, [len(above)]))
-
-        if len(starts) == 0 or len(ends) == 0:
-            return []
-
-        n = min(len(starts), len(ends))
-        pairs = list(zip(starts[:n], ends[:n]))
-
-        # Merge near-neighbours.
-        merged: list[tuple[int, int]] = []
-        for start, end in pairs:
-            if merged and (start - merged[-1][1]) < min_gap:
-                merged[-1] = (merged[-1][0], end)
-            else:
-                merged.append((start, end))
-
-        bursts: list[dict] = []
-        for start, end in merged:
-            duration = end - start
-            if duration >= min_dur:
-                bursts.append({
-                    "start_idx": int(start),
-                    "end_idx": int(end),
-                    "start_s": float(start / sr),
-                    "end_s": float(end / sr),
-                    "duration_ms": float(duration / sr * 1000.0),
-                })
-        return bursts
+        return _extract_epochs(above, min_dur, min_gap, sr)
 
     def _populate_burst_fields(
         self,

@@ -904,7 +904,8 @@ export interface FPspData {
  *    - 'none'     — no Im could be derived (no protocol, manual off)
  *  `label` is an optional short description (e.g. "reconstructed (pA)"). */
 export interface ImSource {
-  mode: 'protocol' | 'manual' | 'none'
+  /** ``disabled`` = spontaneous AP run (no stimulus, Im not used). */
+  mode: 'protocol' | 'manual' | 'none' | 'disabled'
   label: string | null
 }
 
@@ -1039,8 +1040,13 @@ export type APThresholdMethod =
   | 'leading_inflection'
   | 'max_curvature'
 
-export type APDetectionMethod = 'auto_rec' | 'auto_spike' | 'manual'
+export type APDetectionMethod = 'auto_rec' | 'auto_spike' | 'manual' | 'noise_threshold'
 export type APRheobaseMode = 'record' | 'exact' | 'ramp'
+/** ``evoked`` = stimulus-driven sweeps (F-I, rheobase, latency).
+ *  ``spontaneous`` = continuous recording without a stimulus: the
+ *  stimulus-dependent outputs are skipped and the Counting tab shows
+ *  firing statistics instead. */
+export type APMode = 'evoked' | 'spontaneous'
 
 export interface APDetectionParams {
   method: APDetectionMethod
@@ -1057,6 +1063,22 @@ export interface APDetectionParams {
   filter_low: number
   filter_high: number
   filter_order: number
+  // ---- ``noise_threshold`` method ("Threshold (noise-relative)") ----
+  // Same keys as the Burst window's threshold method — both run
+  // ``detect_threshold_epochs`` in backend/analysis/bursts.py. Optional
+  // so saves from before the method existed still type-check.
+  baseline_mode?: 'percentile' | 'robust' | 'rolling' | 'fixed_start'
+  baseline_percentile?: number
+  baseline_window_s?: number
+  baseline_end_s?: number
+  noise_method?: 'sd' | 'mad' | 'mad_diff'
+  n_sd?: number
+  smooth_ms?: number
+  min_duration_ms?: number
+  min_gap_ms?: number
+  peak_direction?: 'auto' | 'positive' | 'negative'
+  /** Window (ms) for moving each detected peak onto the unfiltered trace. */
+  peak_snap_ms?: number
 }
 
 export interface APKineticsParams {
@@ -1075,6 +1097,15 @@ export interface APKineticsParams {
   mahp_search_end_ms: number
   max_slope_window_ms: number
   interpolate_to_200khz: boolean
+  /** Noise-relative detection only: amplitude, rise, FWHM and decay
+   *  are measured from the median of this many ms just before the
+   *  search window (pre-spike baseline) instead of an AP threshold.
+   *  Optional — older saves lack it (backend default 10 ms). */
+  baseline_window_ms?: number
+  /** Which trace kinetics are measured on: the unfiltered recording
+   *  (default) or the pre-detection-filtered one. Only matters when a
+   *  pre-detection filter is set. Optional — older saves = 'raw'. */
+  measure_on?: 'raw' | 'filtered'
 }
 
 export interface APRampParams {
@@ -1097,6 +1128,10 @@ export interface APPoint {
   riseTimeS: number | null
   decayTimeS: number | null
   halfWidthS: number | null
+  /** Times (s, sweep time) of the rising / falling half-amplitude
+   *  crossings the FWHM was measured between. Absent on older saves. */
+  halfRiseT?: number | null
+  halfFallT?: number | null
   fahpVm: number | null
   fahpT: number | null
   mahpVm: number | null
@@ -1117,6 +1152,31 @@ export interface APPerSweep {
   localVariance: number | null
   imMean: number | null
   spikeRateHz: number | null
+  /** Optional — absent on saves from before spontaneous mode. */
+  medianISI?: number | null
+  cvISI?: number | null
+  /** Analysed duration (bounds end − start), seconds. */
+  durationS?: number | null
+  /** +1 upward spikes, −1 downward (e.g. inward action currents). */
+  polarity?: number
+  /** Noise-relative runs: the detector's baseline and threshold, for
+   *  the viewer's guide lines. */
+  detLines?: APDetectionLines | null
+}
+
+/** Baseline + threshold of a noise-relative run (one sweep), in the
+ *  frame the detector saw (the pre-filtered trace). ``threshold`` is
+ *  the distance from the baseline; the line is drawn at
+ *  ``baseline + polarity × threshold``. With a rolling baseline,
+ *  ``curve`` is the baseline on a uniform grid. */
+export interface APDetectionLines {
+  baselineMode: string
+  baseline: number
+  threshold: number
+  polarity: number
+  tStartS: number
+  tEndS: number
+  curve: { t0: number; dt: number; v: number[] } | null
 }
 
 /** User overrides on top of auto-detection. Replayed on every run so
@@ -1164,6 +1224,8 @@ export interface APData {
   /** What the backend actually used as the Im source on the last run.
    *  Drives the ImSourceCard info line. Absent on pre-refactor saves. */
   imSource?: ImSource
+  /** Evoked vs spontaneous run. Absent on older saves = evoked. */
+  mode?: APMode
 }
 
 // ---------------------------------------------------------------------------
@@ -2151,6 +2213,8 @@ interface AppState {
     rampParams: APRampParams | null,
     manualEdits: APManualEdits,
     measureKinetics: boolean,
+    /** Defaults to ``evoked``. */
+    mode?: APMode,
   ) => Promise<void>
   /** Drop AP results for one series (or all if both are null). */
   clearAP: (group?: number, series?: number) => void
@@ -4874,7 +4938,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // ---- Action Potentials ----
 
-  runAP: async (group, series, trace, imSource, sweepIndices, detection, kinetics, rheobaseMode, rampParams, manualEdits, measureKinetics) => {
+  runAP: async (group, series, trace, imSource, sweepIndices, detection, kinetics, rheobaseMode, rampParams, manualEdits, measureKinetics, mode = 'evoked') => {
     const { backendUrl } = get()
     if (!backendUrl) return
     set({ loading: true, error: null })
@@ -4906,6 +4970,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         manual_im_end_s: imSource.manualEndS,
         manual_im_start_pa: imSource.manualStartPA,
         manual_im_step_pa: imSource.manualStepPA,
+        mode,
       }
       const resp = await fetch(`${backendUrl}/api/ap/run`, {
         method: 'POST',
@@ -4929,6 +4994,23 @@ export const useAppStore = create<AppState>((set, get) => ({
         localVariance: p.local_variance != null ? Number(p.local_variance) : null,
         imMean: p.im_mean_pa != null ? Number(p.im_mean_pa) : null,
         spikeRateHz: p.spike_rate_hz != null ? Number(p.spike_rate_hz) : null,
+        medianISI: p.median_isi_s != null ? Number(p.median_isi_s) : null,
+        cvISI: p.cv_isi != null ? Number(p.cv_isi) : null,
+        durationS: p.duration_s != null ? Number(p.duration_s) : null,
+        polarity: p.polarity != null ? Number(p.polarity) : 1,
+        detLines: p.detection_lines ? {
+          baselineMode: String(p.detection_lines.baseline_mode ?? ''),
+          baseline: Number(p.detection_lines.baseline ?? 0),
+          threshold: Number(p.detection_lines.threshold ?? 0),
+          polarity: Number(p.detection_lines.polarity ?? 1),
+          tStartS: Number(p.detection_lines.t_start_s ?? 0),
+          tEndS: Number(p.detection_lines.t_end_s ?? 0),
+          curve: p.detection_lines.curve ? {
+            t0: Number(p.detection_lines.curve.t0 ?? 0),
+            dt: Number(p.detection_lines.curve.dt ?? 0),
+            v: (p.detection_lines.curve.v ?? []).map((x: any) => Number(x)),
+          } : null,
+        } : null,
       }))
       const perSpike: APPoint[] = (data.per_spike ?? []).map((p: any) => ({
         sweep: Number(p.sweep ?? 0),
@@ -4941,6 +5023,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         riseTimeS: p.rise_time_s != null ? Number(p.rise_time_s) : null,
         decayTimeS: p.decay_time_s != null ? Number(p.decay_time_s) : null,
         halfWidthS: p.half_width_s != null ? Number(p.half_width_s) : null,
+        halfRiseT: p.half_rise_t_s != null ? Number(p.half_rise_t_s) : null,
+        halfFallT: p.half_fall_t_s != null ? Number(p.half_fall_t_s) : null,
         fahpVm: p.fahp_vm != null ? Number(p.fahp_vm) : null,
         fahpT: p.fahp_t_s != null ? Number(p.fahp_t_s) : null,
         mahpVm: p.mahp_vm != null ? Number(p.mahp_vm) : null,
@@ -4982,6 +5066,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           mode: data.im_source.mode as ImSource['mode'],
           label: data.im_source.label ?? null,
         } : undefined,
+        mode,
       }
       const key = `${group}:${series}`
       set((s) => ({ apAnalyses: { ...s.apAnalyses, [key]: next }, loading: false }))
@@ -5104,6 +5189,8 @@ export const useAppStore = create<AppState>((set, get) => ({
           group, series, trace: entry.trace, sweep, peak_t_s: timeS,
           detection: entry.detection,
           kinetics: entry.kinetics,
+          // Snap + measure in the same direction the detector used.
+          polarity: entry.perSweep.find((p) => p.sweep === sweep)?.polarity ?? 1,
         }),
       })
       if (!resp.ok) return
@@ -5129,6 +5216,8 @@ export const useAppStore = create<AppState>((set, get) => ({
           riseTimeS: m.rise_time_s != null ? Number(m.rise_time_s) : null,
           decayTimeS: m.decay_time_s != null ? Number(m.decay_time_s) : null,
           halfWidthS: m.half_width_s != null ? Number(m.half_width_s) : null,
+          halfRiseT: m.half_rise_t_s != null ? Number(m.half_rise_t_s) : null,
+          halfFallT: m.half_fall_t_s != null ? Number(m.half_fall_t_s) : null,
           fahpVm: m.fahp_vm != null ? Number(m.fahp_vm) : null,
           fahpT: m.fahp_t_s != null ? Number(m.fahp_t_s) : null,
           mahpVm: m.mahp_vm != null ? Number(m.mahp_vm) : null,

@@ -36,7 +36,7 @@ import numpy as np
 
 # Reuse the burst module's filter helper — same shape/semantics as
 # every other "pre-detection filter" in the app.
-from analysis.bursts import _apply_pre_detection_filter
+from analysis.bursts import _apply_pre_detection_filter, detect_threshold_epochs
 
 
 # ---------------------------------------------------------------------------
@@ -194,6 +194,147 @@ def _detect_spikes_sweep(
     return spikes
 
 
+def _detect_spikes_noise_threshold(
+    vm: np.ndarray,
+    sr: float,
+    *,
+    detection: dict,
+    bounds_start_s: float,
+    bounds_end_s: float,
+) -> tuple[list[_Spike], int]:
+    """Noise-relative threshold detection ("Threshold (noise-relative)").
+
+    Runs the Burst window's threshold detector (``detect_threshold_epochs``)
+    on the analysis window — same baseline modes, noise estimators,
+    smoothing, min duration and min gap — and turns each detected epoch
+    into one spike at its most extreme sample. ``vm`` is expected to be
+    pre-filtered already (``run_ap`` applies the pre-detection filter to
+    the whole sweep), so the detector's own filter is switched off.
+
+    Spike polarity comes from ``peak_direction``: ``positive`` /
+    ``negative``, or ``auto`` = the sign of the median epoch extreme,
+    decided once per sweep so every spike is measured the same way.
+    The detector itself works on the rectified signal, so it also finds
+    deflections the other way; an epoch whose largest deviation points
+    against the polarity is dropped (with *positive* peaks, a downward-
+    only event is not a spike).
+    Returns ``(spikes, polarity, lines)`` with polarity ``+1`` or ``-1``
+    and ``lines`` the detector's baseline / threshold for the viewer
+    (see ``_detection_lines``), or None when nothing could be run.
+    """
+    if vm.size == 0 or sr <= 0:
+        return [], 1, None
+    i0 = max(0, int(round(bounds_start_s * sr)))
+    i1 = min(vm.size, int(round(bounds_end_s * sr))) if bounds_end_s > 0 else vm.size
+    if i1 <= i0 + 2:
+        return [], 1, None
+    seg = vm[i0:i1]
+    params = dict(detection)
+    params["filter_enabled"] = False
+    det = detect_threshold_epochs(seg, sr, params)
+    epochs = det["epochs"]
+    dev = det["detrended"] - det["baseline_value"]
+
+    # Signed extreme (largest |deviation|) of each epoch.
+    extremes: list[float] = []
+    for ep in epochs:
+        w = dev[ep["start_idx"]:ep["end_idx"]]
+        extremes.append(float(w[int(np.argmax(np.abs(w)))]) if w.size else 0.0)
+
+    direction = str(detection.get("peak_direction", "auto")).lower()
+    if direction == "positive":
+        polarity = 1
+    elif direction == "negative":
+        polarity = -1
+    else:
+        polarity = -1 if extremes and float(np.median(extremes)) < 0 else 1
+    lines = _detection_lines(seg, det, sr, i0 / sr, polarity)
+
+    spikes: list[_Spike] = []
+    for ep, ext in zip(epochs, extremes):
+        a, b = ep["start_idx"], ep["end_idx"]
+        if b <= a:
+            continue
+        # Opposite-direction event — not a spike of this polarity.
+        if ext * polarity <= 0:
+            continue
+        rel = int(np.argmax(polarity * dev[a:b]))
+        peak = i0 + a + rel
+        spikes.append(_Spike(
+            onset_idx=int(i0 + a),
+            peak_idx=int(peak),
+            fall_idx=int(i0 + b - 1),
+            peak_vm=float(vm[peak]),
+        ))
+    return spikes, polarity, lines
+
+
+# Most points sent for a rolling-baseline curve (one sweep).
+_LINE_MAX_POINTS = 5000
+
+
+def _detection_lines(seg: np.ndarray, det: dict, sr: float, t0: float, polarity: int) -> dict:
+    """Baseline and threshold of a noise-relative run, for drawing on the
+    viewer (same idea as the Burst window's baseline / threshold lines).
+
+    Values are in the frame the detector saw (the pre-filtered trace).
+    ``threshold`` is the distance from the baseline (``n × noise``); the
+    detector applies it to the smoothed |signal − baseline|, so the line
+    is a guide, not an exact per-sample criterion. With a rolling
+    baseline the baseline is a curve: ``curve`` holds it on a uniform
+    grid (``t0``, ``dt``) decimated to at most ``_LINE_MAX_POINTS``.
+    """
+    out = {
+        "baseline_mode": str(det.get("baseline_mode", "percentile")),
+        "baseline": float(det["baseline_value"]),
+        "threshold": float(det["threshold_value"]),
+        "noise": float(det["noise_value"]),
+        "polarity": int(polarity),
+        "t_start_s": float(t0),
+        "t_end_s": float(t0 + seg.size / sr),
+        "curve": None,
+    }
+    if out["baseline_mode"] == "rolling":
+        rolling = det["filtered"] - det["detrended"]
+        step = max(1, int(np.ceil(rolling.size / _LINE_MAX_POINTS)))
+        out["curve"] = {
+            "t0": float(t0),
+            "dt": float(step / sr),
+            "v": [round(float(x), 6) for x in rolling[::step]],
+        }
+    return out
+
+
+def _snap_peaks(
+    spikes: list[_Spike], vm: np.ndarray, sr: float, polarity: int, snap_ms: float,
+) -> list[_Spike]:
+    """Move each spike's peak to the most extreme sample of ``vm`` within
+    ±``snap_ms``. Used after noise-relative detection so the peak sits on
+    the unfiltered trace (a band-pass smears and shifts a 1 ms spike)."""
+    w = max(1, int(round(snap_ms * sr / 1000.0)))
+    out: list[_Spike] = []
+    for sp in spikes:
+        lo = max(0, sp.peak_idx - w)
+        hi = min(vm.size, sp.peak_idx + w + 1)
+        if hi <= lo:
+            out.append(sp)
+            continue
+        pk = lo + int(np.argmax(polarity * vm[lo:hi]))
+        out.append(_Spike(
+            onset_idx=min(sp.onset_idx, pk), peak_idx=pk,
+            fall_idx=max(sp.fall_idx, pk),
+            peak_vm=float(vm[pk]), manual=sp.manual,
+        ))
+    # Two epochs can snap onto the same sample — keep one.
+    out.sort(key=lambda s: s.peak_idx)
+    dedup: list[_Spike] = []
+    for sp in out:
+        if dedup and sp.peak_idx == dedup[-1].peak_idx:
+            continue
+        dedup.append(sp)
+    return dedup
+
+
 def _apply_manual_edits_to_sweep(
     spikes: list[_Spike],
     vm: np.ndarray,
@@ -201,6 +342,7 @@ def _apply_manual_edits_to_sweep(
     added_t_s: list[float],
     removed_t_s: list[float],
     min_distance_ms: float,
+    polarity: int = 1,
 ) -> list[_Spike]:
     """Replay manual additions / removals on top of an auto-detected
     spike list. See module docstring."""
@@ -231,7 +373,7 @@ def _apply_manual_edits_to_sweep(
         if i1 <= i0:
             continue
         seg = vm[i0:i1]
-        peak_rel = int(np.argmax(seg))
+        peak_rel = int(np.argmax(polarity * seg))
         peak_idx = i0 + peak_rel
         spikes.append(_Spike(
             onset_idx=peak_idx, peak_idx=peak_idx, fall_idx=peak_idx,
@@ -353,10 +495,30 @@ def _measure_spike(
     mahp_search_start_ms: float, mahp_search_end_ms: float,
     max_slope_window_ms: float,
     interpolate: bool,
+    amplitude_ref: str = "threshold",
+    baseline_window_ms: float = 10.0,
+    dvdt: Optional[np.ndarray] = None,
 ) -> dict:
     """Compute every per-spike kinetic quantity for one spike. Indexes
     into ``vm`` are absolute (sweep-wide). All time quantities are
-    returned in seconds."""
+    returned in seconds.
+
+    ``amplitude_ref`` picks what amplitude, rise, FWHM and decay are
+    measured from:
+      - ``threshold`` — the AP threshold found by ``threshold_method``
+        (classic whole-cell APs).
+      - ``baseline`` — the local pre-spike baseline: the median of the
+        ``baseline_window_ms`` just before the search window (which
+        starts ``threshold_search_ms_before_peak`` before the peak). The
+        spike's onset is the last baseline crossing before the peak.
+        Used by noise-relative detection, where spikes may be action
+        currents or extracellular units with no voltage threshold. The
+        returned ``threshold_vm`` / ``threshold_t_s`` then hold that
+        baseline level and the onset time.
+
+    ``dvdt`` may be passed in pre-computed (``np.gradient(vm) · sr/1000``)
+    so a sweep with thousands of spikes doesn't recompute the
+    derivative of the whole trace once per spike."""
     if vm.size == 0 or sr <= 0:
         return {}
 
@@ -366,18 +528,29 @@ def _measure_spike(
     search_samples = max(1, int(round(threshold_search_ms_before_peak / dt_ms)))
     onset_for_thr = max(0, spike.peak_idx - search_samples)
 
-    dvdt = np.gradient(vm) * (sr / 1000.0)  # mV/ms
+    if dvdt is None or dvdt.size != vm.size:
+        dvdt = np.gradient(vm) * (sr / 1000.0)  # mV/ms
 
-    thr_idx = _threshold_idx(
-        vm, dvdt, sr,
-        onset=onset_for_thr,
-        peak=spike.peak_idx,
-        method=threshold_method,
-        cutoff_mv_ms=threshold_cutoff_mv_ms,
-        sekerli_lower_bound_mv_ms=sekerli_lower_bound_mv_ms,
-    )
-    threshold_vm = float(vm[thr_idx])
     peak_vm = float(vm[spike.peak_idx])
+    if amplitude_ref == "baseline":
+        bw = max(1, int(round(baseline_window_ms / dt_ms)))
+        b0 = max(0, onset_for_thr - bw)
+        base_seg = vm[b0:onset_for_thr]
+        threshold_vm = float(np.median(base_seg)) if base_seg.size else float(vm[onset_for_thr])
+        # Onset = last sample at or below the baseline before the peak.
+        rise_win = vm[onset_for_thr:spike.peak_idx + 1]
+        below = np.flatnonzero(rise_win <= threshold_vm)
+        thr_idx = onset_for_thr + (int(below[-1]) if below.size else int(np.argmin(rise_win)))
+    else:
+        thr_idx = _threshold_idx(
+            vm, dvdt, sr,
+            onset=onset_for_thr,
+            peak=spike.peak_idx,
+            method=threshold_method,
+            cutoff_mv_ms=threshold_cutoff_mv_ms,
+            sekerli_lower_bound_mv_ms=sekerli_lower_bound_mv_ms,
+        )
+        threshold_vm = float(vm[thr_idx])
     amplitude = peak_vm - threshold_vm
 
     # Optionally upsample the rising-and-decay slice for precise %
@@ -435,15 +608,21 @@ def _measure_spike(
 
     decay_hi_t = _crossing_t_in_seg(decay_seg_i, peak_vm - decay_amp * decay_high_pct / 100.0, sr_i)
     decay_lo_t = _crossing_t_in_seg(decay_seg_i, peak_vm - decay_amp * decay_low_pct / 100.0, sr_i)
-    decay_time_s = (decay_lo_t - decay_hi_t) if (decay_hi_t is not None and decay_lo_t is not None) else None
+    # ``decay_lo_t`` = drop by ``decay_low_pct`` of the amplitude (near the
+    # peak, crossed first); ``decay_hi_t`` = drop by ``decay_high_pct``
+    # (crossed later). Decay time is the interval between them.
+    decay_time_s = (decay_hi_t - decay_lo_t) if (decay_hi_t is not None and decay_lo_t is not None) else None
 
     # Half-width: measure at amplitude/2 above threshold, both rising and falling.
     half_target = threshold_vm + amplitude / 2.0
     rise_half = _crossing_t_in_seg(rise_seg_i, half_target, sr_i)
     fall_half = _crossing_t_in_seg(decay_seg_i, half_target, sr_i)
     if rise_half is not None and fall_half is not None:
-        half_width_s = (spike.peak_idx / sr - (thr_idx / sr + rise_half)) + fall_half
+        half_rise_t = thr_idx / sr + rise_half
+        half_fall_t = spike.peak_idx / sr + fall_half
+        half_width_s = half_fall_t - half_rise_t
     else:
+        half_rise_t = half_fall_t = None
         half_width_s = None
 
     # AHP windows.
@@ -491,6 +670,10 @@ def _measure_spike(
         "rise_time_s": rise_time_s,
         "decay_time_s": decay_time_s,
         "half_width_s": half_width_s,
+        # Where the FWHM was measured (s, sweep time) — lets the viewers
+        # draw the FWHM marks exactly where the measurement put them.
+        "half_rise_t_s": float(half_rise_t) if half_rise_t is not None else None,
+        "half_fall_t_s": float(half_fall_t) if half_fall_t is not None else None,
         "fahp_vm": fahp_vm,
         "fahp_t_s": fahp_t,
         "mahp_vm": mahp_vm,
@@ -499,6 +682,80 @@ def _measure_spike(
         "max_decay_slope_mv_ms": max_decay,
         "manual": bool(spike.manual),
     }
+
+
+def kinetics_kwargs(kinetics: dict) -> dict:
+    """Map the frontend's kinetics dict onto ``_measure_spike`` kwargs."""
+    k = kinetics or {}
+    return dict(
+        threshold_method=str(k.get("threshold_method", "first_deriv_cutoff")),
+        threshold_cutoff_mv_ms=float(k.get("threshold_cutoff_mv_ms", 20.0)),
+        threshold_search_ms_before_peak=float(k.get("threshold_search_ms_before_peak", 5.0)),
+        sekerli_lower_bound_mv_ms=float(k.get("sekerli_lower_bound_mv_ms", 5.0)),
+        rise_low_pct=float(k.get("rise_low_pct", 10.0)),
+        rise_high_pct=float(k.get("rise_high_pct", 90.0)),
+        decay_low_pct=float(k.get("decay_low_pct", 10.0)),
+        decay_high_pct=float(k.get("decay_high_pct", 90.0)),
+        decay_end=str(k.get("decay_end", "to_threshold")),
+        fahp_search_start_ms=float(k.get("fahp_search_start_ms", 0.0)),
+        fahp_search_end_ms=float(k.get("fahp_search_end_ms", 5.0)),
+        mahp_search_start_ms=float(k.get("mahp_search_start_ms", 5.0)),
+        mahp_search_end_ms=float(k.get("mahp_search_end_ms", 100.0)),
+        max_slope_window_ms=float(k.get("max_slope_window_ms", 0.5)),
+        interpolate=bool(k.get("interpolate_to_200khz", True)),
+        amplitude_ref=str(k.get("amplitude_ref", "threshold")),
+        baseline_window_ms=float(k.get("baseline_window_ms", 10.0)),
+    )
+
+
+def kinetics_on_filtered(kinetics: dict) -> bool:
+    """True when kinetics should be measured on the pre-detection-
+    filtered trace instead of the unfiltered one (the default). Has no
+    effect when no pre-detection filter is set."""
+    return str((kinetics or {}).get("measure_on", "raw")) == "filtered"
+
+
+def kinetics_for_method(kinetics: dict, method: str) -> dict:
+    """Kinetics params as used for a given detection method: the
+    noise-relative method measures from the local pre-spike baseline
+    instead of an AP threshold."""
+    k = dict(kinetics or {})
+    k["amplitude_ref"] = "baseline" if method == "noise_threshold" else "threshold"
+    return k
+
+
+# Fields that carry signal values (or slopes of it) and flip sign with
+# the trace when a downward spike is measured on the inverted signal.
+_SIGNED_FIELDS = (
+    "threshold_vm", "peak_vm", "amplitude_mv", "fahp_vm", "mahp_vm",
+    "max_rise_slope_mv_ms", "max_decay_slope_mv_ms",
+)
+
+
+def measure_spike_polar(
+    vm: np.ndarray, sr: float, spike: _Spike, polarity: int,
+    kinetics: dict, dvdt: Optional[np.ndarray] = None,
+) -> dict:
+    """``_measure_spike`` for either spike polarity.
+
+    Downward spikes (polarity −1, e.g. inward action currents) are
+    measured on the inverted trace — so "threshold", "fAHP" etc. keep
+    their geometric meaning relative to the spike — and the signal-valued
+    results are flipped back, so every value is reported in the
+    recording's own sign. ``dvdt`` must belong to the same orientation
+    as the measured trace (i.e. already inverted when polarity is −1).
+    """
+    if polarity >= 0:
+        return _measure_spike(vm, sr, spike, dvdt=dvdt, **kinetics_kwargs(kinetics))
+    flipped = _Spike(
+        onset_idx=spike.onset_idx, peak_idx=spike.peak_idx, fall_idx=spike.fall_idx,
+        peak_vm=-spike.peak_vm, manual=spike.manual,
+    )
+    m = _measure_spike(-vm, sr, flipped, dvdt=dvdt, **kinetics_kwargs(kinetics))
+    for k in _SIGNED_FIELDS:
+        if m.get(k) is not None:
+            m[k] = -float(m[k])
+    return m
 
 
 # ---------------------------------------------------------------------------
@@ -520,20 +777,32 @@ def _per_sweep_metrics(
     bounds_start_s: float, bounds_end_s: float,
     im_mean_pa: Optional[float],
     im_onset_s: Optional[float],
+    spontaneous: bool = False,
 ) -> dict:
-    """Counting metrics computed from a sweep's detected spike list."""
+    """Counting metrics computed from a sweep's detected spike list.
+
+    In spontaneous mode there is no stimulus, so the stimulus-relative
+    metrics (first-spike latency, SFA divisor) are left empty."""
     peak_t = np.array([s.peak_idx / sr for s in spikes], dtype=float) if spikes else np.zeros(0)
     isis = np.diff(peak_t) if peak_t.size >= 2 else np.zeros(0)
     sfa_div = float(isis[0] / isis[-1]) if isis.size >= 2 and isis[-1] != 0 else None
     first_lat = (float(peak_t[0]) - im_onset_s) if (peak_t.size > 0 and im_onset_s is not None) else None
+    if spontaneous:
+        sfa_div = None
+        first_lat = None
+    mean_isi = float(isis.mean()) if isis.size else None
     return {
         "spike_count": int(peak_t.size),
         "peak_times_s": peak_t.tolist(),
         "first_spike_latency_s": first_lat,
-        "mean_isi_s": float(isis.mean()) if isis.size else None,
+        "mean_isi_s": mean_isi,
+        "median_isi_s": float(np.median(isis)) if isis.size else None,
+        "cv_isi": (float(isis.std(ddof=1) / mean_isi)
+                   if isis.size >= 2 and mean_isi else None),
         "sfa_divisor": sfa_div,
         "local_variance": _local_variance(isis),
         "im_mean_pa": im_mean_pa,
+        "duration_s": float(bounds_end_s - bounds_start_s) if bounds_end_s > bounds_start_s else None,
         "spike_rate_hz": (
             float(peak_t.size / (bounds_end_s - bounds_start_s))
             if bounds_end_s > bounds_start_s else None
@@ -558,13 +827,19 @@ def run_ap(
     im_onset_s: Optional[float],          # from .pgf, used for first-spike latency
     manual_edits: Optional[dict] = None,  # {added: {sweep: [t_s,...]}, removed: {...}}
     measure_kinetics: bool = True,
+    mode: str = "evoked",                 # 'evoked' | 'spontaneous'
 ) -> dict:
     """Run AP detection + counting + (optionally) kinetics across all sweeps.
 
     Returns a dict with ``per_sweep`` (one entry per sweep), ``per_spike``
     (flattened list across sweeps with sweep + spike index), ``fi_curve``
     (Im, rate, sweep), and ``rheobase`` (mode + value).
+
+    ``mode='spontaneous'`` is for continuous recordings without a
+    stimulus: F-I, rheobase, latency and SFA are skipped; detection and
+    kinetics are unchanged.
     """
+    spontaneous = str(mode) == "spontaneous"
     bounds_start_s = float(detection.get("bounds_start_s", 0.0))
     bounds_end_s = float(detection.get("bounds_end_s", 0.0))
     method = str(detection.get("method", "auto_rec"))
@@ -574,6 +849,10 @@ def run_ap(
     neg_dvdt = float(detection.get("neg_dvdt_mv_ms", -10.0))
     width_ms = float(detection.get("width_ms", 5.0))
     min_dist = float(detection.get("min_distance_ms", 2.0))
+    kin_eff = kinetics_for_method(kinetics, method)
+    # Kinetics on the unfiltered trace (default) or on the pre-filtered
+    # one the detector saw (``measure_on: 'filtered'``).
+    measure_filtered = kinetics_on_filtered(kinetics)
 
     added_by_sweep: dict[int, list[float]] = {}
     removed_by_sweep: dict[int, list[float]] = {}
@@ -589,6 +868,7 @@ def run_ap(
     fi_rate: list[float] = []
     fi_sweep: list[int] = []
     spike_times_per_sweep: list[list[float]] = []
+    polarity_per_sweep: list[int] = []
 
     rheobase_value: Optional[float] = None
     first_ap_sweep_idx: Optional[int] = None
@@ -605,37 +885,70 @@ def run_ap(
                 "peak_times_s": [],
                 "first_spike_latency_s": None,
                 "mean_isi_s": None,
+                "median_isi_s": None,
+                "cv_isi": None,
                 "sfa_divisor": None,
                 "local_variance": None,
                 "im_mean_pa": None,
+                "duration_s": None,
                 "spike_rate_hz": None,
             })
             spike_times_per_sweep.append([])
+            polarity_per_sweep.append(1)
             continue
 
         eff_end = sweep_end_default if sweep_end_default else (vm.size / sr)
         # Optional pre-detection filter (same shape as bursts).
         vm_for_detection = _apply_pre_detection_filter(vm, sr, detection)
+        vm_meas = vm_for_detection if measure_filtered else vm
 
-        spikes = _detect_spikes_sweep(
-            vm_for_detection, sr,
-            method=method,
-            manual_threshold_mv=manual_threshold,
-            min_amplitude_mv=min_amp,
-            pos_dvdt_mv_ms=pos_dvdt,
-            neg_dvdt_mv_ms=neg_dvdt,
-            width_ms=width_ms,
-            min_distance_ms=min_dist,
-            bounds_start_s=bounds_start_s,
-            bounds_end_s=eff_end,
-        )
+        polarity = 1
+        lines = None
+        if method == "noise_threshold":
+            spikes, polarity, lines = _detect_spikes_noise_threshold(
+                vm_for_detection, sr,
+                detection=detection,
+                bounds_start_s=bounds_start_s,
+                bounds_end_s=eff_end,
+            )
+            # Peaks onto the trace kinetics are measured on.
+            spikes = _snap_peaks(
+                spikes, vm_meas, sr, polarity,
+                float(detection.get("peak_snap_ms", 1.0)),
+            )
+        else:
+            spikes = _detect_spikes_sweep(
+                vm_for_detection, sr,
+                method=method,
+                manual_threshold_mv=manual_threshold,
+                min_amplitude_mv=min_amp,
+                pos_dvdt_mv_ms=pos_dvdt,
+                neg_dvdt_mv_ms=neg_dvdt,
+                width_ms=width_ms,
+                min_distance_ms=min_dist,
+                bounds_start_s=bounds_start_s,
+                bounds_end_s=eff_end,
+            )
+        polarity_per_sweep.append(int(polarity))
         # Apply manual edits for THIS sweep, if any.
         added = added_by_sweep.get(int(sweep_idx), [])
         removed = removed_by_sweep.get(int(sweep_idx), [])
         if added or removed:
             spikes = _apply_manual_edits_to_sweep(
                 spikes, vm_for_detection, sr, added, removed, min_dist,
+                polarity=polarity,
             )
+            if method == "noise_threshold":
+                # Added spikes were snapped on the filtered trace — move
+                # them onto the measured one like the detected spikes.
+                manual = _snap_peaks(
+                    [sp for sp in spikes if sp.manual], vm_meas, sr, polarity,
+                    float(detection.get("peak_snap_ms", 1.0)),
+                )
+                spikes = sorted(
+                    [sp for sp in spikes if not sp.manual] + manual,
+                    key=lambda sp: sp.peak_idx,
+                )
 
         # Im channel mean over the bounded window (for F-I + rheobase 'record').
         im_mean_pa: Optional[float] = None
@@ -649,13 +962,16 @@ def run_ap(
             spikes, sr,
             bounds_start_s=bounds_start_s, bounds_end_s=eff_end,
             im_mean_pa=im_mean_pa, im_onset_s=im_onset_s,
+            spontaneous=spontaneous,
         )
         per_sweep["sweep"] = int(sweep_idx)
+        per_sweep["polarity"] = int(polarity)
+        per_sweep["detection_lines"] = lines
         per_sweep_out.append(per_sweep)
         spike_times_per_sweep.append(per_sweep["peak_times_s"])
 
         # F-I point — needs an Im value from one source or another.
-        if im_mean_pa is not None and per_sweep["spike_rate_hz"] is not None:
+        if (not spontaneous) and im_mean_pa is not None and per_sweep["spike_rate_hz"] is not None:
             fi_im.append(im_mean_pa)
             fi_rate.append(per_sweep["spike_rate_hz"])
             fi_sweep.append(int(sweep_idx))
@@ -665,32 +981,18 @@ def run_ap(
             first_ap_sweep_idx = int(sweep_idx)
             first_ap_peak_t_s = float(spikes[0].peak_idx / sr)
 
-        if measure_kinetics:
+        if measure_kinetics and spikes:
+            # Derivative once per sweep, in the orientation being measured.
+            oriented = vm_meas if polarity >= 0 else -vm_meas
+            dvdt = np.gradient(oriented) * (sr / 1000.0)
             for j, sp in enumerate(spikes):
-                m = _measure_spike(
-                    vm, sr, sp,
-                    threshold_method=str(kinetics.get("threshold_method", "first_deriv_cutoff")),
-                    threshold_cutoff_mv_ms=float(kinetics.get("threshold_cutoff_mv_ms", 20.0)),
-                    threshold_search_ms_before_peak=float(kinetics.get("threshold_search_ms_before_peak", 5.0)),
-                    sekerli_lower_bound_mv_ms=float(kinetics.get("sekerli_lower_bound_mv_ms", 5.0)),
-                    rise_low_pct=float(kinetics.get("rise_low_pct", 10.0)),
-                    rise_high_pct=float(kinetics.get("rise_high_pct", 90.0)),
-                    decay_low_pct=float(kinetics.get("decay_low_pct", 10.0)),
-                    decay_high_pct=float(kinetics.get("decay_high_pct", 90.0)),
-                    decay_end=str(kinetics.get("decay_end", "to_threshold")),
-                    fahp_search_start_ms=float(kinetics.get("fahp_search_start_ms", 0.0)),
-                    fahp_search_end_ms=float(kinetics.get("fahp_search_end_ms", 5.0)),
-                    mahp_search_start_ms=float(kinetics.get("mahp_search_start_ms", 5.0)),
-                    mahp_search_end_ms=float(kinetics.get("mahp_search_end_ms", 100.0)),
-                    max_slope_window_ms=float(kinetics.get("max_slope_window_ms", 0.5)),
-                    interpolate=bool(kinetics.get("interpolate_to_200khz", True)),
-                )
+                m = measure_spike_polar(vm_meas, sr, sp, polarity, kin_eff, dvdt=dvdt)
                 m["sweep"] = int(sweep_idx)
                 m["spike_index"] = int(j)
                 per_spike_out.append(m)
 
-    # Rheobase computation.
-    if first_ap_sweep_idx is not None:
+    # Rheobase computation (stimulus-driven recordings only).
+    if first_ap_sweep_idx is not None and not spontaneous:
         if rheobase_mode == "record":
             # Im of the first sweep that fired.
             for ps in per_sweep_out:
@@ -729,8 +1031,11 @@ def run_ap(
             {"im": fi_im, "rate": fi_rate, "sweep": fi_sweep}
             if fi_im else None
         ),
-        "rheobase": {"mode": rheobase_mode, "value": rheobase_value},
+        "rheobase": (None if spontaneous
+                     else {"mode": rheobase_mode, "value": rheobase_value}),
         "spike_times_per_sweep": spike_times_per_sweep,
+        "polarity_per_sweep": polarity_per_sweep,
+        "mode": "spontaneous" if spontaneous else "evoked",
         "first_ap_sweep": first_ap_sweep_idx,
         "first_ap_peak_t_s": first_ap_peak_t_s,
     }
