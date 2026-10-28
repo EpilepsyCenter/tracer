@@ -4,6 +4,7 @@ import { spawn, ChildProcess } from 'child_process'
 import { join, dirname, basename } from 'path'
 import { createServer } from 'net'
 import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync, unlinkSync, readdirSync, statSync } from 'fs'
+import { initUpdater, checkForUpdates } from './updater'
 
 // When the app is launched from a GUI (double-clicked AppImage, Finder,
 // a .desktop entry) the main process's stdout/stderr are wired to a pipe
@@ -135,6 +136,7 @@ function buildAppMenu() {
       label: app.name,
       submenu: [
         { role: 'about' },
+        { label: 'Check for Updates…', click: () => { void checkForUpdates(true) } },
         { type: 'separator' },
         { label: 'Settings…', accelerator: 'CmdOrCtrl+,', click: () => sendMenuAction('open-settings') },
         { type: 'separator' },
@@ -231,6 +233,7 @@ function buildAppMenu() {
       { label: 'TRACER on GitHub', click: () => { void shell.openExternal('https://github.com/EpilepsyCenter/tracer') } },
       ...(isMac ? [] : [
         { type: 'separator' as const },
+        { label: 'Check for Updates…', click: () => { void checkForUpdates(true) } },
         { role: 'about' as const },
       ]),
     ],
@@ -1075,6 +1078,8 @@ app.whenReady().then(async () => {
   }
 
   createWindow()
+  // Update check from the menu, plus a quiet daily check at launch.
+  initUpdater(() => mainWindow)
 
   // Safety net: if ``ready-to-show`` never fires (hung renderer,
   // missing index.html, etc.) the splash would stay on top forever.

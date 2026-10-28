@@ -22,6 +22,8 @@ No build required — pre-built installers for every supported platform are atta
 
 No separate Python or Node install is needed — the backend is bundled inside the installer.
 
+**Updating:** from the release after v1.0.0 on, use **Check for Updates…** (TRACER menu on macOS, Help menu on Windows / Linux) — TRACER downloads the new version and replaces itself, no re-download needed. It also checks once a day at launch. On macOS this needs TRACER in a writable folder such as Applications.
+
 ## What it does
 
 Open a recording, navigate the group → series → sweep tree, and run analysis modules over the trace. Each module has its own window with a continuous-mode viewer + draggable cursor regions, a parameter sidebar, and a results table you can curate. Detection results are kept in a sidecar JSON (`recording.dat.tracer`) next to the recording, so reopening the file restores everything — selections, cursors, every module's last run.

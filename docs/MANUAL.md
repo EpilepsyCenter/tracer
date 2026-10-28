@@ -173,7 +173,39 @@ inside the window on Windows and Linux:
   Traces…**, which work across files.
 - **Window** — minimise, zoom and switch between TRACER's windows.
 - **Help** — the **TRACER Manual**, **Keyboard Shortcuts**, **Report a
-  Bug…**, and a link to TRACER on GitHub.
+  Bug…**, and a link to TRACER on GitHub. On Windows and Linux,
+  **Check for Updates…** is here too; on macOS it is under the
+  **TRACER** menu.
+
+### Updating TRACER
+
+**Check for Updates…** looks for a newer release on GitHub. When
+there is one, TRACER shows its version and release notes and offers
+**Install Update**: the update downloads in the background (progress
+shows on the Dock / taskbar icon), then TRACER asks to restart. Choose
+**Later** and it installs the next time you quit. Your recordings,
+sidecars and settings are not touched.
+
+TRACER also checks quietly once a day at launch and only speaks up
+when an update is available — that prompt has **Skip This Version**,
+and a *Check for updates automatically* box to turn the daily check
+off (the menu item always works).
+
+- **macOS** — TRACER replaces its own app bundle and reopens. This
+  needs the app in a folder you can write to, such as
+  **Applications**; when it runs from the disk image, from a
+  temporary location macOS chose (open it once from Applications to
+  fix that), or from a read-only folder, TRACER says so and offers
+  the download page instead. Each download is checked against the
+  checksum published with the release. If replacing the app fails,
+  the previous version is put back and TRACER tells you on the next
+  launch.
+- **Windows** — the installer runs silently and TRACER reopens.
+- **Linux** — works for the AppImage; other installs get the download
+  page.
+
+In-place updates start with the release after v1.0.0: on v1.0.0,
+download the next version once from the releases page.
 
 ### Toolbar
 

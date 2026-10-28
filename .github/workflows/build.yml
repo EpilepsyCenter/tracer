@@ -15,7 +15,8 @@ jobs:
           - os: macos-14       # Apple Silicon runner
             arch: arm64
             artifact: TRACER-mac-arm64
-            builder_flags: --mac dmg --arm64
+            # zip = the in-app update package (see electron/updater.ts)
+            builder_flags: --mac dmg zip --arm64
             freeze: bash scripts/build-backend.sh
           # Intel Mac build intentionally disabled for the 0.2.x series —
           # the lab only uses Apple Silicon. Re-add the macos-13 row here
@@ -80,11 +81,15 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact }}
+          # latest*.yml = release metadata the in-app updater reads
+          # (version, file names, SHA-512); one per platform / arch.
           path: |
             dist/*.dmg
+            dist/*.zip
             dist/*.exe
             dist/*.AppImage
             dist/*.blockmap
+            dist/latest*.yml
           if-no-files-found: error
 
   release:

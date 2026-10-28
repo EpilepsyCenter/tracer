@@ -26,7 +26,9 @@ export default defineConfig({
           build: {
             outDir: resolve(__dirname, 'dist-electron'),
             rollupOptions: {
-              external: ['electron'],
+              // electron-updater stays a runtime dependency (packaged in
+              // node_modules) rather than being bundled into main.js.
+              external: ['electron', 'electron-updater'],
             },
           },
         },

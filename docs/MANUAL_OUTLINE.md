@@ -301,6 +301,8 @@ fine.
 
 ## 2. Toolbar
 
+- **Updating TRACER** (in chapter 2, after the menu bar): Check for Updates… (TRACER menu on macOS, Help elsewhere), daily launch check with Skip This Version / auto-check box; macOS self-replaces (needs a writable folder, falls back to the download page), Windows silent installer, Linux AppImage only; starts after v1.0.0
+
 Left-to-right.
 
 ### File & Settings
