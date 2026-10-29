@@ -78,55 +78,54 @@ const stages = [
 ---
 <Base title="TRACER — Workflow">
 <style>
-.stage{padding:80px 0;border-bottom:1px solid var(--border);}
-.stage .head{display:grid;grid-template-columns:80px 1fr auto;gap:24px;align-items:baseline;margin-bottom:18px;}
-.stage .num{font-family:var(--font-mono);font-size:11px;color:var(--text-muted);letter-spacing:0.14em;}
-.stage h2{font-family:var(--font-ui);font-weight:300;font-size:44px;letter-spacing:-0.015em;margin:0;line-height:1.05;}
-.stage h2 em{font-style:italic;color:var(--text-muted);}
-.stage .kicker{font-family:var(--font-mono);font-size:10px;color:var(--text-muted);letter-spacing:0.1em;text-transform:uppercase;}
-.stage .lead{margin:4px 0 28px 104px;color:var(--text-secondary);font-size:16px;line-height:1.55;max-width:62ch;}
-.stage .bullets{margin-left:104px;display:grid;grid-template-columns:repeat(3,1fr);gap:0;border:1px solid var(--border);border-radius:var(--rad);overflow:hidden;background:var(--bg-secondary);}
-.stage .bullet{padding:18px 20px;background:var(--bg-primary);border-right:1px solid var(--border);}
-.stage .bullet:last-child{border-right:none;}
-.stage .bullet h3{margin:0 0 6px;font-family:var(--font-ui);font-weight:600;font-size:13px;}
-.stage .bullet p{margin:0;font-size:13px;line-height:1.55;color:var(--text-secondary);}
-.stage .bullet p .mono{background:var(--bg-secondary);padding:0 4px;border-radius:var(--rad);color:var(--text-primary);font-size:12px;}
+.stage { padding: 58px 0; border-bottom: 1px solid var(--rule); }
+.stage:last-of-type { border-bottom: none; }
+.stage .head { display: grid; grid-template-columns: 76px 1fr auto; gap: 24px; align-items: baseline; margin-bottom: 18px; }
+.stage .num { font-family: var(--mono); font-size: 11px; color: var(--muted); letter-spacing: 0.07em; }
+.stage h2 { font-weight: 600; font-size: 30px; letter-spacing: -0.03em; margin: 0; line-height: 1.1; }
+.stage .kicker { font-family: var(--mono); font-size: 11px; color: var(--muted); letter-spacing: 0.07em; text-transform: uppercase; }
+.stage .lead { margin: 4px 0 24px 100px; color: var(--ink-soft); font-size: 16px; line-height: 1.65; max-width: 62ch; }
+.stage .bullets { margin-left: 100px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.stage .bullet {
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+}
+.stage .bullet h3 { margin: 0 0 6px; font-weight: 600; font-size: 15px; letter-spacing: -0.01em; }
+.stage .bullet p { margin: 0; font-size: 14.5px; line-height: 1.6; color: var(--ink-soft); }
+.stage .bullet p .mono {
+  color: var(--ink);
+  font-size: 13px;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 0 4px;
+}
 
-.cta-big{padding:120px 0;background:var(--dark-bg);color:var(--dark-text);text-align:center;position:relative;overflow:hidden;}
-.cta-big::before{content:'';position:absolute;inset:0;pointer-events:none;background-image:linear-gradient(to right,rgba(255,255,255,0.04) 1px,transparent 1px),linear-gradient(to bottom,rgba(255,255,255,0.04) 1px,transparent 1px);background-size:80px 80px;}
-.cta-big .wrap{position:relative;z-index:1;}
-.cta-big .eyebrow{color:var(--dark-accent);}
-.cta-big .eyebrow::before{background:var(--dark-accent);box-shadow:0 0 5px var(--dark-accent),0 0 9px oklch(0.78 0.10 215 / 0.5);border-radius:50%;width:7px;height:7px;}
-.cta-big h2{color:var(--dark-text);font-family:var(--font-ui);font-weight:300;font-size:52px;letter-spacing:-0.02em;margin:12px auto 16px;max-width:26ch;line-height:1.05;}
-.cta-big h2 em{font-style:italic;color:var(--dark-text-2);}
-.cta-big p{color:var(--dark-text-2);font-size:15px;max-width:46ch;margin:0 auto 32px;line-height:1.55;}
-.cta-big .btns{display:flex;justify-content:center;gap:10px;flex-wrap:wrap;}
-.cta-big .btn-lg{background:transparent;border-color:var(--dark-border);color:var(--dark-text);}
-.cta-big .btn-lg:hover{background:var(--dark-bg-3);color:var(--dark-accent);}
-.cta-big .btn-lg.primary{background:var(--dark-accent);border-color:var(--dark-accent);color:var(--dark-bg);}
-
-@media (max-width:900px){
-  .stage .head{grid-template-columns:1fr;}
-  .stage .lead,.stage .bullets{margin-left:0;}
-  .stage .bullets{grid-template-columns:1fr;}
-  .stage .bullet{border-right:none;border-bottom:1px solid var(--border);}
-  .stage .bullet:last-child{border-bottom:none;}
+@media (max-width: 900px) {
+  .stage .head { grid-template-columns: 1fr; }
+  .stage .lead, .stage .bullets { margin-left: 0; }
+  .stage .bullets { grid-template-columns: 1fr; }
+  .stage h2 { font-size: 26px; }
 }
 </style>
 
+<div class="scope-zone">
 <header class="page-hd"><div class="wrap">
   <div>
     <div class="eyebrow">Workflow · Step by step</div>
-    <h1>From recording<br><em>to figure.</em></h1>
+    <h1>From recording <span>to figure.</span></h1>
     <p class="sub">Six stages, the way it actually goes: open the recording, navigate the tree, run the analysis, curate sweep-by-sweep, export the figure, aggregate at cohort scale. Same shape every day.</p>
   </div>
   <div class="meta">
     <span><strong>6</strong> stages</span>
     <span><strong>14</strong> windows</span>
     <span><strong>1.0.1</strong> current build</span>
-    <span class="led ok">No CLI required</span>
+    <span class="led">No CLI required</span>
   </div>
 </div></header>
+</div>
 
 <div class="toc"><div class="wrap">
   <span class="k">Stages</span>
@@ -159,14 +158,14 @@ const stages = [
   </section>
 ))}
 
-<section class="cta-big">
+<section class="band">
   <div class="wrap">
     <div class="eyebrow">Try it</div>
-    <h2>Drop a recording in.<em> The rest is interface.</em></h2>
+    <h2>Drop a recording in. <span>The rest is interface.</span></h2>
     <p>TRACER runs entirely on your machine. No account, no upload, no telemetry.</p>
     <div class="btns">
-      <a class="btn-lg primary" href={releases}>Download v1.0.1 ↓</a>
-      <a class="btn-lg" href={link('/features')}>See the features →</a>
+      <a class="btn-lg primary" href={releases}>Download v1.0.1</a>
+      <a class="btn-lg" href={link('/features')}>See the features</a>
     </div>
   </div>
 </section>
