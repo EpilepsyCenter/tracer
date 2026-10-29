@@ -1,5 +1,6 @@
 ---
 import Base from '../layouts/Base.astro';
+import Lightbox from '../components/Lightbox.astro';
 import { marked } from 'marked';
 import manualMd from '../../../docs/MANUAL.md?raw';
 
@@ -75,177 +76,217 @@ let html = await marked.parse(mdWithScreenshots, { gfm: true });
     }
   );
 }
+
+// Wrap every manual screenshot in a .shot link so the shared <dialog>
+// lightbox picks it up — the same viewer the hub and the front page use.
+html = html.replace(
+  /<img src="([^"]*)" alt="([^"]*)"\s*\/?>/g,
+  (_m, src, alt) =>
+    '<a class="shot" href="' + src + '" data-caption="' + alt + '">' +
+    '<img src="' + src + '" alt="' + alt + '" loading="lazy" /></a>'
+);
 ---
 <Base title="TRACER — Manual">
 <style>
-.doc-layout{display:grid;grid-template-columns:260px 1fr;gap:48px;padding:40px 0 80px;align-items:start;}
+.doc-layout { display: grid; grid-template-columns: 220px 1fr; gap: 40px; padding: 44px 0 40px; align-items: start; }
 
-aside.side{position:sticky;top:72px;max-height:calc(100vh - 90px);overflow:auto;padding-right:8px;font-family:var(--font-mono);font-size:12px;}
-aside.side h5{font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:var(--text-muted);margin:0 0 14px;font-weight:500;display:flex;align-items:center;gap:8px;}
-aside.side h5::before{content:'';width:5px;height:5px;background:var(--accent);}
-aside.side h5.tail{margin-top:28px;}
-aside.side ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px;}
-aside.side a{display:block;padding:5px 10px;border-radius:var(--rad);color:var(--text-secondary);letter-spacing:0.02em;transition:all 0.1s;border-left:2px solid transparent;line-height:1.4;}
-aside.side a:hover{background:var(--bg-secondary);color:var(--text-primary);}
-
-main.doc{min-width:0;max-width:780px;}
-
-.doc-header{padding-bottom:32px;margin-bottom:40px;border-bottom:1px solid var(--border);}
-.doc-header .crumb{font-family:var(--font-mono);font-size:10px;color:var(--text-muted);letter-spacing:0.12em;text-transform:uppercase;margin-bottom:14px;display:flex;gap:10px;align-items:center;}
-.doc-header h1{font-family:var(--font-ui);font-weight:300;font-size:60px;line-height:1;letter-spacing:-0.02em;margin:0 0 18px;}
-.doc-header h1 em{font-style:italic;color:var(--text-muted);}
-.doc-header .lead{color:var(--text-secondary);font-size:17px;line-height:1.55;max-width:62ch;}
-.doc-header .meta{margin-top:22px;display:flex;gap:10px;flex-wrap:wrap;}
-
-@media (max-width:1100px){
-  .doc-layout{grid-template-columns:220px 1fr;gap:32px;}
+aside.side {
+  position: sticky;
+  top: calc(var(--nav-h) + 20px);
+  max-height: calc(100vh - var(--nav-h) - 40px);
+  overflow: auto;
+  padding-right: 8px;
+  font-size: 13.5px;
 }
-@media (max-width:900px){
-  .doc-layout{grid-template-columns:1fr;}
-  aside.side{position:static;max-height:none;}
+aside.side h5 {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 12px;
+}
+aside.side h5.tail { margin-top: 26px; }
+aside.side ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; }
+aside.side a {
+  display: block;
+  padding: 5px 10px;
+  border-radius: 5px;
+  color: var(--muted);
+  line-height: 1.45;
+  transition: background 0.12s, color 0.12s;
+}
+aside.side a:hover { background: var(--card); color: var(--ink); }
+
+main.doc { min-width: 0; max-width: 760px; }
+
+.doc-header { padding-bottom: 30px; margin-bottom: 36px; border-bottom: 1px solid var(--rule); }
+.doc-header .crumb {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  margin-bottom: 14px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.doc-header h1 { font-weight: 600; font-size: 40px; line-height: 1.05; letter-spacing: -0.032em; margin: 0 0 16px; }
+.doc-header h1 span { color: var(--accent); }
+.doc-header .lead { color: var(--ink-soft); font-size: 17px; line-height: 1.65; max-width: 62ch; }
+.doc-header .meta { margin-top: 20px; display: flex; gap: 7px; flex-wrap: wrap; }
+
+@media (max-width: 900px) {
+  .doc-layout { grid-template-columns: 1fr; gap: 24px; }
+  aside.side { position: static; max-height: none; }
+  .doc-header h1 { font-size: 32px; }
 }
 </style>
 
 <!-- Manual body styles must be global because the content is
      injected via set:html and won't carry Astro's scope marker. -->
 <style is:global>
-.manual-body{font-family:var(--font-ui);font-size:15px;line-height:1.65;color:var(--text-primary);}
-.manual-body > h1{display:none;}
+.manual-body { font-size: 15.5px; line-height: 1.7; color: var(--ink-soft); }
+.manual-body > h1 { display: none; }
 
-.manual-body h2{
-  font-family:var(--font-mono);font-size:17px;font-weight:600;
-  text-transform:uppercase;letter-spacing:0.05em;color:var(--text-primary);
-  margin:64px 0 14px;padding-bottom:8px;border-bottom:1px solid var(--border);
-  scroll-margin-top:76px;
+.manual-body h2 {
+  font-weight: 600;
+  font-size: 23px;
+  letter-spacing: -0.025em;
+  color: var(--ink);
+  margin: 56px 0 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--rule);
+  scroll-margin-top: calc(var(--nav-h) + 20px);
 }
-.manual-body h2::before{
-  content:'';display:inline-block;width:8px;height:8px;background:var(--accent);
-  margin-right:10px;vertical-align:middle;margin-top:-3px;
-}
-.manual-body h3{
-  font-family:var(--font-mono);font-size:13px;font-weight:600;
-  text-transform:uppercase;letter-spacing:0.04em;color:var(--text-primary);
-  margin:36px 0 10px;scroll-margin-top:76px;
-  display:flex;align-items:baseline;gap:10px;
-}
-.manual-body h3::before{
-  content:'';width:5px;height:5px;background:var(--accent);
-  display:inline-block;flex-shrink:0;
+.manual-body h3 {
+  font-weight: 600;
+  font-size: 16px;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+  margin: 34px 0 10px;
+  scroll-margin-top: calc(var(--nav-h) + 20px);
 }
 
-.manual-body p{margin:0 0 14px;color:var(--text-secondary);}
-.manual-body strong{color:var(--text-primary);font-weight:600;}
-.manual-body em{font-style:italic;}
+.manual-body p { margin: 0 0 14px; }
+.manual-body strong { color: var(--ink); font-weight: 600; }
+.manual-body em { font-style: italic; }
 
-.manual-body code{
-  font-family:var(--font-mono);font-size:13px;
-  background:var(--bg-secondary);padding:1px 6px;
-  border:1px solid var(--border);border-radius:var(--rad);color:var(--text-primary);
+.manual-body code {
+  font-family: var(--mono);
+  font-size: 13px;
+  background: var(--card);
+  padding: 1px 6px;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  color: var(--ink);
 }
-.manual-body pre{
-  background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--rad);
-  padding:14px 16px;font-family:var(--font-mono);font-size:12.5px;line-height:1.55;
-  overflow:auto;margin:0 0 18px;
+.manual-body pre {
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+  overflow: auto;
+  margin: 0 0 18px;
 }
-.manual-body pre code{background:transparent;border:none;padding:0;font-size:12.5px;}
+.manual-body pre code { background: transparent; border: none; padding: 0; font-size: 12.5px; }
 
-.manual-body a{color:var(--accent);}
-.manual-body a:hover{text-decoration:underline;}
+.manual-body a { color: var(--accent); }
+.manual-body a:hover { text-decoration: underline; }
 
-.manual-body ul,.manual-body ol{padding-left:24px;margin:0 0 16px;color:var(--text-secondary);}
-.manual-body li{margin-bottom:5px;}
-.manual-body ul li::marker{color:var(--accent);}
+.manual-body ul, .manual-body ol { padding-left: 22px; margin: 0 0 16px; }
+.manual-body li { margin-bottom: 5px; }
+.manual-body ul li::marker { color: var(--rule-strong); }
 
-.manual-body table{width:100%;border-collapse:collapse;margin:0 0 18px;font-size:13px;}
-.manual-body th,.manual-body td{
-  text-align:left;padding:8px 12px;border-bottom:1px solid var(--border);
-  vertical-align:top;
+.manual-body table { width: 100%; border-collapse: collapse; margin: 0 0 18px; font-size: 14px; }
+.manual-body th, .manual-body td {
+  text-align: left;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: top;
 }
-.manual-body th{
-  font-family:var(--font-mono);font-size:10px;font-weight:600;
-  letter-spacing:0.10em;text-transform:uppercase;color:var(--text-muted);
-  background:var(--bg-secondary);
+.manual-body th {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
-.manual-body td{color:var(--text-secondary);}
-.manual-body td:first-child,.manual-body td:nth-child(2){color:var(--text-primary);}
+.manual-body td:first-child, .manual-body td:nth-child(2) { color: var(--ink); }
 
-.manual-body img{
-  display:block;max-width:100%;height:auto;
-  margin:18px 0;
-  border:1px solid var(--border);border-radius:var(--rad);
-  background:var(--bg-secondary);
-  cursor:zoom-in;
-  transition:opacity 0.12s;
-}
-.manual-body img:hover{opacity:0.9;}
-
-.manual-lightbox{
-  position:fixed;inset:0;z-index:100;
-  background:rgba(20,22,28,0.88);
-  display:flex;align-items:center;justify-content:center;
-  cursor:zoom-out;
-  animation:lightbox-in 0.12s ease-out;
-  padding:24px;
-}
-.manual-lightbox img{
-  max-width:96vw;max-height:96vh;
-  width:auto;height:auto;
-  border:1px solid var(--border);border-radius:var(--rad);
-  background:var(--bg-secondary);
-  box-shadow:0 30px 80px rgba(0,0,0,0.5);
-}
-.manual-lightbox .caption{
-  position:absolute;left:0;right:0;bottom:0;
-  padding:16px 24px;text-align:center;
-  font-family:var(--font-mono);font-size:11px;letter-spacing:0.06em;
-  color:rgba(255,255,255,0.7);
-  pointer-events:none;
-}
-@keyframes lightbox-in{from{opacity:0;}to{opacity:1;}}
-
-.manual-body kbd{
-  font-family:var(--font-mono);font-size:11px;
-  background:var(--bg-surface);border:1px solid var(--border);border-bottom-width:2px;
-  padding:1px 6px;border-radius:var(--rad);color:var(--text-primary);
+/* Screenshots are wrapped in .shot links; the viewer styling is shared. */
+.manual-body a.shot { margin: 18px 0; }
+.manual-body a.shot:hover { text-decoration: none; }
+.manual-body img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--card);
 }
 
-.manual-body blockquote{
-  border-left:2px solid var(--accent);
-  padding:8px 16px;margin:0 0 16px;
-  background:var(--bg-secondary);
-  color:var(--text-secondary);
+.manual-body kbd {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-bottom-width: 2px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  color: var(--ink);
 }
 
-.manual-body hr{
-  border:none;border-top:1px solid var(--border);margin:32px 0;
+.manual-body blockquote {
+  border-left: 2px solid var(--accent);
+  padding: 10px 16px;
+  margin: 0 0 16px;
+  background: var(--card);
 }
 
-.manual-body .manual-img-missing{
-  display:flex;flex-direction:column;gap:2px;
-  padding:14px 18px;margin:18px auto;
-  border:1px dashed var(--border);border-radius:var(--rad);
-  background:var(--bg-secondary);
-  font-family:var(--font-mono);font-size:11px;color:var(--text-muted);
-  max-width:520px;
+.manual-body hr { border: none; border-top: 1px solid var(--rule); margin: 32px 0; }
+
+.manual-body .manual-img-missing {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px 18px;
+  margin: 18px auto;
+  border: 1px dashed var(--rule-strong);
+  border-radius: var(--radius);
+  background: var(--card);
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  max-width: 520px;
 }
-.manual-body .manual-img-missing .k{
-  text-transform:uppercase;letter-spacing:0.1em;
-  color:var(--text-secondary);font-weight:500;
+.manual-body .manual-img-missing .k {
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--ink-soft);
 }
 </style>
 
+<div class="scope-zone">
 <header class="page-hd"><div class="wrap">
   <div>
     <div class="eyebrow">Documentation · v1.0.1</div>
-    <h1>The user<br><em>manual.</em></h1>
+    <h1>The user <span>manual.</span></h1>
     <p class="sub">The full in-app manual, served from <a href={manualUrl}><code>docs/MANUAL.md</code></a> in the repository.</p>
   </div>
   <div class="meta">
     <span><strong>{chapters.length}</strong> chapters</span>
     <span><strong>v1.0.1</strong> current</span>
-    <span class="led ok">Single page</span>
+    <span class="led">Single page</span>
   </div>
 </div></header>
+</div>
 
 <div class="wrap doc-layout">
   <aside class="side">
@@ -266,10 +307,10 @@ main.doc{min-width:0;max-width:780px;}
   <main class="doc">
     <div class="doc-header">
       <div class="crumb"><span>Docs</span><span style="opacity:.4;">/</span><span>User manual</span></div>
-      <h1>TRACER <em>user manual.</em></h1>
+      <h1>TRACER <span>user manual.</span></h1>
       <p class="lead">Open a recording, navigate the group → series → sweep tree, and run the analysis modules over the trace. Below is the complete in-app reference — {chapters.length} chapters covering every analysis window, the persistence model, and the keyboard shortcuts.</p>
       <div class="meta">
-        <span class="chip ok">v1.0.1</span>
+        <span class="chip">v1.0.1</span>
         <span class="chip">macOS · Linux · Windows</span>
         <span class="chip">Free for noncommercial use</span>
       </div>
@@ -279,45 +320,5 @@ main.doc{min-width:0;max-width:780px;}
   </main>
 </div>
 
-<script>
-  // Click any manual screenshot to open a fullscreen lightbox.
-  // Click anywhere or press Escape to close.
-  const onReady = () => {
-    document.querySelectorAll<HTMLImageElement>('.manual-body img').forEach((img) => {
-      img.addEventListener('click', () => {
-        const overlay = document.createElement('div');
-        overlay.className = 'manual-lightbox';
-
-        const big = document.createElement('img');
-        big.src = img.src;
-        big.alt = img.alt;
-        overlay.appendChild(big);
-
-        if (img.alt) {
-          const cap = document.createElement('div');
-          cap.className = 'caption';
-          cap.textContent = img.alt;
-          overlay.appendChild(cap);
-        }
-
-        const close = () => {
-          overlay.remove();
-          document.body.style.overflow = '';
-          document.removeEventListener('keydown', onKey);
-        };
-        const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
-
-        overlay.addEventListener('click', close);
-        document.addEventListener('keydown', onKey);
-        document.body.style.overflow = 'hidden';
-        document.body.appendChild(overlay);
-      });
-    });
-  };
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', onReady);
-  } else {
-    onReady();
-  }
-</script>
+<Lightbox />
 </Base>

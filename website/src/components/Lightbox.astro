@@ -1,0 +1,118 @@
+---
+// The screenshot viewer, shared with the hub: a native <dialog> driven by the
+// .shot links on the page. Each .shot is a plain link to the image, so the
+// figures still work with the script disabled.
+---
+
+<dialog id="lightbox" aria-label="Screenshot viewer">
+  <div class="lb-inner">
+    <img id="lb-img" alt="" />
+    <div class="lb-bar">
+      <p class="eyebrow plain" id="lb-caption"></p>
+      <span class="eyebrow plain" id="lb-count"></span>
+      <button type="button" id="lb-prev" aria-label="Previous screenshot">&#8249;</button>
+      <button type="button" id="lb-next" aria-label="Next screenshot">&#8250;</button>
+      <button type="button" id="lb-close" aria-label="Close">&#215;</button>
+    </div>
+  </div>
+</dialog>
+
+<script>
+  const dialog = document.getElementById('lightbox');
+  const shots = Array.from(document.querySelectorAll('.shot'));
+
+  if (dialog instanceof HTMLDialogElement && shots.length && typeof dialog.showModal === 'function') {
+    const img = document.getElementById('lb-img');
+    const caption = document.getElementById('lb-caption');
+    const count = document.getElementById('lb-count');
+    let index = 0;
+
+    const show = (n) => {
+      index = (n + shots.length) % shots.length;
+      const shot = shots[index];
+      img.src = shot.getAttribute('href');
+      img.alt = shot.dataset.caption ?? '';
+      caption.textContent = shot.dataset.caption ?? '';
+      count.textContent = `${index + 1} / ${shots.length}`;
+    };
+
+    shots.forEach((shot, n) => {
+      shot.addEventListener('click', (event) => {
+        event.preventDefault();
+        show(n);
+        dialog.showModal();
+        document.documentElement.style.overflow = 'hidden';
+      });
+    });
+
+    dialog.addEventListener('close', () => {
+      document.documentElement.style.overflow = '';
+      shots[index].focus();
+    });
+
+    // Clicking the backdrop (anything outside the panel) closes it.
+    dialog.addEventListener('click', (event) => {
+      if (event.target === dialog) dialog.close();
+    });
+
+    dialog.addEventListener('keydown', (event) => {
+      if (event.key === 'ArrowLeft') { event.preventDefault(); show(index - 1); }
+      if (event.key === 'ArrowRight') { event.preventDefault(); show(index + 1); }
+    });
+
+    document.getElementById('lb-close').addEventListener('click', () => dialog.close());
+    document.getElementById('lb-prev').addEventListener('click', () => show(index - 1));
+    document.getElementById('lb-next').addEventListener('click', () => show(index + 1));
+  }
+</script>
+
+<style is:global>
+  /* The figures that open the viewer. Global so a page can emit .shot links
+     from its own markup without re-declaring the hover affordance. */
+  .shot { display: block; position: relative; border-radius: var(--radius); cursor: zoom-in; }
+  .shot::after {
+    content: '\2922';
+    position: absolute;
+    right: 10px;
+    bottom: 10px;
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1;
+    padding: 5px 6px;
+    border-radius: 5px;
+    background: var(--card);
+    color: var(--accent);
+    border: 1px solid var(--rule);
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+  .shot:hover::after,
+  .shot:focus-visible::after { opacity: 1; }
+  .shot:hover img { border-color: var(--rule-strong); }
+
+  #lightbox { border: 0; padding: 0; background: transparent; max-width: min(1180px, 92vw); }
+  #lightbox::backdrop { background: rgba(21, 24, 31, 0.72); }
+  .lb-inner {
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    padding: 14px;
+  }
+  #lb-img { display: block; width: 100%; max-height: 76vh; object-fit: contain; border-radius: 6px; }
+  .lb-bar { display: flex; align-items: center; gap: 10px; margin: 12px 2px 2px; }
+  .lb-bar p { margin: 0; flex: 1; }
+  .lb-bar button {
+    font: inherit;
+    font-size: 15px;
+    line-height: 1;
+    width: 30px;
+    height: 30px;
+    flex: none;
+    border-radius: 6px;
+    border: 1px solid var(--rule);
+    background: transparent;
+    color: var(--ink);
+    cursor: pointer;
+  }
+  .lb-bar button:hover { border-color: var(--rule-strong); }
+</style>

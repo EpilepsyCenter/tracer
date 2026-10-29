@@ -1,348 +1,250 @@
 ---
 import Base from '../layouts/Base.astro';
+import TraceDivider from '../components/TraceDivider.astro';
+import Lightbox from '../components/Lightbox.astro';
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 const link = (p: string) => `${base}${p}`;
 const repo = 'https://github.com/EpilepsyCenter/tracer';
 const releases = `${repo}/releases`;
+
+// The screenshots live with the manual, in docs/screenshots. Astro hashes and
+// copies them into the build, so the site and the manual share one set.
+const shotModules = import.meta.glob(
+  '../../../docs/screenshots/*.png',
+  { eager: true, query: '?url', import: 'default' }
+) as Record<string, string>;
+
+const shotUrl = (file: string): string | undefined =>
+  Object.entries(shotModules).find(([path]) => path.endsWith('/' + file))?.[1];
+
+// A missing file drops out rather than breaking the build.
+const shots = [
+  { file: 'main-window-overview.png', caption: 'Main window · recording tree, viewer, results table' },
+  { file: 'events-window-overview.png', caption: 'Event detection · template match with per-event fits' },
+  { file: 'ap-window-kinetics-tab.png', caption: 'Action potentials · per-AP kinetics and F–I curve' },
+  { file: 'trace-export-figure-tab.png', caption: 'Trace export · figure-quality SVG, PDF and PNG' },
+]
+  .map((s) => ({ ...s, url: shotUrl(s.file) }))
+  .filter((s): s is { file: string; caption: string; url: string } => Boolean(s.url));
 ---
 <Base title="TRACER — Patch-clamp & field-recording analysis">
 <style>
 /* ═══════ HERO ═══════ */
-.hero{padding:72px 0 80px;border-bottom:1px solid var(--border);position:relative;overflow:hidden;background:var(--bg-primary);}
-.hero::before{
-  content:'';position:absolute;inset:0;pointer-events:none;
-  background-image:linear-gradient(to right,var(--chart-grid) 1px,transparent 1px),
-                   linear-gradient(to bottom,var(--chart-grid) 1px,transparent 1px);
-  background-size:80px 80px;opacity:0.6;
+.hero { padding: 64px 0 0; }
+.hero h1 {
+  font-weight: 600;
+  font-size: 60px;
+  line-height: 1.02;
+  letter-spacing: -0.035em;
+  margin: 18px 0 0;
+  max-width: 17ch;
+  text-wrap: pretty;
 }
-.hero .wrap{position:relative;z-index:1;}
-.hero .grid{display:grid;grid-template-columns:1fr 1.05fr;gap:56px;align-items:center;}
+.hero h1 span { color: var(--accent); }
+.hero p.lead {
+  font-size: 18px;
+  line-height: 1.65;
+  color: var(--ink-soft);
+  max-width: 60ch;
+  margin: 26px 0 0;
+}
+.hero p.lead .mono {
+  color: var(--ink);
+  font-size: 15px;
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 0 5px;
+}
+.hero .cta { display: flex; gap: 9px; align-items: center; flex-wrap: wrap; margin: 30px 0 0; }
+.hero .specs { display: flex; gap: 28px; margin: 34px 0 0; flex-wrap: wrap; }
+.hero .specs div {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.hero .specs b { color: var(--ink); font-weight: 500; }
 
-.hero h1{
-  font-family:var(--font-ui);font-weight:300;
-  font-size:88px;line-height:0.95;letter-spacing:-0.02em;
-  color:var(--text-primary);margin:20px 0 22px;text-wrap:pretty;
+/* ═══════ SHARED SECTION FURNITURE ═══════ */
+section { padding: 64px 0; }
+section h2 {
+  font-size: 32px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  margin: 14px 0 0;
+  max-width: 24ch;
+  line-height: 1.1;
 }
-.hero h1 em{font-style:italic;color:var(--text-muted);}
-.hero p.lead{
-  font-size:17px;line-height:1.55;color:var(--text-secondary);
-  max-width:48ch;margin:0 0 32px;font-weight:400;
-}
-.hero p.lead .mono{color:var(--text-primary);font-weight:500;background:var(--bg-secondary);padding:1px 6px;border:1px solid var(--border);border-radius:var(--rad);font-size:13px;}
-.hero .cta{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
-.hero .meta{margin-top:32px;display:flex;gap:18px;flex-wrap:wrap;align-items:center;}
+section h2 span { color: var(--accent); }
+section p.sub { color: var(--ink-soft); font-size: 16px; line-height: 1.65; max-width: 62ch; margin: 16px 0 0; }
 
-.hero-meta-top{
-  display:inline-flex;align-items:center;gap:12px;
-  padding:4px 4px 4px 10px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--rad);
-  margin-bottom:28px;
+/* ═══════ SCREENSHOTS ═══════ */
+.shots { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 26px 0 0; }
+.shots figure { margin: 0; }
+.shots img {
+  width: 100%;
+  display: block;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  object-position: top left;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--card);
 }
-.sepv{width:1px;height:28px;background:var(--border);align-self:center;}
+.shots figcaption { margin: 11px 0 0; }
 
-/* scope card */
-.scope-card{
-  background:var(--bg-primary);color:var(--text-primary);
-  border:1px solid var(--border);border-radius:var(--rad-lg);
-  display:grid;grid-template-rows:auto auto 1fr auto;
-  font-family:var(--font-ui);overflow:hidden;
-  box-shadow:0 1px 0 rgba(20,19,15,0.03),0 30px 60px -30px rgba(20,19,15,0.18);
+/* ═══════ WHAT'S INSIDE ═══════ */
+.inside { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 26px 0 0; }
+.inside div {
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--tracer);
+  border-radius: 9px;
+  padding: 14px 16px;
 }
-.selrow{
-  display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;
-  padding:8px 12px;background:var(--bg-secondary);
-  border-bottom:1px solid var(--border);
-  font-family:var(--font-mono);font-size:11px;
+.inside b { display: block; font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+.inside span {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.05em;
+  color: var(--muted);
 }
-.fld{display:flex;flex-direction:column;gap:3px;}
-.fld .k{color:var(--text-muted);letter-spacing:0.08em;text-transform:uppercase;font-size:10px;}
-.fld .v{color:var(--text-primary);font-family:var(--font-mono);padding:3px 8px;background:var(--bg-primary);border:1px solid var(--border);border-radius:var(--rad);min-height:22px;display:inline-flex;align-items:center;font-size:11px;}
-.scope-plot{position:relative;background:var(--chart-bg);aspect-ratio:16/8;overflow:hidden;}
-.scope-plot svg{display:block;width:100%;height:100%;}
-.scope-plot .trace{stroke:var(--trace-1);stroke-width:1.3;fill:none;stroke-linecap:round;stroke-linejoin:round;}
-.scope-plot .grid{stroke:var(--chart-grid);stroke-width:0.6;}
-.scope-plot .tick{stroke:var(--chart-tick);stroke-width:0.6;}
-.scope-plot .cursor{stroke:var(--cursor-peak);stroke-width:0.6;stroke-dasharray:2 2;}
-.scope-plot .baseline{stroke:var(--chart-axis);stroke-width:0.4;stroke-dasharray:1 2;opacity:0.5;}
-.scope-plot .label{font-family:var(--font-mono);font-size:4px;fill:var(--cursor-peak);letter-spacing:0.04em;font-weight:700;}
-.scope-plot .pk-band{fill:var(--cursor-peak-fill);}
-.scope-plot .bl-band{fill:var(--cursor-baseline-fill);}
-.scope-foot{
-  display:grid;grid-template-columns:repeat(3,1fr);gap:0;
-  border-top:1px solid var(--border);background:var(--bg-secondary);
-}
-.scope-foot .cell{
-  padding:10px 14px;border-right:1px solid var(--border);
-  display:flex;flex-direction:column;gap:3px;
-  font-family:var(--font-mono);font-variant-numeric:tabular-nums;
-}
-.scope-foot .cell:last-child{border-right:none;}
-.scope-foot .k{color:var(--text-muted);letter-spacing:0.10em;text-transform:uppercase;font-size:9px;}
-.scope-foot .v{color:var(--text-primary);font-weight:600;font-size:14px;}
-
-/* ═══════ SECTION ═══════ */
-section{padding:96px 0;border-bottom:1px solid var(--border);}
-section h2{
-  font-family:var(--font-ui);font-weight:300;
-  font-size:52px;line-height:1.04;letter-spacing:-0.015em;
-  color:var(--text-primary);margin:16px 0 16px;max-width:24ch;text-wrap:pretty;
-}
-section h2 em{font-style:italic;color:var(--text-muted);}
-section .sub{font-size:15px;line-height:1.6;color:var(--text-secondary);max-width:54ch;}
-
-/* ═══════ INSIDE STRIP (replaces fake institutions) ═══════ */
-.inst-section{padding:40px 0;background:var(--bg-secondary);border-bottom:1px solid var(--border);}
-.inst-section .eyebrow{margin-bottom:18px;}
-.institutions{
-  display:grid;grid-template-columns:repeat(6,1fr);gap:0;
-  border-left:1px solid var(--border);
-}
-.inst{
-  padding:14px 16px;border-right:1px solid var(--border);
-  font-family:var(--font-mono);font-size:10px;color:var(--text-secondary);
-  letter-spacing:0.08em;text-transform:uppercase;line-height:1.4;
-  min-height:64px;display:flex;align-items:center;gap:8px;
-  background:var(--bg-primary);
-}
-.inst::before{content:'';width:6px;height:6px;background:var(--accent);flex-shrink:0;}
-.inst.placeholder{color:var(--text-muted);background:var(--bg-secondary);}
-.inst.placeholder::before{background:var(--text-muted);opacity:0.5;}
 
 /* ═══════ FEATURES ═══════ */
-.features{display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin-top:56px;border:1px solid var(--border);border-radius:var(--rad-lg);overflow:hidden;background:var(--bg-secondary);}
-.feature{
-  background:var(--bg-primary);padding:32px 28px;
-  border-right:1px solid var(--border);border-bottom:1px solid var(--border);
-  display:flex;flex-direction:column;gap:14px;transition:background 0.2s;position:relative;
+.features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin: 32px 0 0; }
+.feature {
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  transition: border-color 0.15s;
 }
-.feature:nth-child(3n){border-right:none;}
-.feature:nth-last-child(-n+3){border-bottom:none;}
-.feature:hover{background:var(--bg-secondary);}
-.feature .f-head{display:flex;align-items:center;justify-content:space-between;}
-.feature .num{font-family:var(--font-mono);font-size:10px;color:var(--text-muted);letter-spacing:0.12em;}
-.feature .icon{
-  width:42px;height:42px;
-  display:flex;align-items:center;justify-content:center;
-  border:1px solid var(--border);border-radius:var(--rad);
-  background:var(--bg-secondary);color:var(--text-primary);
+.feature:hover { border-color: var(--rule-strong); }
+.feature .f-head { display: flex; align-items: center; justify-content: space-between; }
+.feature .num { font-family: var(--mono); font-size: 11px; color: var(--muted); letter-spacing: 0.07em; }
+.feature .icon {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--tracer) 7%, #fff);
+  color: var(--tracer);
 }
-.feature h3{
-  margin:0;font-family:var(--font-ui);font-weight:600;font-size:16px;
-  letter-spacing:-0.005em;color:var(--text-primary);
+.feature h3 { margin: 16px 0 0; font-weight: 600; font-size: 18px; letter-spacing: -0.02em; }
+.feature p { margin: 10px 0 0; font-size: 14.5px; line-height: 1.6; color: var(--ink-soft); }
+.feature p .mono {
+  color: var(--ink);
+  font-size: 13px;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 0 4px;
 }
-.feature p{margin:0;font-size:13.5px;line-height:1.55;color:var(--text-secondary);}
-.feature p .mono{background:var(--bg-secondary);padding:0 4px;border-radius:var(--rad);color:var(--text-primary);font-size:12px;}
-.feature .meta-row{
-  margin-top:auto;padding-top:14px;border-top:1px dashed var(--border);
-  display:flex;gap:6px;flex-wrap:wrap;
+.feature .meta-row {
+  margin-top: auto;
+  padding-top: 18px;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
 }
-.feature .meta-row .chip{font-size:9px;padding:1px 6px;background:transparent;}
 
 /* ═══════ WORKFLOW ═══════ */
-.workflow{display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:start;margin-top:56px;}
-.workflow .steps{display:flex;flex-direction:column;}
-.step{
-  padding:22px 0;border-top:1px solid var(--border);
-  display:grid;grid-template-columns:48px 1fr;gap:18px;align-items:start;
-  transition:padding-left 0.2s,background 0.2s;
+.steps { display: grid; grid-template-columns: 1fr 1fr; gap: 0 36px; margin: 32px 0 0; }
+.step {
+  padding: 22px 0;
+  border-top: 1px solid var(--rule);
+  display: grid;
+  grid-template-columns: 40px 1fr;
+  gap: 16px;
+  align-items: start;
 }
-.step:last-child{border-bottom:1px solid var(--border);}
-.step:hover{padding-left:6px;}
-.step .n{font-family:var(--font-mono);font-size:11px;color:var(--accent);letter-spacing:0.14em;padding-top:3px;font-weight:600;}
-.step h4{margin:0 0 6px;font-family:var(--font-ui);font-weight:600;font-size:15px;color:var(--text-primary);}
-.step p{margin:0;font-size:13.5px;line-height:1.55;color:var(--text-secondary);}
-.step p .mono{background:var(--bg-secondary);padding:0 4px;border-radius:var(--rad);color:var(--text-primary);font-size:12px;}
+.step .n { font-family: var(--mono); font-size: 11px; color: var(--accent); letter-spacing: 0.07em; padding-top: 4px; }
+.step h4 { margin: 0 0 5px; font-weight: 600; font-size: 16px; letter-spacing: -0.015em; }
+.step p { margin: 0; font-size: 14.5px; line-height: 1.6; color: var(--ink-soft); }
+.step p .mono {
+  color: var(--ink);
+  font-size: 13px;
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 0 4px;
+}
 
-.wf-visual{
-  background:var(--bg-primary);
-  border:1px solid var(--border);border-radius:var(--rad-lg);
-  overflow:hidden;
-}
-.wf-visual .win-title{font-size:10px;}
-.wf-visual .body{padding:14px;display:flex;flex-direction:column;gap:8px;background:var(--bg-secondary);}
-.wf-file{
-  background:var(--bg-primary);border:1px solid var(--border);border-radius:var(--rad);
-  padding:10px 14px;display:flex;align-items:center;gap:10px;
-  font-family:var(--font-mono);font-size:11px;color:var(--text-primary);
-}
-.wf-file .preset-k{color:var(--text-muted);letter-spacing:0.08em;text-transform:uppercase;font-size:10px;}
-.wf-arrow{text-align:center;font-family:var(--font-mono);color:var(--text-muted);font-size:12px;padding:0;}
-.wf-result{
-  background:var(--dark-bg);color:var(--dark-text);border:1px solid var(--border);border-radius:var(--rad);
-  padding:14px 16px;font-family:var(--font-mono);font-size:11px;line-height:1.8;
-}
-.wf-result .hl{color:var(--dark-accent);}
-.wf-result .ok{color:oklch(0.74 0.13 150);}
-.wf-result .mute{color:var(--dark-text-mute);}
-.wf-result .path{color:var(--dark-text);}
-
-/* ═══════ METRICS ═══════ */
-.metrics{
-  display:grid;grid-template-columns:repeat(4,1fr);gap:0;
-  border:1px solid var(--border);border-radius:var(--rad-lg);overflow:hidden;
-  margin-top:56px;background:var(--bg-secondary);
-}
-.metric{
-  padding:28px 24px;border-right:1px solid var(--border);
-  background:var(--bg-primary);
-}
-.metric:last-child{border-right:none;}
-.metric .n{
-  font-family:var(--font-ui);font-weight:300;font-size:54px;
-  color:var(--text-primary);line-height:1;letter-spacing:-0.02em;
-  display:flex;align-items:baseline;gap:3px;
-}
-.metric .n em{font-family:var(--font-mono);font-size:16px;color:var(--accent);font-style:normal;letter-spacing:0;font-weight:500;}
-.metric .l{margin-top:10px;font-family:var(--font-mono);font-size:10px;color:var(--text-muted);letter-spacing:0.10em;text-transform:uppercase;}
-
-/* ═══════ LINEAGE (replaces fake testimonial) ═══════ */
-.lineage{display:grid;grid-template-columns:1fr 1.3fr;gap:56px;align-items:center;}
-.lineage blockquote{
-  margin:0;font-family:var(--font-ui);font-weight:300;
-  font-size:36px;line-height:1.32;letter-spacing:-0.005em;
-  color:var(--text-primary);text-wrap:pretty;
-}
-.lineage blockquote em{font-style:italic;color:var(--text-muted);}
-.lineage .who{margin-top:28px;display:flex;align-items:center;gap:14px;}
-.lineage .who .name{font-size:14px;color:var(--text-primary);font-weight:600;}
-.lineage .who .role{font-family:var(--font-mono);font-size:10px;color:var(--text-muted);letter-spacing:0.08em;text-transform:uppercase;margin-top:2px;}
-
-/* ═══════ BIG CTA ═══════ */
-.cta-big{
-  padding:120px 0;background:var(--dark-bg);color:var(--dark-text);
-  text-align:center;border-bottom:none;position:relative;overflow:hidden;
-}
-.cta-big::before{
-  content:'';position:absolute;inset:0;pointer-events:none;
-  background-image:linear-gradient(to right,rgba(255,255,255,0.04) 1px,transparent 1px),
-                   linear-gradient(to bottom,rgba(255,255,255,0.04) 1px,transparent 1px);
-  background-size:80px 80px;
-}
-.cta-big .wrap{position:relative;z-index:1;}
-.cta-big .eyebrow{color:var(--dark-accent);}
-.cta-big .eyebrow::before{background:var(--dark-accent);box-shadow:0 0 5px var(--dark-accent),0 0 9px oklch(0.78 0.10 215 / 0.5);border-radius:50%;width:7px;height:7px;}
-.cta-big h2{color:var(--dark-text);font-family:var(--font-ui);font-weight:300;font-size:64px;letter-spacing:-0.02em;margin:12px auto 16px;max-width:24ch;line-height:1.05;}
-.cta-big h2 em{font-style:italic;color:var(--dark-text-2);}
-.cta-big p{color:var(--dark-text-2);font-size:16px;max-width:48ch;margin:0 auto 36px;line-height:1.55;}
-.cta-big .btns{display:flex;justify-content:center;gap:10px;flex-wrap:wrap;}
-.cta-big .btn-lg{background:transparent;border-color:var(--dark-border);color:var(--dark-text);}
-.cta-big .btn-lg:hover{background:var(--dark-bg-3);border-color:var(--dark-accent);color:var(--dark-accent);}
-.cta-big .btn-lg.primary{background:var(--dark-accent);border-color:var(--dark-accent);color:var(--dark-bg);}
-.cta-big .btn-lg.primary:hover{background:var(--dark-accent-hover);border-color:var(--dark-accent-hover);color:var(--dark-bg);}
-.cta-big p.install-note{font-size:13px;max-width:62ch;margin:28px auto 0;color:var(--dark-text-mute);}
-.cta-big .install-note strong{color:var(--dark-text-2);font-weight:500;}
-.cta-big .install-note em{font-style:normal;color:var(--dark-text-2);}
-.cta-big .install-note code{font-family:var(--font-mono);font-size:12px;color:var(--dark-text);background:var(--dark-bg-3);border:1px solid var(--dark-border);border-radius:4px;padding:1px 6px;overflow-wrap:anywhere;}
-.cta-big .foot-line{
-  margin-top:40px;font-family:var(--font-mono);font-size:10px;color:var(--dark-text-mute);
-  letter-spacing:0.14em;text-transform:uppercase;
-  display:inline-flex;gap:18px;padding:8px 14px;border:1px solid var(--dark-border);border-radius:var(--rad);
-}
+/* ═══════ WHY A NEW TOOL ═══════ */
+.why p.body { color: var(--ink-soft); font-size: 17px; line-height: 1.7; max-width: 66ch; margin: 18px 0 0; }
+.why .row { display: flex; gap: 6px; flex-wrap: wrap; margin: 22px 0 0; }
 
 /* responsive */
-@media (max-width:1024px){
-  .institutions{grid-template-columns:repeat(3,1fr);}
-  .inst:nth-child(3n){border-right:none;}
+@media (max-width: 900px) {
+  .hero h1 { font-size: 42px; }
+  section h2 { font-size: 27px; }
+  .features, .inside { grid-template-columns: 1fr 1fr; }
+  .steps, .shots { grid-template-columns: 1fr; }
 }
-@media (max-width:900px){
-  .hero .grid,.workflow,.lineage{grid-template-columns:1fr;gap:40px;}
-  .features{grid-template-columns:1fr 1fr;}
-  .feature:nth-child(3n){border-right:1px solid var(--border);}
-  .feature:nth-child(2n){border-right:none;}
-  .metrics{grid-template-columns:1fr 1fr;}
-  .metric:nth-child(2){border-right:none;}
-  .metric:nth-child(-n+2){border-bottom:1px solid var(--border);}
-  .hero h1{font-size:56px;}
-  section h2{font-size:38px;}
-  .cta-big h2{font-size:44px;}
-}
-@media (max-width:600px){
-  .features,.institutions{grid-template-columns:1fr;}
-  .feature,.inst{border-right:none !important;}
-  .metrics{grid-template-columns:1fr;}
-  .metric{border-right:none;border-bottom:1px solid var(--border);}
-  .metric:last-child{border-bottom:none;}
-  .hero h1{font-size:44px;}
+@media (max-width: 600px) {
+  .hero h1 { font-size: 34px; }
+  .features, .inside { grid-template-columns: 1fr; }
 }
 </style>
 
 <!-- ══════ HERO ══════ -->
-<header class="hero"><div class="wrap"><div class="grid">
-  <div>
-    <div class="hero-meta-top">
-      <span class="led ok">Build <strong>1.0.1</strong></span>
-      <span class="sepv"></span>
-      <span class="chip">macOS · Linux · Windows</span>
-    </div>
-    <h1>Analyze patch-clamp<br><em>&amp; field recordings.</em></h1>
+<div class="scope-zone">
+  <header class="hero"><div class="wrap">
+    <div class="eyebrow">v1.0.1 · macOS · Windows · Linux</div>
+    <h1>Analyze patch-clamp <span>&amp; field recordings.</span></h1>
     <p class="lead">TRACER reads your <span class="mono">.dat</span> and <span class="mono">.abf</span> files, runs the analyses you actually use — events, kinetics, AP counting, fEPSP slopes — and exports clean figures. Locally, offline, on your machine.</p>
     <div class="cta">
-      <a class="btn-lg primary" href={releases}>Download v1.0.1 ↓</a>
-      <a class="btn-lg" href={link('/features')}>See what's inside →</a>
+      <a class="btn-lg primary" href={releases}>Download v1.0.1</a>
+      <a class="btn-lg" href={link('/features')}>See what's inside</a>
     </div>
-    <div class="meta">
-      <span class="led ok">Patch-clamp</span>
-      <span class="led ok">Field recordings</span>
-      <span class="led">Free for academic use</span>
+    <div class="specs">
+      <div>Recordings <b>Patch-clamp · field</b></div>
+      <div>Licence <b>Free for noncommercial use</b></div>
+      <div>Data <b>Stays local</b></div>
     </div>
-  </div>
 
-  <!-- scope card -->
-  <div class="scope-card">
-    <div class="win-title">
-      <span class="dot-row"><span></span><span></span><span></span></span>
-      <span>cell_a2.dat · Group 02 · Series 04 · I-clamp</span>
-      <span class="sp"></span>
-      <span class="ct">sweep 008 / 128</span>
-    </div>
-    <div class="selrow">
-      <div class="fld"><span class="k">Module</span><span class="v">Action Potentials</span></div>
-      <div class="fld"><span class="k">Channel</span><span class="v">Vm (mV)</span></div>
-      <div class="fld"><span class="k">Protocol</span><span class="v">I-step · +20 pA</span></div>
-      <span class="sepv"></span>
-      <div class="fld"><span class="k">AP peak</span><span class="v" style="color:var(--accent);">+42.1 mV</span></div>
-    </div>
-    <div class="scope-plot">
-      <svg viewBox="0 0 320 140" preserveAspectRatio="none">
-        <g class="grid">
-          <path d="M0 35 H320"></path><path d="M0 70 H320"></path><path d="M0 105 H320"></path>
-          <path d="M64 0 V140"></path><path d="M128 0 V140"></path><path d="M192 0 V140"></path><path d="M256 0 V140"></path>
-        </g>
-        <g class="tick"><path d="M0 0 H320"></path><path d="M0 140 H320"></path></g>
-        <rect class="bl-band" x="10" y="0" width="22" height="140"></rect>
-        <rect class="pk-band" x="130" y="0" width="16" height="140"></rect>
-        <path class="baseline" d="M0 90 H320"></path>
-        <path class="trace" d="
-          M0 90 L40 90
-          C 50 90 54 90 58 78 L 62 30 C 63 20 67 20 68 30 L 74 120 C 76 132 79 132 80 120 L 86 96
-          L 110 96 L 120 96
-          C 128 96 131 96 134 86 L 138 42 C 139 34 142 34 143 42 L 148 116 C 150 126 153 126 154 116 L 159 98
-          L 180 98 L 200 98
-          C 208 98 211 98 214 88 L 218 44 C 219 36 222 36 223 44 L 228 118 C 230 128 233 128 234 118 L 239 100
-          L 260 100 L 320 100"></path>
-        <path class="cursor" d="M138 0 V140"></path>
-        <text class="label" x="141" y="10">PK · +42.1 mV</text>
-        <text class="label" x="13" y="10" style="fill:var(--cursor-baseline);">BL</text>
-      </svg>
-    </div>
-    <div class="scope-foot">
-      <div class="cell"><span class="k">rheobase</span><span class="v">84.3 pA</span></div>
-      <div class="cell"><span class="k">threshold</span><span class="v">−42.1 mV</span></div>
-      <div class="cell"><span class="k">half-width</span><span class="v">1.24 ms</span></div>
-    </div>
-  </div>
-</div></div></header>
+    <TraceDivider />
+  </div></header>
+</div>
 
-<!-- ══════ WHAT'S INSIDE (replaces fake institutions) ══════ -->
-<section class="inst-section">
+<!-- ══════ SCREENSHOTS ══════ -->
+{shots.length > 0 && (
+  <section id="screens">
+    <div class="wrap">
+      <div class="eyebrow">The instrument</div>
+      <h2>One window shape, every analysis.</h2>
+      <p class="sub">Recording tree on the left, continuous-mode viewer with draggable cursors in the middle, parameter sidebar and results table on the right. Click any screenshot to see it full size.</p>
+      <div class="shots">
+        {shots.map((s) => (
+          <figure>
+            <a class="shot" href={s.url} data-caption={s.caption}>
+              <img src={s.url} alt={s.caption} loading="lazy" />
+            </a>
+            <figcaption class="eyebrow plain">{s.caption}</figcaption>
+          </figure>
+        ))}
+      </div>
+    </div>
+  </section>
+)}
+
+<!-- ══════ WHAT'S INSIDE ══════ -->
+<section id="inside">
   <div class="wrap">
     <div class="eyebrow">What's inside</div>
-    <div class="institutions">
-      <div class="inst">Cursors<br>baseline · peak · rise · decay</div>
-      <div class="inst">Resistance<br>Rs · Rin · Cm · τ</div>
-      <div class="inst">I–V curve<br>steady · transient · sag</div>
-      <div class="inst">Action potentials<br>F–I · phase plot · fAHP</div>
-      <div class="inst">Events<br>template · biexp fit</div>
-      <div class="inst">Bursts<br>3 detectors · field</div>
+    <div class="inside">
+      <div><b>Cursors</b><span>baseline · peak · rise · decay</span></div>
+      <div><b>Resistance</b><span>Rs · Rin · Cm · τ</span></div>
+      <div><b>I–V curve</b><span>steady · transient · sag</span></div>
+      <div><b>Action potentials</b><span>F–I · phase plot · fAHP</span></div>
+      <div><b>Events</b><span>template · biexp fit</span></div>
+      <div><b>Bursts</b><span>3 detectors · field</span></div>
     </div>
   </div>
 </section>
@@ -351,63 +253,63 @@ section .sub{font-size:15px;line-height:1.6;color:var(--text-secondary);max-widt
 <section id="features">
   <div class="wrap">
     <div class="eyebrow">What it does</div>
-    <h2>Built around how electrophysiologists <em>actually work.</em></h2>
+    <h2>Built around how electrophysiologists <span>actually work.</span></h2>
     <p class="sub">A short list of analysis modules, done carefully. Continuous-mode viewer with draggable cursors, a sidebar of parameters, a results table you can curate. Same shape across every window.</p>
 
     <div class="features">
-      <div class="feature">
+      <div class="feature bracketed">
         <div class="f-head">
-          <div class="icon"><svg width="22" height="22" viewBox="0 0 64 64" fill="none"><path d="M6 40 H22 C 24 40 26 40 27 34 L 29 22 C 30 17 32 17 33 22 L 36 50 C 37 56 40 56 41 50 L 44 42 H58" stroke="#14130f" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></div>
+          <div class="icon"><svg width="22" height="22" viewBox="0 0 64 64" fill="none"><path d="M6 40 H22 C 24 40 26 40 27 34 L 29 22 C 30 17 32 17 33 22 L 36 50 C 37 56 40 56 41 50 L 44 42 H58" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></div>
           <div class="num">01</div>
         </div>
         <h3>Single-cell kinetics</h3>
         <p>Cursor measurements, resistance (Rs/Rin/Cm/τ), I–V curves with sag and reversal, action potentials with threshold, peak, rise/decay slopes, half-width, F–I curve, rheobase, phase plot.</p>
         <div class="meta-row"><span class="chip">V-clamp</span><span class="chip">I-clamp</span><span class="chip">Phase plot</span></div>
       </div>
-      <div class="feature">
+      <div class="feature bracketed">
         <div class="f-head">
-          <div class="icon"><svg width="22" height="22" viewBox="0 0 64 64" fill="none"><path d="M6 50 C 18 50 24 14 32 14 C 40 14 46 50 58 50" stroke="#14130f" stroke-width="2.4" stroke-linecap="round" fill="none"></path><circle cx="20" cy="32" r="1.8" fill="#14130f"></circle><circle cx="32" cy="14" r="1.8" fill="#14130f"></circle><circle cx="44" cy="32" r="1.8" fill="#14130f"></circle></svg></div>
+          <div class="icon"><svg width="22" height="22" viewBox="0 0 64 64" fill="none"><path d="M6 50 C 18 50 24 14 32 14 C 40 14 46 50 58 50" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"></path><circle cx="20" cy="32" r="1.8" fill="currentColor"></circle><circle cx="32" cy="14" r="1.8" fill="currentColor"></circle><circle cx="44" cy="32" r="1.8" fill="currentColor"></circle></svg></div>
           <div class="num">02</div>
         </div>
         <h3>Event detection</h3>
         <p>EPSCs, IPSCs, miniature events. Template matching (correlation or deconvolution) and thresholding, with biexponential per-event fits, multi-template detection, manual add/remove, sweep-by-sweep review.</p>
         <div class="meta-row"><span class="chip">Template</span><span class="chip">Biexp</span></div>
       </div>
-      <div class="feature">
+      <div class="feature bracketed">
         <div class="f-head">
-          <div class="icon"><svg width="22" height="22" viewBox="0 0 64 64" fill="none"><path d="M4 32 H60" stroke="#14130f" stroke-width="1" opacity=".4"></path><g stroke="#14130f" stroke-width="2.4" stroke-linecap="round"><path d="M12 14 V50"></path><path d="M22 22 V50"></path><path d="M32 10 V50"></path><path d="M42 26 V50"></path><path d="M52 18 V50"></path></g></svg></div>
+          <div class="icon"><svg width="22" height="22" viewBox="0 0 64 64" fill="none"><path d="M4 32 H60" stroke="currentColor" stroke-width="1" opacity=".4"></path><g stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 14 V50"></path><path d="M22 22 V50"></path><path d="M32 10 V50"></path><path d="M42 26 V50"></path><path d="M52 18 V50"></path></g></svg></div>
           <div class="num">03</div>
         </div>
         <h3>Field &amp; paired</h3>
         <p>fEPSP slope, population spike, paired-pulse ratio, LTP/LTD time-courses in one window. Burst detection with three algorithms on continuous traces. Pre/post detection in two-channel paired recordings.</p>
         <div class="meta-row"><span class="chip">fEPSP</span><span class="chip">Bursts</span><span class="chip">Paired</span></div>
       </div>
-      <div class="feature">
+      <div class="feature bracketed">
         <div class="f-head">
-          <div class="icon"><svg width="22" height="22" viewBox="0 0 64 64" fill="none"><rect x="10" y="14" width="44" height="32" rx="1" stroke="#14130f" stroke-width="2"></rect><path d="M16 36 L24 28 L32 34 L40 22 L48 30" stroke="#14130f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"></path><path d="M22 54 H42" stroke="#14130f" stroke-width="2" stroke-linecap="round"></path></svg></div>
+          <div class="icon"><svg width="22" height="22" viewBox="0 0 64 64" fill="none"><rect x="10" y="14" width="44" height="32" rx="1" stroke="currentColor" stroke-width="2"></rect><path d="M16 36 L24 28 L32 34 L40 22 L48 30" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"></path><path d="M22 54 H42" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg></div>
           <div class="num">04</div>
         </div>
         <h3>Publication figures</h3>
         <p>Trace Export window: figure-quality SVG, PDF, PNG and JPG with templates and saved sessions. Vector output, consistent typography, no re-styling.</p>
         <div class="meta-row"><span class="chip">SVG</span><span class="chip">PDF</span><span class="chip">PNG</span><span class="chip">JPG</span></div>
       </div>
-      <div class="feature">
+      <div class="feature bracketed">
         <div class="f-head">
-          <div class="icon"><svg width="22" height="22" viewBox="0 0 64 64" fill="none"><path d="M14 10 H38 L50 22 V54 H14 Z" stroke="#14130f" stroke-width="2" stroke-linejoin="round" fill="none"></path><path d="M38 10 V22 H50" stroke="#14130f" stroke-width="2" stroke-linejoin="round" fill="none"></path><path d="M22 34 H42 M22 42 H38" stroke="#14130f" stroke-width="2" stroke-linecap="round"></path></svg></div>
+          <div class="icon"><svg width="22" height="22" viewBox="0 0 64 64" fill="none"><path d="M14 10 H38 L50 22 V54 H14 Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round" fill="none"></path><path d="M38 10 V22 H50" stroke="currentColor" stroke-width="2" stroke-linejoin="round" fill="none"></path><path d="M22 34 H42 M22 42 H38" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg></div>
           <div class="num">05</div>
         </div>
         <h3>Native formats</h3>
         <p>HEKA Patchmaster <span class="mono">.dat</span>, Axon Binary Format <span class="mono">.abf</span>, plus 50+ other formats via <span class="mono">Neo</span>. No converters, no intermediate CSVs, no data loss.</p>
         <div class="meta-row"><span class="chip">DAT</span><span class="chip">ABF</span><span class="chip">Neo</span></div>
       </div>
-      <div class="feature">
+      <div class="feature bracketed">
         <div class="f-head">
-          <div class="icon"><svg width="22" height="22" viewBox="0 0 64 64" fill="none"><circle cx="32" cy="32" r="22" stroke="#14130f" stroke-width="2"></circle><path d="M32 18 V32 L42 38" stroke="#14130f" stroke-width="2" stroke-linecap="round"></path></svg></div>
+          <div class="icon"><svg width="22" height="22" viewBox="0 0 64 64" fill="none"><circle cx="32" cy="32" r="22" stroke="currentColor" stroke-width="2"></circle><path d="M32 18 V32 L42 38" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg></div>
           <div class="num">06</div>
         </div>
         <h3>Cohort &amp; batch</h3>
         <p>Aggregate across folders of recordings, run two-group / N-group / paired / RM-ANOVA stats with post-hocs, render dot / bar / box / violin / ECDF plots, export to CSV, Excel, and Prism <span class="mono">.pzfx</span>.</p>
-        <div class="meta-row"><span class="chip ok">Cohort</span><span class="chip">Batch</span><span class="chip">Prism</span></div>
+        <div class="meta-row"><span class="chip">Cohort</span><span class="chip">Batch</span><span class="chip">Prism</span></div>
       </div>
     </div>
   </div>
@@ -417,121 +319,55 @@ section .sub{font-size:15px;line-height:1.6;color:var(--text-secondary);max-widt
 <section id="workflow">
   <div class="wrap">
     <div class="eyebrow">The workflow</div>
-    <h2>Drop a file. Curate the events. <em>Export the figure.</em></h2>
+    <h2>Drop a file. Curate the events. <span>Export the figure.</span></h2>
 
-    <div class="workflow">
-      <div class="steps">
-        <div class="step">
-          <div class="n">01</div>
-          <div><h4>Open a recording</h4><p>Drag an <span class="mono">.abf</span> or <span class="mono">.dat</span> into the workspace. The group → series → sweep tree builds itself; protocols, channel units and timestamps come along.</p></div>
-        </div>
-        <div class="step">
-          <div class="n">02</div>
-          <div><h4>Pick an analysis window</h4><p>Cursors, Resistance, I–V, AP, Events, Bursts, Field PSP, Paired — same shape every time. Continuous-mode viewer, draggable cursors, parameter sidebar, results table.</p></div>
-        </div>
-        <div class="step">
-          <div class="n">03</div>
-          <div><h4>Review &amp; curate</h4><p>Sweep-by-sweep with detected events highlighted. Accept, reject, re-fit, add or remove by click. Optional <span class="mono">train grouping</span> labels closely-spaced events as <span class="mono">T1, T2…</span>.</p></div>
-        </div>
-        <div class="step">
-          <div class="n">04</div>
-          <div><h4>Export &amp; archive</h4><p>Publication-ready SVG / PDF / PNG figures. CSV / Excel / Prism summary tables. A <span class="mono">.tracer</span> sidecar next to the recording — every selection, cursor and parameter, restored on reopen.</p></div>
-        </div>
+    <div class="steps">
+      <div class="step">
+        <div class="n">01</div>
+        <div><h4>Open a recording</h4><p>Drag an <span class="mono">.abf</span> or <span class="mono">.dat</span> into the workspace. The group → series → sweep tree builds itself; protocols, channel units and timestamps come along.</p></div>
       </div>
-
-      <div class="wf-visual">
-        <div class="win-title">
-          <span class="dot-row"><span></span><span></span><span></span></span>
-          <span>session log · cell_a2.dat</span>
-          <span class="sp"></span>
-          <span class="ct">events · live</span>
-        </div>
-        <div class="body">
-          <div class="wf-file">
-            <span class="led ok"></span>
-            cell_a2.dat · 412 MB · 128 sweeps · HEKA Patchmaster
-          </div>
-          <div class="wf-arrow">↓</div>
-          <div class="wf-file">
-            <span class="preset-k">window</span>
-            Event Detection · template match · biexp fit
-          </div>
-          <div class="wf-arrow">↓</div>
-          <div class="wf-result">
-<span class="mute">▸</span> <span class="hl">open</span>      cell_a2.dat<br>
-<span class="mute">▸</span> <span class="hl">tree</span>      Group 02 · Series 04 · 32 sweeps<br>
-<span class="mute">▸</span> <span class="hl">detect</span>    142 events · template · σ = 4.0<br>
-<span class="mute">▸</span> <span class="hl">review</span>    138 accepted · 4 rejected · 2 re-fit<br>
-<br>
-<span class="ok">✓</span> <span class="path">events.csv</span>           <span class="mute">142 rows · per-event</span><br>
-<span class="ok">✓</span> <span class="path">events.svg</span>           <span class="mute">trace + ticks</span><br>
-<span class="ok">✓</span> <span class="path">cell_a2.dat.tracer</span> <span class="mute">sidecar saved</span>
-          </div>
-        </div>
+      <div class="step">
+        <div class="n">02</div>
+        <div><h4>Pick an analysis window</h4><p>Cursors, Resistance, I–V, AP, Events, Bursts, Field PSP, Paired — same shape every time. Continuous-mode viewer, draggable cursors, parameter sidebar, results table.</p></div>
       </div>
-    </div>
-
-    <div class="metrics">
-      <div class="metric"><div class="n">14</div><div class="l">Analysis windows</div></div>
-      <div class="metric"><div class="n">50<em>+</em></div><div class="l">Native file formats</div></div>
-      <div class="metric"><div class="n">0</div><div class="l">Lines of code required</div></div>
-      <div class="metric"><div class="n">100<em>%</em></div><div class="l">Offline · on-device</div></div>
+      <div class="step">
+        <div class="n">03</div>
+        <div><h4>Review &amp; curate</h4><p>Sweep-by-sweep with detected events highlighted. Accept, reject, re-fit, add or remove by click. Optional <span class="mono">train grouping</span> labels closely-spaced events as <span class="mono">T1, T2…</span>.</p></div>
+      </div>
+      <div class="step">
+        <div class="n">04</div>
+        <div><h4>Export &amp; archive</h4><p>Publication-ready SVG / PDF / PNG figures. CSV / Excel / Prism summary tables. A <span class="mono">.tracer</span> sidecar next to the recording — every selection, cursor and parameter, restored on reopen.</p></div>
+      </div>
     </div>
   </div>
 </section>
 
 <!-- ══════ WHY A NEW TOOL ══════ -->
-<section id="why">
-  <div class="wrap lineage">
-    <div>
-      <div class="eyebrow" style="margin-bottom:22px;">Why a new tool</div>
-      <div class="who">
-        <div>
-          <div class="name">A modern instrument</div>
-          <div class="role">Same working day · faster</div>
-        </div>
-      </div>
-      <div style="margin-top:20px;display:flex;gap:6px;flex-wrap:wrap;">
-        <span class="chip ok">Sub-second viewer</span>
-        <span class="chip">Live filters</span>
-        <span class="chip">Reproducible by default</span>
-      </div>
-      <div style="margin-top:18px;display:flex;gap:8px;flex-wrap:wrap;">
-        <a class="btn" href={link('/features')}>Browse features →</a>
-        <a class="btn" href={link('/workflow')}>See the workflow →</a>
-      </div>
-    </div>
-    <blockquote>
-      <em>"</em>Patch-clamp analysis tools have been good enough for a long time — and old enough to show. TRACER runs the same working day on a stack you'd actually choose today: a viewer that doesn't stutter on long recordings, filters that update live, a sidecar that records every parameter you used, cohort stats and batch automation in the same app. No licences to renew. No scripts to inherit.<em>"</em>
-    </blockquote>
-  </div>
-</section>
-
-<!-- ══════ IN LABS · placeholder for future installs ══════ -->
-<section class="inst-section" id="in-labs">
+<section id="why" class="why">
   <div class="wrap">
-    <div class="eyebrow">In labs · coming soon</div>
-    <p class="sub" style="margin:0 0 18px;">If your group is using TRACER and would like to be listed, open an issue on GitHub and we'll add you here.</p>
-    <div class="institutions">
-      <div class="inst placeholder">Your lab<br>here</div>
-      <div class="inst placeholder">Your lab<br>here</div>
-      <div class="inst placeholder">Your lab<br>here</div>
-      <div class="inst placeholder">Your lab<br>here</div>
-      <div class="inst placeholder">Your lab<br>here</div>
-      <div class="inst placeholder">Your lab<br>here</div>
+    <div class="eyebrow">Why a new tool</div>
+    <p class="body">Patch-clamp analysis tools have been good enough for a long time — and old enough to show. TRACER runs the same working day on a stack you'd actually choose today: a viewer that doesn't stutter on long recordings, filters that update live, a sidecar that records every parameter you used, cohort stats and batch automation in the same app. No licences to renew. No scripts to inherit.</p>
+    <div class="row">
+      <span class="chip">Sub-second viewer</span>
+      <span class="chip">Live filters</span>
+      <span class="chip">Reproducible by default</span>
+    </div>
+    <div class="row">
+      <a class="btn" href={link('/features')}>Browse features</a>
+      <a class="btn" href={link('/workflow')}>See the workflow</a>
     </div>
   </div>
 </section>
 
-<!-- ══════ CTA ══════ -->
-<section class="cta-big">
+<!-- ══════ CLOSING BAND ══════ -->
+<section class="band">
   <div class="wrap">
     <div class="eyebrow">v1.0.1 · Released</div>
-    <h2>Get back to <em>the science.</em></h2>
+    <h2>Get back to <span>the science.</span></h2>
     <p>Free for noncommercial use: academic labs, hospitals, nonprofits. macOS Apple Silicon, Windows, and Linux installers built on every release. No account, no telemetry, no upload.</p>
     <div class="btns">
-      <a class="btn-lg primary" href={releases}>Download TRACER 1.0.1 ↓</a>
-      <a class="btn-lg" href={link('/docs')}>Read the docs →</a>
+      <a class="btn-lg primary" href={releases}>Download TRACER 1.0.1</a>
+      <a class="btn-lg" href={link('/docs')}>Read the docs</a>
     </div>
     <p class="install-note">
       <strong>First launch on macOS:</strong> TRACER isn't notarized by Apple yet, so macOS blocks it the first time.
@@ -539,14 +375,14 @@ section .sub{font-size:15px;line-height:1.6;color:var(--text-secondary);max-widt
       If macOS says the app <em>"is damaged"</em> (v1.0.0), it isn't. Run
       <code>xattr -dr com.apple.quarantine /Applications/TRACER.app</code> once in Terminal.
     </p>
-    <div style="margin-top:40px;">
-      <div class="foot-line">
-        <span>macOS 12+ Apple Silicon</span>
-        <span>Windows 11</span>
-        <span>Linux AppImage · x64 / arm64</span>
-        <span>Free for noncommercial use</span>
-      </div>
+    <div class="foot-line">
+      <span>macOS 12+ Apple Silicon</span>
+      <span>Windows 11</span>
+      <span>Linux AppImage · x64 / arm64</span>
+      <span>Free for noncommercial use</span>
     </div>
   </div>
 </section>
+
+<Lightbox />
 </Base>

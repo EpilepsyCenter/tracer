@@ -1,13 +1,26 @@
 ---
 import Base from '../layouts/Base.astro';
+import Lightbox from '../components/Lightbox.astro';
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 const link = (p: string) => `${base}${p}`;
 const repo = 'https://github.com/EpilepsyCenter/tracer';
 const releases = `${repo}/releases`;
 
+// Screenshots live with the manual, in docs/screenshots. Astro hashes and
+// copies them into the build, so the site and the manual share one set.
+const shotModules = import.meta.glob(
+  '../../../docs/screenshots/*.png',
+  { eager: true, query: '?url', import: 'default' }
+) as Record<string, string>;
+
+const shotUrl = (file: string): string | undefined =>
+  Object.entries(shotModules).find(([path]) => path.endsWith('/' + file))?.[1];
+
 const blocks = [
   {
     id: 'cursor',
+    shot: 'cursor-window-overview.png',
+    shotCaption: 'Cursor measurements window',
     num: '01',
     kicker: 'Baseline · Peak · Rise · Decay · Half-width · Area',
     title: 'Cursor measurements',
@@ -20,6 +33,8 @@ const blocks = [
   },
   {
     id: 'resistance',
+    shot: 'resistance-window-main-layout.png',
+    shotCaption: 'Resistance window with the test-pulse fit',
     num: '02',
     kicker: 'Rs · Rin · Cm · τmembrane',
     title: 'Resistance',
@@ -32,6 +47,8 @@ const blocks = [
   },
   {
     id: 'iv',
+    shot: 'iv-window-full-layout.png',
+    shotCaption: 'I–V window, curve tab',
     num: '03',
     kicker: 'Steady-state · Transient peak · Sag · Reversal',
     title: 'I–V curves',
@@ -44,6 +61,8 @@ const blocks = [
   },
   {
     id: 'ap',
+    shot: 'ap-window-kinetics-tab.png',
+    shotCaption: 'Action potential window, kinetics tab',
     num: '04',
     kicker: 'Threshold · Peak · Rise / Decay slopes · F–I · Phase plot',
     title: 'Action potentials',
@@ -56,6 +75,8 @@ const blocks = [
   },
   {
     id: 'events',
+    shot: 'events-window-overview.png',
+    shotCaption: 'Event detection window',
     num: '05',
     kicker: 'Template match · Threshold · Multi-template · Biexp fit',
     title: 'Event detection',
@@ -68,6 +89,8 @@ const blocks = [
   },
   {
     id: 'bursts',
+    shot: 'bursts-window-continuous-viewer.png',
+    shotCaption: 'Burst detection on the continuous-mode viewer',
     num: '06',
     kicker: 'Threshold · Oscillation envelope · ISI clustering',
     title: 'Burst detection',
@@ -80,6 +103,8 @@ const blocks = [
   },
   {
     id: 'field',
+    shot: 'fpsp-window-overview.png',
+    shotCaption: 'Field PSP window',
     num: '07',
     kicker: 'fEPSP slope · Population spike · Paired-pulse · LTP / LTD',
     title: 'Field potential',
@@ -92,6 +117,8 @@ const blocks = [
   },
   {
     id: 'paired',
+    shot: 'paired-window-sta-tab.png',
+    shotCaption: 'Paired recordings window, spike-triggered average',
     num: '08',
     kicker: 'Pre / post detection · Latency · PPR · Spike-triggered average',
     title: 'Paired recordings',
@@ -104,6 +131,8 @@ const blocks = [
   },
   {
     id: 'persistence',
+    shot: 'sidecar-json-excerpt.png',
+    shotCaption: 'An excerpt from a .tracer sidecar',
     num: '09',
     kicker: '.tracer sidecar JSON · atomic write · debounced save',
     title: 'Sidecar persistence',
@@ -116,6 +145,8 @@ const blocks = [
   },
   {
     id: 'cohort',
+    shot: 'cohort-window-plots.png',
+    shotCaption: 'Cohort window, plots tab',
     num: '10',
     kicker: 'Folder aggregation · Stats · Plots · Prism export',
     title: 'Cohort &amp; batch',
@@ -128,6 +159,8 @@ const blocks = [
   },
   {
     id: 'formats',
+    shot: 'toolbar-open-file-dropdown.png',
+    shotCaption: 'Opening a recording from the toolbar',
     num: '11',
     kicker: 'HEKA Patchmaster · Axon · 50+ via Neo',
     title: 'Native file formats',
@@ -142,51 +175,57 @@ const blocks = [
 ---
 <Base title="TRACER — Features">
 <style>
-.feature-block{padding:88px 0;border-bottom:1px solid var(--border);}
-.feature-block .head{display:grid;grid-template-columns:80px 1fr auto;gap:24px;align-items:baseline;margin-bottom:24px;}
-.feature-block .num{font-family:var(--font-mono);font-size:11px;color:var(--text-muted);letter-spacing:0.14em;}
-.feature-block h2{font-family:var(--font-ui);font-weight:300;font-size:48px;letter-spacing:-0.015em;margin:0;line-height:1.05;}
-.feature-block h2 em{font-style:italic;color:var(--text-muted);}
-.feature-block .kicker{font-family:var(--font-mono);font-size:10px;color:var(--text-muted);letter-spacing:0.1em;text-transform:uppercase;}
-.feature-block .lead{margin:4px 0 28px 104px;color:var(--text-secondary);font-size:16px;line-height:1.55;max-width:64ch;}
-.feature-block .body{margin-left:104px;display:grid;grid-template-columns:1fr 1fr;gap:32px;}
-.feature-block .body .pt h3{font-family:var(--font-ui);font-weight:600;font-size:14px;margin:0 0 4px;letter-spacing:-0.005em;color:var(--text-primary);}
-.feature-block .body .pt p{margin:0 0 18px;color:var(--text-secondary);font-size:14px;line-height:1.6;}
+.feature-block { padding: 60px 0; border-bottom: 1px solid var(--rule); }
+.feature-block:last-of-type { border-bottom: none; }
+.feature-block .head { display: grid; grid-template-columns: 76px 1fr auto; gap: 24px; align-items: baseline; margin-bottom: 20px; }
+.feature-block .num { font-family: var(--mono); font-size: 11px; color: var(--muted); letter-spacing: 0.07em; }
+.feature-block h2 { font-weight: 600; font-size: 32px; letter-spacing: -0.03em; margin: 0; line-height: 1.1; }
+.feature-block .kicker { font-family: var(--mono); font-size: 11px; color: var(--muted); letter-spacing: 0.07em; text-transform: uppercase; }
+.feature-block .lead { margin: 4px 0 24px 100px; color: var(--ink-soft); font-size: 16px; line-height: 1.65; max-width: 64ch; }
+.feature-block .body { margin-left: 100px; display: grid; grid-template-columns: 1fr 1.1fr; gap: 20px; align-items: start; }
+.feature-block .points { display: flex; flex-direction: column; gap: 14px; }
+.feature-block .pt {
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+}
+.feature-block .pt h3 { font-weight: 600; font-size: 15px; margin: 0 0 6px; letter-spacing: -0.01em; }
+.feature-block .pt p { margin: 0; color: var(--ink-soft); font-size: 14.5px; line-height: 1.6; }
 
-/* CTA */
-.cta-big{padding:120px 0;background:var(--dark-bg);color:var(--dark-text);text-align:center;position:relative;overflow:hidden;}
-.cta-big::before{content:'';position:absolute;inset:0;pointer-events:none;background-image:linear-gradient(to right,rgba(255,255,255,0.04) 1px,transparent 1px),linear-gradient(to bottom,rgba(255,255,255,0.04) 1px,transparent 1px);background-size:80px 80px;}
-.cta-big .wrap{position:relative;z-index:1;}
-.cta-big .eyebrow{color:var(--dark-accent);}
-.cta-big .eyebrow::before{background:var(--dark-accent);box-shadow:0 0 5px var(--dark-accent),0 0 9px oklch(0.78 0.10 215 / 0.5);border-radius:50%;width:7px;height:7px;}
-.cta-big h2{color:var(--dark-text);font-family:var(--font-ui);font-weight:300;font-size:52px;letter-spacing:-0.02em;margin:12px auto 16px;max-width:24ch;line-height:1.05;}
-.cta-big h2 em{font-style:italic;color:var(--dark-text-2);}
-.cta-big p{color:var(--dark-text-2);font-size:15px;max-width:46ch;margin:0 auto 32px;line-height:1.55;}
-.cta-big .btns{display:flex;justify-content:center;gap:10px;flex-wrap:wrap;}
-.cta-big .btn-lg{background:transparent;border-color:var(--dark-border);color:var(--dark-text);}
-.cta-big .btn-lg:hover{background:var(--dark-bg-3);color:var(--dark-accent);}
-.cta-big .btn-lg.primary{background:var(--dark-accent);border-color:var(--dark-accent);color:var(--dark-bg);}
+.feature-block figure { margin: 0; }
+.feature-block figure img {
+  width: 100%;
+  display: block;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--card);
+}
+.feature-block figcaption { margin: 11px 0 0; }
 
-@media (max-width:900px){
-  .feature-block .head{grid-template-columns:1fr;}
-  .feature-block .lead,.feature-block .body{margin-left:0;}
-  .feature-block .body{grid-template-columns:1fr;}
+@media (max-width: 900px) {
+  .feature-block .head { grid-template-columns: 1fr; }
+  .feature-block .lead, .feature-block .body { margin-left: 0; }
+  .feature-block .body { grid-template-columns: 1fr; }
+  .feature-block h2 { font-size: 27px; }
 }
 </style>
 
+<div class="scope-zone">
 <header class="page-hd"><div class="wrap">
   <div>
     <div class="eyebrow">Features · Reference</div>
-    <h1>Every analysis<br><em>in one panel.</em></h1>
+    <h1>Every analysis <span>in one panel.</span></h1>
     <p class="sub">A guided tour of the eleven analysis modules. What each one does, how it's configured, and what you can expect on the other side. Drawn from the actual instrument.</p>
   </div>
   <div class="meta">
     <span><strong>11</strong> modules</span>
     <span><strong>50+</strong> file formats</span>
     <span><strong>1.0.1</strong> current build</span>
-    <span class="led ok">Free for noncommercial use</span>
+    <span class="led">Free for noncommercial use</span>
   </div>
 </div></header>
+</div>
 
 <div class="toc"><div class="wrap">
   <span class="k">Jump to</span>
@@ -208,26 +247,38 @@ const blocks = [
       </div>
       <p class="lead">{b.lead}</p>
       <div class="body">
-        {b.bullets.map(([h, p]) => (
-          <div class="pt">
-            <h3>{h}</h3>
-            <p>{p}</p>
-          </div>
-        ))}
+        <div class="points">
+          {b.bullets.map(([h, p]) => (
+            <div class="pt">
+              <h3>{h}</h3>
+              <p>{p}</p>
+            </div>
+          ))}
+        </div>
+        {shotUrl(b.shot) && (
+          <figure>
+            <a class="shot" href={shotUrl(b.shot)} data-caption={b.shotCaption}>
+              <img src={shotUrl(b.shot)} alt={b.shotCaption} loading="lazy" />
+            </a>
+            <figcaption class="eyebrow plain">{b.shotCaption}</figcaption>
+          </figure>
+        )}
       </div>
     </div>
   </section>
 ))}
 
-<section class="cta-big">
+<section class="band">
   <div class="wrap">
     <div class="eyebrow">v1.0.1 · Released</div>
-    <h2>Read the docs.<em> Then run it.</em></h2>
-    <p>User manual is bundled into the app and lives in the repository at <span class="mono" style="background:var(--dark-bg-3);padding:1px 6px;border-radius:var(--rad);color:var(--dark-text);">docs/MANUAL.md</span>.</p>
+    <h2>Read the docs. <span>Then run it.</span></h2>
+    <p>User manual is bundled into the app and lives in the repository at <span class="mono">docs/MANUAL.md</span>.</p>
     <div class="btns">
-      <a class="btn-lg primary" href={link('/docs')}>Open the docs →</a>
-      <a class="btn-lg" href={releases}>Download v1.0.1 ↓</a>
+      <a class="btn-lg primary" href={link('/docs')}>Open the docs</a>
+      <a class="btn-lg" href={releases}>Download v1.0.1</a>
     </div>
   </div>
 </section>
+
+<Lightbox />
 </Base>
