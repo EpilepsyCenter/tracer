@@ -125,4 +125,9 @@ Quick keyboard reference: press `?` inside the app for the shortcuts overlay; th
 
 ## License
 
-MIT
+Free for noncommercial use under the PolyForm Noncommercial License 1.0.0 (see
+[`LICENSE`](LICENSE)): personal research and study, and use by universities, hospitals, public
+research organisations, charities and government bodies. Commercial use needs a commercial
+licence from the copyright holder. Versions up to and including 1.0.1 were released under the
+MIT License. Contributions are accepted only if their author agrees that they may also be
+offered under other licences.

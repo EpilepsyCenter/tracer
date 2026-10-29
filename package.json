@@ -2,6 +2,8 @@
   "name": "tracer",
   "version": "1.0.1",
   "description": "Electrophysiology analysis software",
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "author": "Marco Ledri",
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "concurrently \"npm run dev:python\" \"npm run dev:electron\"",
@@ -40,6 +42,7 @@
   "build": {
     "appId": "com.tracer.app",
     "productName": "TRACER",
+    "copyright": "Copyright © 2026 Marco Ledri. Free for noncommercial use (PolyForm Noncommercial 1.0.0).",
     "files": [
       "dist/**/*",
       "dist-electron/**/*"
@@ -52,6 +55,10 @@
       {
         "from": "build/lockup.png",
         "to": "lockup.png"
+      },
+      {
+        "from": "LICENSE",
+        "to": "LICENSE"
       }
     ],
     "afterPack": "scripts/adhoc-sign.cjs",
