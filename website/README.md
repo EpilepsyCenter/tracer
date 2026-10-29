@@ -1,22 +1,23 @@
 # TRACER website
 
-Static marketing site for [TRACER](https://github.com/marcoledri/tracer), built with [Astro](https://astro.build).
-
-Source for the design tokens (Telegraph theme: vellum paper, warm ink, amber LED accent, 2 px radii) lives in `src/styles/global.css`. Shared layout in `src/layouts/Base.astro`. Pages under `src/pages/`.
+Static site for [TRACER](https://github.com/EpilepsyCenter/tracer), built with
+[Astro](https://astro.build) and deployed to
+<https://epilepsycenter.github.io/tracer/> by
+`.github/workflows/deploy-website.yml`.
 
 ## Pages
 
 - `/` — homepage
-- `/features` — eleven analysis modules, expanded
-- `/workflow` — six-stage tour from recording to figure
-- `/docs` — short version of `docs/MANUAL.md` from the main repo
+- `/features` — the eleven analysis modules, expanded
+- `/workflow` — the four-step tour from recording to figure
+- `/docs` — the full user manual, rendered from `docs/MANUAL.md`
 
 ## Develop
 
 ```bash
 cd website
 npm install        # one-time
-npm run dev        # http://localhost:4321
+npm run dev        # http://localhost:4321/tracer
 ```
 
 ## Build
@@ -26,20 +27,20 @@ npm run build      # → website/dist/
 npm run preview    # serve the built site
 ```
 
-The site is fully static — `npm run build` writes plain HTML to `dist/`. Drop it on GitHub Pages, Netlify, S3, or any static host.
-
-When you wire up a real host, set `site` and (if needed) `base` in `astro.config.mjs`. Example for GitHub Pages at `marcoledri.github.io/tracer`:
-
-```js
-export default defineConfig({
-  site: 'https://marcoledri.github.io',
-  base: '/tracer',
-  trailingSlash: 'ignore',
-});
-```
-
 ## Conventions
 
-- **Logos**: SVGs in `public/logo/` mirror the canonical files in `<repo-root>/logo/`. Update both if you rev the mark.
-- **Version string**: footer + nav reference `v0.6.1` — search-and-replace on release.
-- **Accuracy first**: this site advertises real features only. No fabricated benchmarks, no fabricated lab logos, no fabricated quotes. The placeholder "In labs" strip on the homepage is intentionally empty until real users opt in.
+- **Design language.** `src/styles/global.css` is the shared token layer of the
+  Epilepsy Center sites — the same block as the hub at
+  <https://epilepsycenter.github.io/>. Paper `#f3f2ee` on ink `#15181f`, one
+  interactive accent (`#007d93`), and `#0f1722` from TRACER's own scope mark as
+  the identity colour. Change a palette or a typeface here and nowhere else.
+- **Logos.** SVGs in `public/logo/` mirror the canonical files in
+  `<repo-root>/logo/`. Update both if you rev the mark.
+- **Manual and screenshots** are read straight out of `docs/`, so the site and
+  the in-app manual can never drift apart. Adding a screenshot to
+  `docs/screenshots/` is enough — the docs page picks it up.
+- **Accuracy first.** This site describes real features only: no invented
+  benchmarks, no placeholder lab logos, no fabricated quotes or numbers. The
+  figures are real screenshots of the app.
+- **Version string.** `v1.0.1` appears in the nav, the footer and the page
+  headers — search and replace on release.
