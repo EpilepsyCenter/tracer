@@ -181,10 +181,13 @@ inside the window on Windows and Linux:
 
 **Check for Updates…** looks for a newer release on GitHub. When
 there is one, TRACER shows its version and release notes and offers
-**Install Update**: the update downloads in the background (progress
-shows on the Dock / taskbar icon), then TRACER asks to restart. Choose
-**Later** and it installs the next time you quit. Your recordings,
-sidecars and settings are not touched.
+**Install Update**. An *Updating TRACER* window then shows each step:
+the download (size and time left, with **Cancel**), checking and
+unpacking it, and finally **Restart and Install** or **Later** — Later
+installs it the next time you quit. On Windows the installer shows its
+own progress while it runs; afterwards TRACER opens again by itself, and
+its start window says it is finishing the update (that first start can
+take a minute). Your recordings, sidecars and settings are not touched.
 
 TRACER also checks quietly once a day at launch and only speaks up
 when an update is available — that prompt has **Skip This Version**,

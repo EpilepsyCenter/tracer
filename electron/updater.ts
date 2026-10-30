@@ -16,21 +16,30 @@
 //     user is sent to the download page instead.
 //
 // Nothing is installed without the user clicking Install.
+//
+// Progress is shown in the "Updating TRACER" window (updateWindow.ts):
+// download (with Cancel), checking/unpacking, then "ready to install"
+// saying what happens next. On Windows the installer runs with its own
+// progress window (not silently), and after a restart the new version's
+// splash says it is finishing the update (``updatingTo`` below).
 
 import { app, dialog, shell, BrowserWindow, net } from 'electron'
-import { autoUpdater } from 'electron-updater'
-import type { UpdateInfo } from 'electron-updater'
-import { spawn, execFileSync } from 'child_process'
+import { autoUpdater, CancellationToken } from 'electron-updater'
+import type { ProgressInfo, UpdateInfo } from 'electron-updater'
+import { spawn, execFile, execFileSync } from 'child_process'
+import { promisify } from 'util'
 import { createHash } from 'crypto'
 import { join, dirname, resolve } from 'path'
 import {
   accessSync, constants as fsConstants, createWriteStream,
   mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync,
 } from 'fs'
+import { UpdateWindow } from './updateWindow'
 
 const REPO = 'EpilepsyCenter/tracer'
 const RELEASES_PAGE = `https://github.com/${REPO}/releases/latest`
 const DAY_MS = 24 * 60 * 60 * 1000
+const execFileAsync = promisify(execFile)
 
 /** Testing only: point the updater at a local folder served over HTTP
  *  (containing latest*.yml and the update files) instead of GitHub. */
@@ -45,12 +54,16 @@ interface UpdateState {
   auto?: boolean
   /** Work folder of a Mac install that ran after the last quit. */
   pendingWork?: string
+  /** Version a restart is installing; the next start's splash says so. */
+  updatingTo?: string
 }
 
 let getWindow: () => BrowserWindow | null = () => null
 let busy = false
 /** Mac update unpacked and waiting for the app to quit. */
 let stagedMac: { newApp: string; target: string; work: string; version: string } | null = null
+/** Progress window of the download in flight (Windows / Linux). */
+let activeWindow: UpdateWindow | null = null
 
 const stateFile = () => join(app.getPath('userData'), 'update-state.json')
 
@@ -117,6 +130,26 @@ async function offerDownloadPage(message: string, detail: string, version?: stri
     buttons: ['Open Download Page', 'Cancel'], defaultId: 0, cancelId: 1,
   })
   if (r.response === 0) void shell.openExternal(releasePage(version))
+}
+
+/** What the "ready to install" step says will happen. */
+function readyNote(): string {
+  if (process.platform === 'darwin') {
+    return 'TRACER will close, install the update and open again by itself. '
+      + 'The first start of the new version can take up to a minute while macOS checks it.'
+  }
+  if (process.platform === 'win32') {
+    return 'TRACER will close and the installer will show its progress. '
+      + 'TRACER opens again when it is done.'
+  }
+  return 'TRACER will close and open again with the new version.'
+}
+
+/** For the splash on the first start after an update restart: the version
+ *  being finished, or null. main.ts reads it before the updater starts. */
+export function finishingUpdateTo(): string | null {
+  const { updatingTo } = readState()
+  return updatingTo && updatingTo === app.getVersion() ? updatingTo : null
 }
 
 // ---------------------------------------------------------------------------
@@ -191,7 +224,7 @@ export async function checkForUpdates(interactive: boolean): Promise<void> {
     type: 'info',
     message: `TRACER ${info.version} is available`,
     detail: `You have version ${current}.` + (notes ? `\n\n${notes}` : '')
-      + '\n\nThe update downloads in the background; TRACER restarts to finish.',
+      + '\n\nTRACER shows the download’s progress, then restarts to finish.',
     buttons, defaultId: 0, cancelId: 2,
     checkboxLabel: 'Check for updates automatically',
     checkboxChecked: state.auto !== false,
@@ -212,23 +245,36 @@ export async function checkForUpdates(interactive: boolean): Promise<void> {
 
 async function installWithUpdater(info: UpdateInfo) {
   busy = true
+  const ui = new UpdateWindow(info.version, getWindow(), { unpacks: false })
+  activeWindow = ui
+  const token = new CancellationToken()
+  let cancelled = false
+  ui.onAction((a) => { if (a === 'cancel') { cancelled = true; token.cancel() } })
+  ui.downloading({ received: 0, total: 0 })
   try {
-    await autoUpdater.downloadUpdate()
+    await autoUpdater.downloadUpdate(token)
   } catch (err) {
     busy = false
+    activeWindow = null
+    ui.close()
     setProgress(-1)
-    await offerDownloadPage('The update couldn’t be downloaded.', String((err as Error)?.message ?? err), info.version)
+    if (!cancelled) {
+      await offerDownloadPage('The update couldn’t be downloaded.', String((err as Error)?.message ?? err), info.version)
+    }
     return
   }
   busy = false
+  activeWindow = null
   setProgress(-1)
-  const r = await messageBox({
-    type: 'info', message: `TRACER ${info.version} is ready to install`,
-    detail: 'Restart TRACER now to finish, or it will be installed when you quit.',
-    buttons: ['Restart Now', 'Later'], defaultId: 0, cancelId: 1,
-  })
-  if (r.response === 0) autoUpdater.quitAndInstall(true, true)
-  else autoUpdater.autoInstallOnAppQuit = true
+  const choice = await ui.ready(readyNote())
+  ui.close()
+  if (choice === 'install') {
+    writeState({ updatingTo: info.version })
+    // Not silent: the Windows installer shows its own progress window.
+    autoUpdater.quitAndInstall(false, true)
+  } else {
+    autoUpdater.autoInstallOnAppQuit = true
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -257,8 +303,11 @@ function canReplace(bundle: string): string | null {
   return null
 }
 
-async function download(url: string, dest: string, expectedSha512: string, size?: number) {
-  const res = await net.fetch(url)
+async function download(
+  url: string, dest: string, expectedSha512: string, size: number | undefined,
+  onProgress: (received: number, total: number) => void, signal: AbortSignal,
+) {
+  const res = await net.fetch(url, { signal })
   if (!res.ok || !res.body) throw new Error(`Download failed (HTTP ${res.status})`)
   const total = Number(res.headers.get('content-length')) || size || 0
   const hash = createHash('sha512')
@@ -273,6 +322,7 @@ async function download(url: string, dest: string, expectedSha512: string, size?
       received += value.length
       if (!out.write(value)) await new Promise<void>((r) => out.once('drain', () => r()))
       if (total > 0) setProgress(received / total)
+      onProgress(received, total)
     }
   } finally {
     await new Promise<void>((r) => out.end(() => r()))
@@ -299,6 +349,10 @@ async function installMac(info: UpdateInfo) {
   }
 
   busy = true
+  const ui = new UpdateWindow(info.version, getWindow(), { unpacks: true })
+  const abort = new AbortController()
+  ui.onAction((a) => { if (a === 'cancel') abort.abort() })
+  ui.downloading({ received: 0, total: file.size ?? 0 })
   const work = join(app.getPath('temp'), `tracer-update-${info.version}-${Date.now()}`)
   try {
     rmSync(work, { recursive: true, force: true })
@@ -307,11 +361,15 @@ async function installMac(info: UpdateInfo) {
       ? (TEST_FEED.endsWith('/') ? TEST_FEED : TEST_FEED + '/')
       : `https://github.com/${REPO}/releases/download/v${info.version}/`
     const zipPath = join(work, 'update.zip')
-    await download(new URL(file.url, base).toString(), zipPath, file.sha512, file.size)
+    await download(new URL(file.url, base).toString(), zipPath, file.sha512, file.size,
+      (received, total) => ui.downloading({ received, total }), abort.signal)
 
-    // ditto keeps the bundle's symlinks, permissions and signature.
+    ui.preparing()
+    setProgress(2)   // indeterminate on the Dock icon too
+    // ditto keeps the bundle's symlinks, permissions and signature. Run it
+    // asynchronously so the window keeps animating while it unpacks.
     const unpacked = join(work, 'unpacked')
-    execFileSync('/usr/bin/ditto', ['-x', '-k', zipPath, unpacked])
+    await execFileAsync('/usr/bin/ditto', ['-x', '-k', zipPath, unpacked])
     rmSync(zipPath, { force: true })
     const appName = readdirSync(unpacked).find((n) => n.endsWith('.app'))
     if (!appName) throw new Error('The update archive contains no app.')
@@ -325,23 +383,27 @@ async function installMac(info: UpdateInfo) {
     stagedMac = { newApp, target: bundle, work, version: info.version }
   } catch (err) {
     rmSync(work, { recursive: true, force: true })
-    await offerDownloadPage('The update couldn’t be installed.', String((err as Error)?.message ?? err), info.version)
+    ui.close()
+    if (!abort.signal.aborted) {
+      await offerDownloadPage('The update couldn’t be installed.', String((err as Error)?.message ?? err), info.version)
+    }
     return
   } finally {
     busy = false
     setProgress(-1)
   }
-  await promptRestartMac()
+  await promptRestartMac(ui)
 }
 
-async function promptRestartMac() {
+/** "Ready to install" for a staged Mac update; reuses the progress window
+ *  when there is one (otherwise opens it at the last step). */
+async function promptRestartMac(existing?: UpdateWindow) {
   if (!stagedMac) return
-  const r = await messageBox({
-    type: 'info', message: `TRACER ${stagedMac.version} is ready to install`,
-    detail: 'Restart TRACER now to finish, or it will be installed when you quit.',
-    buttons: ['Restart Now', 'Later'], defaultId: 0, cancelId: 1,
-  })
-  if (r.response === 0) {
+  const ui = existing ?? new UpdateWindow(stagedMac.version, getWindow(), { unpacks: true })
+  const choice = await ui.ready(readyNote())
+  ui.close()
+  if (choice === 'install' && stagedMac) {
+    writeState({ updatingTo: stagedMac.version })
     launchMacSwap(true)
     app.quit()
   }
@@ -410,7 +472,13 @@ export function initUpdater(windowGetter: () => BrowserWindow | null) {
     autoUpdater.setFeedURL({ provider: 'generic', url: TEST_FEED })
     autoUpdater.forceDevUpdateConfig = !app.isPackaged
   }
-  autoUpdater.on('download-progress', (p) => setProgress((p.percent ?? 0) / 100))
+  autoUpdater.on('download-progress', (p: ProgressInfo) => {
+    setProgress((p.percent ?? 0) / 100)
+    activeWindow?.downloading({ received: p.transferred, total: p.total, rate: p.bytesPerSecond })
+  })
+
+  // The splash of this start has shown "Finishing the update…" if needed.
+  if (readState().updatingTo) writeState({ updatingTo: undefined })
 
   // A Mac update staged with "Later" installs when the app quits.
   app.on('will-quit', () => { if (stagedMac) launchMacSwap(false) })

@@ -4,7 +4,7 @@ import { spawn, ChildProcess } from 'child_process'
 import { join, dirname, basename } from 'path'
 import { createServer } from 'net'
 import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync, unlinkSync, readdirSync, statSync } from 'fs'
-import { initUpdater, checkForUpdates } from './updater'
+import { initUpdater, checkForUpdates, finishingUpdateTo } from './updater'
 
 // When the app is launched from a GUI (double-clicked AppImage, Finder,
 // a .desktop entry) the main process's stdout/stderr are wired to a pipe
@@ -375,7 +375,13 @@ function saveWindowBounds() {
 // always-on-top, destroyed once the main window is ready-to-show.
 // HTML is inlined as a data URL so there's no extra file to bundle.
 // -----------------------------------------------------------------
-function buildSplashHtml(lockupDataUri: string): string {
+function buildSplashHtml(lockupDataUri: string, updatingTo: string | null = null): string {
+  // First start after an update restart: say so, since macOS / SmartScreen
+  // checking the new version can make this start slow.
+  const status = updatingTo
+    ? `Finishing the update to ${updatingTo}…</div>
+    <div class="status hint">The first start after an update can take a minute.`
+    : 'Starting backend…'
   const lockupTag = lockupDataUri
     ? `<img class="lockup" src="${lockupDataUri}" alt="TRACER Suite" />`
     // Fallback: text wordmark if the lockup file is missing for any
@@ -416,6 +422,7 @@ function buildSplashHtml(lockupDataUri: string): string {
   .status {
     font-size: 12px; color: #5f636b;
   }
+  .status.hint { font-size: 11px; margin-top: -14px; }
   .bar {
     width: 240px; height: 3px; background: rgba(20, 22, 28, 0.08);
     border-radius: 999px; overflow: hidden;
@@ -436,7 +443,7 @@ function buildSplashHtml(lockupDataUri: string): string {
   <div class="wrap">
     ${lockupTag}
     <div class="bar"></div>
-    <div class="status">Starting backend…</div>
+    <div class="status">${status}</div>
   </div>
 </body>
 </html>`
@@ -461,7 +468,7 @@ function createSplashWindow() {
       sandbox: true,
     },
   })
-  const html = buildSplashHtml(loadSplashLockupDataUri())
+  const html = buildSplashHtml(loadSplashLockupDataUri(), finishingUpdateTo())
   splashWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html))
   splashWindow.once('ready-to-show', () => {
     splashWindow?.show()
