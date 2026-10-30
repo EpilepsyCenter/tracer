@@ -1,10 +1,41 @@
 """TRACER Python Backend — FastAPI server for electrophysiology analysis."""
 
 import argparse
+import os
 import sys
 from contextlib import asynccontextmanager
 
-import uvicorn
+
+def _keep_matplotlib_cache() -> None:
+    """Packaged backend only: give matplotlib a cache folder that persists.
+
+    PyInstaller's matplotlib runtime hook sets MPLCONFIGDIR to a temporary
+    folder that is deleted on exit, so matplotlib (imported at start-up by the
+    cohort / export routers and pingouin) rebuilt its font cache on every
+    launch: ~9 s before the backend answered, against ~1 s in development.
+    The hook has already run, so overwrite its value (setdefault would not).
+    """
+    if not getattr(sys, "frozen", False):
+        return
+    home = os.path.expanduser("~")
+    if sys.platform == "darwin":
+        cache = os.path.join(home, "Library", "Caches", "TRACER")
+    elif sys.platform.startswith("win"):
+        cache = os.path.join(os.environ.get("LOCALAPPDATA", home), "TRACER", "cache")
+    else:
+        cache = os.path.join(os.environ.get("XDG_CACHE_HOME", os.path.join(home, ".cache")),
+                             "tracer")
+    try:
+        folder = os.path.join(cache, "matplotlib")
+        os.makedirs(folder, exist_ok=True)
+        os.environ["MPLCONFIGDIR"] = folder
+    except OSError:
+        pass  # fall back to the hook's temporary folder
+
+
+_keep_matplotlib_cache()
+
+import uvicorn  # noqa: E402  (after the cache folder is set)
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
