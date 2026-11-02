@@ -1,6 +1,11 @@
 import { create } from 'zustand'
 import type { TrainParams } from '../utils/trains'
 import { computeBurstTrainIds } from '../utils/burstTrains'
+import {
+  type SpectralData, defaultSpectralData, spectralSignature,
+  regionToBackend, regionResultFromBackend, buildSpectralBandCSV,
+  buildSpectralPsdCSV, downloadText,
+} from '../utils/spectral'
 
 /** Modules that can group their detected events into trains. Bursts =
  *  the FieldBurstWindow's epileptiform burst detection; events = the
@@ -277,6 +282,7 @@ export function fileCloseResetSlices(): Record<string, unknown> {
     fieldBursts: {}, burstFormParams: {},
     trainParams: defaultTrainParamsBundle(),
     ivCurves: {}, fpspCurves: {}, cursorAnalyses: {},
+    spectralAnalyses: {},
     apAnalyses: {}, eventsAnalyses: {},
     pairedAnalyses: {}, pairedForm: defaultPairedForm(),
     excludedSweeps: {}, selectedSweeps: {}, averagedSweeps: {},
@@ -385,6 +391,8 @@ type SidecarPayload = {
      *  modes). Cohort extractor takes the mean across the array
      *  for its per-cell scalar. */
     resistance?: Record<string, ResistanceResult[]>
+    /** Spectral window: per-series form + results (see utils/spectral.ts). */
+    spectral?: Record<string, SpectralData>
   }
   /** Form / preference state per analysis that doesn't live inside
    *  a per-(group,series) results blob. Flat so future analyses can
@@ -443,6 +451,8 @@ function _sidecarPayloadFromState(state: AppState): SidecarPayload {
       fpsp_curves: state.fpspCurves,
       cursor_analyses: state.cursorAnalyses,
       resistance: state.resistanceResults,
+      spectral: Object.keys(state.spectralAnalyses).length > 0
+        ? state.spectralAnalyses : undefined,
     },
     forms: {
       resistance: state.resistanceForm,
@@ -628,6 +638,16 @@ function _broadcastAveragedSweeps(averagedSweeps: Record<string, AveragedSweep[]
     ch.postMessage({ type: 'averaged-update', averagedSweeps })
     ch.close()
   } catch { /* ignore */ }
+}
+
+/** Broadcast the spectral slice (form + results) to every window; the
+ *  main window adopts it and its sidecar subscriber persists it. */
+function _broadcastSpectral(spectralAnalyses: Record<string, SpectralData>) {
+  try {
+    const ch = new BroadcastChannel('tracer-sync')
+    ch.postMessage({ type: 'spectral-update', spectralAnalyses })
+    ch.close()
+  } catch { /* ignore — BroadcastChannel unavailable */ }
 }
 
 /** Broadcast field-burst state + detection filter to other windows via the
@@ -1842,6 +1862,11 @@ interface AppState {
   // persist across series switches.
   fieldBursts: Record<string, FieldBurstsData>
 
+  /** Spectral analysis per series (`${group}:${series}`): channel,
+   *  params, named regions and the last results. Persisted in the
+   *  sidecar under `analyses.spectral`. */
+  spectralAnalyses: Record<string, SpectralData>
+
   /** Per-series burst-detection *form* state (method, baseline mode,
    *  all numeric params, filter fields). Survives window close even if
    *  the user never clicked Run. Keyed by `${group}:${series}`;
@@ -2086,6 +2111,23 @@ interface AppState {
   /** Replace a single series' tag array (group is HEKA group, not
    *  experimental group). Pass an empty array to clear. */
   setSeriesTags: (group: number, series: number, tags: string[]) => void
+
+  // Spectral actions
+  /** Patch the form part of a series' spectral entry (creating it with
+   *  defaults if needed). Broadcast + persisted. */
+  setSpectralForm: (
+    group: number, series: number,
+    patch: Partial<Pick<SpectralData, 'channel' | 'params' | 'regions'>>,
+    defaultChannel?: number,
+  ) => void
+  /** Run every region of a series' spectral entry on the backend. */
+  runSpectral: (group: number, series: number) => Promise<void>
+  /** Drop a series' results (keeps its form). */
+  clearSpectralResults: (group: number, series: number) => void
+  /** Band-power table for every series with results, as CSV. */
+  exportSpectralCSV: () => Promise<void>
+  /** One series' spectra (frequency × region) as CSV. */
+  exportSpectralPsdCSV: (group: number, series: number) => Promise<void>
 
   // Field-burst actions
   /** Run on a single sweep. Result REPLACES any existing bursts for that
@@ -2488,6 +2530,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   recordingMeta: null,
   recordingMetaReady: false,
   fieldBursts: {},
+  spectralAnalyses: {},
   burstFormParams: {},
   trainParams: defaultTrainParamsBundle(),
   ivCurves: {},
@@ -3121,6 +3164,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       additionalTraces: {},
       visibleTraces: {},
       fieldBursts: {},
+      spectralAnalyses: {},
       burstFormParams: {},
       trainParams: defaultTrainParamsBundle(),
       ivCurves: {},
@@ -3226,6 +3270,10 @@ export const useAppStore = create<AppState>((set, get) => ({
             patch.fieldBursts = a.bursts
             post({ type: 'bursts-update', fieldBursts: a.bursts })
             sidecarPopulated.bursts = true
+          }
+          if (a.spectral && Object.keys(a.spectral).length > 0) {
+            patch.spectralAnalyses = a.spectral
+            post({ type: 'spectral-update', spectralAnalyses: a.spectral })
           }
           if (a.ap && Object.keys(a.ap).length > 0) {
             patch.apAnalyses = a.ap
@@ -4108,6 +4156,104 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch (err: any) {
       set({ error: err.message, loading: false })
     }
+  },
+
+  setSpectralForm: (group, series, patch, defaultChannel = 0) => {
+    const key = `${group}:${series}`
+    set((s) => {
+      const prev = s.spectralAnalyses[key] ?? defaultSpectralData(group, series, defaultChannel)
+      return {
+        spectralAnalyses: {
+          ...s.spectralAnalyses,
+          [key]: { ...prev, ...patch, group, series },
+        },
+      }
+    })
+    _broadcastSpectral(get().spectralAnalyses)
+  },
+
+  runSpectral: async (group, series) => {
+    const { backendUrl } = get()
+    const key = `${group}:${series}`
+    const entry = get().spectralAnalyses[key]
+    if (!entry) return
+    set({ loading: true, error: null })
+    try {
+      const excluded = get().excludedSweeps[key] ?? []
+      const resp = await apiFetch(backendUrl, '/api/spectral/run', {
+        method: 'POST',
+        body: JSON.stringify({
+          group, series, trace: entry.channel,
+          regions: entry.regions.map(regionToBackend),
+          params: entry.params,
+          excluded_sweeps: excluded,
+        }),
+      })
+      const results = (resp.results ?? []).map(regionResultFromBackend)
+      const failed = results.filter((r: any) => r.error)
+      // Re-read: the form may have changed while the request ran.
+      const cur = get().spectralAnalyses[key] ?? entry
+      const next: SpectralData = {
+        ...cur,
+        results,
+        runSignature: spectralSignature(entry, excluded),
+        ranAt: new Date().toISOString(),
+      }
+      set((s) => ({
+        spectralAnalyses: { ...s.spectralAnalyses, [key]: next },
+        loading: false,
+        error: failed.length > 0
+          ? failed.map((r: any) => `${r.label}: ${r.error}`).join('; ')
+          : null,
+      }))
+      _broadcastSpectral(get().spectralAnalyses)
+    } catch (err: any) {
+      set({ error: err.message, loading: false })
+    }
+  },
+
+  clearSpectralResults: (group, series) => {
+    const key = `${group}:${series}`
+    const prev = get().spectralAnalyses[key]
+    if (!prev) return
+    set((s) => ({
+      spectralAnalyses: {
+        ...s.spectralAnalyses,
+        [key]: { ...prev, results: null, runSignature: null, ranAt: undefined },
+      },
+    }))
+    _broadcastSpectral(get().spectralAnalyses)
+  },
+
+  exportSpectralCSV: async () => {
+    const { spectralAnalyses, recording, backendUrl } = get()
+    let fileName: string = recording?.fileName ?? ''
+    if (!fileName && backendUrl) {
+      try {
+        const info = await fetch(`${backendUrl}/api/files/info`).then((r) => r.ok ? r.json() : null)
+        if (info?.fileName) fileName = info.fileName
+      } catch { /* ignore */ }
+    }
+    const csv = buildSpectralBandCSV(fileName, spectralAnalyses)
+    if (!csv) return
+    downloadText(csv, (fileName || 'recording').replace(/\.[^.]+$/, '') + '_band_power.csv')
+  },
+
+  exportSpectralPsdCSV: async (group, series) => {
+    const { spectralAnalyses, recording, backendUrl } = get()
+    const entry = spectralAnalyses[`${group}:${series}`]
+    if (!entry) return
+    const csv = buildSpectralPsdCSV(entry)
+    if (!csv) return
+    let fileName: string = recording?.fileName ?? ''
+    if (!fileName && backendUrl) {
+      try {
+        const info = await fetch(`${backendUrl}/api/files/info`).then((r) => r.ok ? r.json() : null)
+        if (info?.fileName) fileName = info.fileName
+      } catch { /* ignore */ }
+    }
+    const base = (fileName || 'recording').replace(/\.[^.]+$/, '')
+    downloadText(csv, `${base}_G${group + 1}S${series + 1}_psd.csv`)
   },
 
   runFieldBurstsOnSeries: async (group, series, channel, params) => {
@@ -5988,6 +6134,7 @@ let _sidecarTimer: ReturnType<typeof setTimeout> | null = null
 let _sidecarRefs = {
   events: null as any,
   bursts: null as any,
+  spectral: null as any,
   ap: null as any,
   iv: null as any,
   fpsp: null as any,
@@ -6013,6 +6160,7 @@ useAppStore.subscribe((state) => {
   const next = {
     events: state.eventsAnalyses,
     bursts: state.fieldBursts,
+    spectral: state.spectralAnalyses,
     ap: state.apAnalyses,
     iv: state.ivCurves,
     fpsp: state.fpspCurves,

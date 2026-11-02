@@ -53,6 +53,7 @@ from api.events import router as events_router
 from api.paired import router as paired_router
 from api.cohort import router as cohort_router
 from api.trace_export import router as trace_export_router
+from api.spectral import router as spectral_router
 
 
 @asynccontextmanager
@@ -87,6 +88,7 @@ app.include_router(events_router, prefix="/api/events", tags=["events"])
 app.include_router(paired_router, prefix="/api/paired", tags=["paired"])
 app.include_router(cohort_router, prefix="/api/cohort", tags=["cohort"])
 app.include_router(trace_export_router, prefix="/api/trace_export", tags=["trace_export"])
+app.include_router(spectral_router, prefix="/api/spectral", tags=["spectral"])
 
 
 @app.get("/health")

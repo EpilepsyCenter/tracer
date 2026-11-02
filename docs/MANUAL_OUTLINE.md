@@ -331,7 +331,7 @@ Order in the actual menu (`Toolbar.tsx:98–108`):
 - Trace Export
 - Batch
 - Cohort
-_(Spectral is in the dropdown but its window is minimal — flag this when writing chapter 2 prose. Metadata (Tags), Trace Export, Batch, Cohort are NOT in the Analyses ▾ menu — they live in the separate **Tools ▾** dropdown immediately to its right.)_
+_(Spectral is documented in chapter 22. Metadata (Tags), Trace Export, Batch, Cohort are NOT in the Analyses ▾ menu — they live in the separate **Tools ▾** dropdown immediately to its right.)_
 
 ### Sweep navigation (only visible when a file is open)
 - Prev / Next buttons (`←` / `→`)
@@ -1174,10 +1174,14 @@ Failures shown with faint red row tint; manual-edited trials marked with `*`. Ri
 - Cohort: scalars (`n_trains`, `fraction_events_in_trains`, `mean_events_per_train`, `train_rate_per_min`, `mean_intra_train_iei_ms`, `mean_intra_train_freq_hz`) + distributions (`events_per_train`, `train_durations_ms`, `intra_train_iei_ms`, `inter_train_iei_ms`)
 - Batch: template's `train_params` propagate to each target sidecar after the analysis runs
 
+## 22. Spectral Analysis
+- When to use · Window layout · Regions · Spectrum settings · Bands · Line noise · Pre-filter · Spectrogram · Results · Band power over time · Export · Batch and Cohort · Known gaps
+
 ---
 
 # Notes
 
 - Cursor Measurements fit-function set: enumerate from `GET /api/cursors/fit_functions` when writing prose
-- Spectral Analysis module: `backend/analysis/spectral.py` IS now surfaced in the toolbar Analyses dropdown (`Toolbar.tsx:107`), but the Spectral window is minimal. Decide when prose is written: document it briefly or mark "preview" / out of scope.
+- Spectral Analysis: full window, documented in chapter 22 (regions, PSD, bands, line noise, spectrogram, Batch + Cohort).
 - Paired Recording: integrated with Cohort export via `extract_paired` (release stats: failure rate, potency, CV, 1/CV², PPR). No prose-side gap.
+

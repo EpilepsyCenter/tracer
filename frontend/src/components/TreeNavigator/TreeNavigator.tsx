@@ -39,6 +39,7 @@ const ANALYSIS_BADGES: { id: string; code: string; label: string; color: string 
   { id: 'events',     code: 'E',  label: 'Events',            color: '#42a5f5' },
   { id: 'ap',         code: 'AP', label: 'Action potentials', color: '#ff7043' },
   { id: 'bursts',     code: 'B',  label: 'Bursts',            color: '#ab47bc' },
+  { id: 'spectral',   code: 'S',  label: 'Spectral',          color: '#5c6bc0' },
   { id: 'iv',         code: 'IV', label: 'I-V curve',         color: '#66bb6a' },
   { id: 'cursors',    code: 'C',  label: 'Cursors',           color: '#ffca28' },
   { id: 'fpsp',       code: 'FP', label: 'fPSP',              color: '#ec407a' },
@@ -67,6 +68,10 @@ export function TreeNavigator() {
   const eventsKeys = useAppStore((s) => Object.keys(s.eventsAnalyses))
   const apKeys = useAppStore((s) => Object.keys(s.apAnalyses))
   const burstKeys = useAppStore((s) => Object.keys(s.fieldBursts))
+  // Spectral entries exist as soon as the form is touched; badge only
+  // the ones with results.
+  const spectralKeys = useAppStore((s) =>
+    Object.keys(s.spectralAnalyses).filter((k) => (s.spectralAnalyses[k].results ?? []).length > 0))
   const ivKeys = useAppStore((s) => Object.keys(s.ivCurves))
   const cursorKeys = useAppStore((s) => Object.keys(s.cursorAnalyses))
   const fpspKeys = useAppStore((s) => Object.keys(s.fpspCurves))
@@ -111,6 +116,7 @@ export function TreeNavigator() {
       events: eventsKeys.includes(k),
       ap: apKeys.includes(k),
       bursts: burstKeys.includes(k),
+      spectral: spectralKeys.includes(k),
       iv: ivKeys.includes(k),
       cursors: cursorKeys.includes(k),
       fpsp: fpspKeys.some((fk) => fk.startsWith(fpspPrefix)),

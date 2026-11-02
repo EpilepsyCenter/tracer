@@ -1500,6 +1500,89 @@ def extract_paired(slice_data: dict, sidecar: dict) -> CellExtraction:
 
 
 # ---------------------------------------------------------------------
+# Spectral extractor (band power per named region)
+# ---------------------------------------------------------------------
+
+def _spectral_slug(text: Any) -> str:
+    """Metric-name-safe slug: lowercase, runs of other characters → '_'."""
+    import re
+    out = re.sub(r'[^0-9a-zA-Z]+', '_', str(text or '').strip()).strip('_').lower()
+    return out or 'region'
+
+
+def _spectral_unit_tag(units: str) -> str:
+    """'mV' → 'mV', 'µV' → 'uV'; empty → 'units'. Used inside metric names
+    because the cohort UI labels axes with the metric name itself."""
+    u = (units or '').replace('µ', 'u').replace('μ', 'u')
+    u = ''.join(ch for ch in u if ch.isalnum())
+    return u or 'units'
+
+
+def extract_spectral(slice_data: dict, sidecar: dict) -> CellExtraction:
+    """Per-series spectral scalars, one set per named region.
+
+    Metric names are ``<region>_<measure>``, e.g. ``baseline_theta_power_mV2``,
+    ``baseline_theta_rel``, ``drug_rms_mV``. Regions are matched across
+    recordings by name, so name them the same way in every file (Batch
+    copies the template's regions, which does this automatically).
+    Whole spectra are not exported: cohort line plots are drawn against
+    sample index, which would mislabel a frequency axis.
+    """
+    results = slice_data.get('results') or []
+    scalars: dict[str, Optional[float]] = {}
+    regions_seen: list[str] = []
+    errors: dict[str, str] = {}
+    for r in results:
+        region = _spectral_slug(r.get('label'))
+        # Two regions with the same name would overwrite each other —
+        # number the later ones so nothing silently disappears.
+        base, k = region, 2
+        while region in regions_seen:
+            region = f'{base}_{k}'
+            k += 1
+        regions_seen.append(region)
+        if r.get('error'):
+            errors[region] = str(r.get('error'))
+            continue
+        u = _spectral_unit_tag(r.get('units', ''))
+        scalars[f'{region}_rms_{u}'] = _spectral_num(r.get('rms'))
+        scalars[f'{region}_total_power_{u}2'] = _spectral_num(r.get('totalPower'))
+        scalars[f'{region}_dominant_hz'] = _spectral_num(r.get('dominantFreqHz'))
+        for band, b in (r.get('bands') or {}).items():
+            bs = _spectral_slug(band)
+            scalars[f'{region}_{bs}_power_{u}2'] = _spectral_num((b or {}).get('power'))
+            scalars[f'{region}_{bs}_rel'] = _spectral_num((b or {}).get('relative'))
+            scalars[f'{region}_{bs}_peak_hz'] = _spectral_num((b or {}).get('peakFreqHz'))
+        ln = r.get('lineNoise') or {}
+        scalars[f'{region}_line_noise_rms_{u}'] = _spectral_num(ln.get('rms'))
+        harmonics = ln.get('harmonics') or []
+        if harmonics:
+            scalars[f'{region}_line_noise_1st_db'] = _spectral_num(harmonics[0].get('prominenceDb'))
+        scalars[f'{region}_duration_s'] = _spectral_num(r.get('durationS'))
+
+    params = slice_data.get('params') or {}
+    meta: dict[str, Any] = {
+        'regions': regions_seen,
+        'channel': slice_data.get('channel'),
+        'method': params.get('method'),
+        'average': params.get('average'),
+        'analysis_range_hz': [params.get('fmin'), params.get('fmax')],
+        'line_noise_excluded': params.get('exclude_line_noise'),
+        'errors': errors,
+        'distribution_counts': {},
+    }
+    return CellExtraction(scalars=scalars, distributions={}, meta=meta)
+
+
+def _spectral_num(v: Any) -> Optional[float]:
+    try:
+        x = float(v)
+    except (TypeError, ValueError):
+        return None
+    return x if math.isfinite(x) else None
+
+
+# ---------------------------------------------------------------------
 # Registry — analysis_type → extractor
 # ---------------------------------------------------------------------
 
@@ -1512,6 +1595,7 @@ EXTRACTORS: dict[str, ExtractorFn] = {
     'ap_spont': extract_ap_spontaneous,
     'iv_curves': extract_iv,
     'bursts': extract_bursts,
+    'spectral': extract_spectral,
     'cursors': extract_cursors,
     'resistance': extract_resistance,
     'paired': extract_paired,
@@ -1610,6 +1694,9 @@ DEFAULT_METRICS: dict[str, dict[str, list[str]]] = {
         ],
         'distributions': ['ibi_s'],
     },
+    # Spectral metric names depend on the user's region and band names,
+    # so there is nothing fixed to pre-select.
+    'spectral': {'scalars': [], 'distributions': []},
     'resistance': {
         'scalars': ['rs_mohm', 'rin_mohm', 'cm_pf', 'tau_ms'],
         'distributions': [],
@@ -1840,6 +1927,17 @@ def aggregate_folder(
             if per_file_series_filter is not None \
                     and series_key not in per_file_series_filter:
                 continue
+            # Some result blobs (bursts) don't carry their own group /
+            # series, which extractors need to find per-series settings
+            # such as train_params. Fill them in from the storage key.
+            if isinstance(slice_data, dict) and (
+                    slice_data.get('group') is None or slice_data.get('series') is None):
+                parts = str(series_key).split(':')
+                try:
+                    slice_data = {**slice_data,
+                                  'group': int(parts[0]), 'series': int(parts[1])}
+                except (IndexError, ValueError):
+                    pass
             try:
                 extraction = extractor(slice_data, sidecar)
             except Exception as exc:  # noqa: BLE001 — surface, don't crash the whole scan

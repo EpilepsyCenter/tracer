@@ -315,11 +315,7 @@ they are documented one chapter at a time in Part II of this manual.
 | Event Detection | 13 |
 | Burst Detection | 14 |
 | Field Potential | 15 |
-| Spectral Analysis | — (experimental) |
-
-The **Spectral Analysis** entry is present in the menu but is still
-under construction; it is not documented in this manual and the
-window it opens should be considered a preview.
+| Spectral Analysis | 22 |
 
 Several windows can be open at once, and they stay in sync with the
 main window: changing the selected sweep or moving a cursor in one
@@ -4308,5 +4304,221 @@ target manually and toggle grouping on.
 - The default thresholds reflect cortical / hippocampal
   norms — adjust them for your cell type rather than treating
   them as gospel.
+
+---
+
+## 22. Spectral Analysis
+
+The **Spectral Analysis** window measures how the power of a signal
+is spread across frequencies. It computes a power spectral density
+(PSD) for one or more named stretches of a recording, reports power
+in frequency bands, checks for mains (line) noise, and shows a
+spectrogram of whatever part of the trace is on screen. It is built
+for slice field potentials, such as oscillations and epileptiform activity
+before and after a drug, and for rig noise checks. It works on any
+channel.
+
+*Reach this window from the toolbar's **Analyses ▾** menu, or
+press `⌘K` and type **spectral**.*
+
+### When to use this window
+
+- Comparing band power between a baseline and a drug period of the
+  same recording.
+- Finding the dominant frequency of an oscillation, or watching
+  one appear in the spectrogram during wash-in.
+- Checking a rig for 50 Hz (or 60 Hz) interference and its
+  harmonics, and measuring how large it is.
+- Building per-slice band-power numbers for Cohort and ASTERISM.
+
+### Window layout
+
+The top bar carries the group, series, channel and sweep-preview
+selectors. The **left panel** holds, from top to bottom: the list of
+**Regions**, the **Spectrum** settings, the **Bands**, **Line noise**
+options, the optional **Pre-filter**, and the pinned run controls
+(**Run**, **Clear**, **Band CSV**, **Spectra CSV**).
+
+The **right panel** shows the trace in the same continuous viewer as
+the Burst Detection window (view presets, arrows, ←/→ and PgUp/PgDn
+paging, scroll to zoom, drag to pan), with the spectrogram of the
+visible stretch underneath. Below a splitter, four tabs show the
+results: **Spectrum**, **Band power**, **Line noise** and **Over time**.
+
+### Regions
+
+A region is a named stretch of the series: a range of sweeps and a
+time window inside each of them. Every region gets its own colour,
+its own line on the spectrum plot and its own column in the tables.
+
+- **Shift-drag** on the trace marks a new region on the previewed
+  sweep. **Region from view** (or **Add from view**) does the same
+  for the whole visible stretch.
+- **Drag a region's edge** to adjust it. Click inside a region to
+  select it.
+- **Add whole series** adds a region covering every sweep at full
+  length. New windows start with one of these.
+- Click a region in the list to edit its name, sweep range and
+  times exactly. Leave **All** or **Full** ticked to mean "every
+  sweep" or "the whole sweep".
+
+Give regions the same names in every recording, e.g. `baseline`
+and `drug`. Cohort matches regions across files by name, and Batch
+copies the template's names for you.
+
+Each sweep in a region is analysed on its own and the spectra are
+then pooled. Sweeps are never joined end to end, which would add a
+step at every join, and never averaged as traces first, which would
+cancel any rhythm that isn't locked to the sweep start. Excluded
+sweeps are left out.
+
+### Spectrum settings
+
+| Setting | What it does |
+|---|---|
+| **Method** | **Welch** cuts each sweep's region into overlapping segments and averages their spectra: smooth, with resolution set by the segment length. **Periodogram** uses each region whole: the finest resolution, but noisy. |
+| **Segment length** | Welch only. Frequency resolution is 1 / length; the default 2 s gives 0.5 Hz. A region shorter than one segment can't be analysed. Shorten the segment or lengthen the region. |
+| **Overlap** | Welch only. 50 % is standard with a Hann window. |
+| **Average** | Welch only. **Median** ignores the occasional segment with a burst or artefact in it. It is bias-corrected, so it matches the mean on clean data. |
+| **Window**, **Detrend** | Taper and per-segment trend removal before the FFT. Hann and mean removal suit almost everything. |
+| **Analysis range** | Total power, relative power and the dominant frequency refer to this range, and the spectrum is stored up to its upper limit. Default 1–500 Hz. |
+
+PSDs are one-sided densities in *units²/Hz*, for example mV²/Hz.
+Band powers are the sum of the PSD bins in the band times the bin
+width, in *units²*. A band includes its lower edge and excludes its
+upper edge, so adjacent bands never count the same bin twice.
+
+### Bands
+
+The default bands are tuned for slice work: delta 1–4, theta 4–12,
+beta 12–30, low gamma 30–80, high gamma 80–150, ripple 150–250 and
+fast ripple 250–500 Hz. Edit, add or remove them freely; **Reset
+bands** restores the defaults. A band that reaches past the
+recording's Nyquist frequency is reported as blank, not as zero.
+
+### Line noise
+
+Choose 50 or 60 Hz mains, how many harmonics to check, and the
+half-width around each harmonic that counts as mains.
+
+**Leave mains out of band powers** is on by default. A 50 Hz peak
+sits inside low gamma and can dominate it, so the mains bins are
+interpolated across before band powers are summed. The plotted
+spectrum and the line-noise numbers are not affected. Turn it off
+if you need the raw sum.
+
+The **Line noise** tab reports, per region:
+
+- **Broadband RMS**: the RMS of the detrended signal.
+- **Mains RMS**: the amplitude of the interference itself, summed over all harmonics,
+  after subtracting the local floor.
+- For each harmonic, **dB above floor**: the peak compared with the
+  median of the spectrum 2–6 Hz either side. About +10 dB or more
+  (amber) is clearly visible interference.
+
+Mains peaks need fine resolution. With a frequency resolution coarser
+than 1 Hz the tab shows a warning; use a segment of at least 1 s.
+
+### Pre-filter
+
+Off by default. A filter reshapes the spectrum it is measuring, so
+use it only to remove something you know is unwanted, such as slow
+drift. When on, it also applies to the displayed trace and the
+spectrogram, and runs on the whole sweep before regions are cut out.
+
+### Spectrogram
+
+The strip under the trace shows the short-time spectrum, in dB, with
+low frequencies at the bottom, lined up with the trace above it. Set
+the window length (frequency resolution 1 / window) and the frequency
+range in its header.
+
+The spectrogram is computed once for the whole sweep (about a second
+for an hour at 20 kHz) and then only cropped as you scroll, page or
+zoom, so it follows the view immediately. The colour scale is fixed
+for the whole sweep, from the 2nd to the 99.5th percentile, so colours
+mean the same thing wherever you are. The bar at the right gives the
+dB values. It is display only: nothing from it is saved. Untick
+**Spectrogram** in the viewer header to hide it.
+
+### Results
+
+**Spectrum** overlays one line per region. Power can be shown on a
+log axis, in dB, or linearly, and frequency on a log or linear axis.
+Drag across the plot to zoom into a frequency range, double-click to
+reset, and right-click to copy or save the image. Bands are shaded
+behind the lines.
+
+**Band power** lists, per region: duration analysed, sweeps and
+segments used, RMS, total power, dominant frequency, then every
+band's power with its share of total power. Hover a band value for
+its peak frequency.
+
+If you change settings, regions or excluded sweeps after a run, an
+amber notice says the results are out of date, with a **Run again**
+button.
+
+### Band power over time
+
+The **Over time** tab cuts the whole series into consecutive bins and
+plots every band's power in each bin. Use it to watch a drug wash in,
+or to find when an oscillation starts. It updates by itself when you
+change a setting; there is nothing to run.
+
+- **Bin** and **Step** set the bin length and the distance between bin
+  starts (equal = no overlap). Each bin gets its own Welch spectrum with
+  the segment settings on the left, so a bin must be at least one
+  segment long. A bin's numbers are exactly what a region covering
+  the same stretch would give.
+- **Power** plots absolute band power on a log axis. **% of total**
+  plots each band's share of total power. **% of region** divides each
+  band by its mean over the bins inside a region you choose, usually
+  the baseline, so 100 % means no change.
+- Click a band's button to hide or show it. Regions are shaded behind
+  the lines.
+- Drag to zoom in time, and double-click to reset. Click a point to
+  centre the trace viewer on that bin.
+- **Export CSV** writes one row per bin: sweep, time, every band's
+  power and share, total power, RMS and dominant frequency.
+
+Bins never cross from one sweep into the next. With several sweeps,
+the sweeps are placed end to end on the time axis, with a dashed line
+at each boundary. This assumes they were recorded back to back.
+
+### Export
+
+- **Band CSV**: one row per region for every series in the recording
+  with results. It includes durations, RMS, total power, dominant
+  frequency, each band's power, relative power and peak, and the
+  line-noise numbers.
+- **Spectra CSV**: the spectra of the current series, a frequency
+  column plus one PSD column per region.
+
+### Batch and Cohort
+
+**Batch** treats spectral like any other analysis. Tag the series in
+a template recording, set up regions and settings there, and Batch
+copies the channel, settings and regions to every matching series in
+the target folder, then runs them. A region with a sweep range a
+target file doesn't have reports an error for that region only.
+
+**Cohort** lists **Spectral (band power per region)** as an analysis
+type. Each series becomes one row, with metrics named
+`<region>_<measure>`, for example `baseline_theta_power_mV2`,
+`drug_low_gamma_rel`, `baseline_rms_mV` and `drug_line_noise_rms_mV`.
+Region and band names are lower-cased with spaces turned into
+underscores.
+
+### Known gaps
+
+- Whole spectra don't go to Cohort, only the numbers derived from
+  them. Cohort's line plots are drawn against sample index, which
+  would mislabel a frequency axis. Use **Spectra CSV** to plot
+  average spectra.
+- Band power over time is not saved and doesn't go to Cohort. Export
+  it as CSV when you need the numbers.
+- Recordings saved with spectral results should be opened with this
+  version of TRACER or later. An older version rewrites the
+  `.tracer` file without the spectral block.
 
 ---

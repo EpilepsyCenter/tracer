@@ -40,6 +40,7 @@ type AnyBlob = Record<string, unknown>
 const ANALYSIS_TYPES = [
   'events',
   'bursts',
+  'spectral',
   'ap',
   'iv_curves',
   'fpsp_curves',
@@ -60,6 +61,7 @@ interface SidecarShape {
   analyses?: {
     events?: Record<string, AnyBlob>
     bursts?: Record<string, AnyBlob>
+    spectral?: Record<string, AnyBlob>
     ap?: Record<string, AnyBlob>
     iv_curves?: Record<string, AnyBlob>
     fpsp_curves?: Record<string, AnyBlob>
@@ -166,6 +168,10 @@ export interface BatchRecipe {
   /** Channel the template's analysis ran on. The batch runner uses
    *  this index on each target file unless overridden later. */
   channel: number | null
+  /** Spectral only: the template's named regions (they live on the
+   *  blob beside ``params``). Copied as-is, so region names match
+   *  across files for Cohort. */
+  regions?: AnyBlob[] | null
   /** For analyses that span multiple series (FPsp LTP needs a baseline
    *  series AND a post-tetanus one), this captures the tags of any
    *  *secondary* series the template references. The runner uses these
@@ -322,6 +328,8 @@ export function extractRecipes(sidecar: SidecarShape): {
           tag, analysisType: type, sourceKey: key,
           subtype, params, channel, secondaryTags, cursors,
           trainParams,
+          regions: type === 'spectral' && Array.isArray((blob as any).regions)
+            ? ((blob as any).regions as AnyBlob[]) : null,
         })
       }
     }
@@ -400,6 +408,7 @@ export function BatchWindow({ backendUrl }: Props) {
         }
       }
       probe('events', a.events); probe('bursts', a.bursts); probe('ap', a.ap)
+      probe('spectral', a.spectral)
       probe('iv_curves', a.iv_curves); probe('fpsp_curves', a.fpsp_curves)
       probe('cursor_analyses', a.cursor_analyses); probe('resistance', a.resistance)
       probe('paired', a.paired)
@@ -644,6 +653,8 @@ export function BatchWindow({ backendUrl }: Props) {
   const appRunAP = useAppStore((s) => s.runAP)
   const appRunIV = useAppStore((s) => s.runIVCurve)
   const appRunBursts = useAppStore((s) => s.runFieldBurstsOnSeries)
+  const appSetSpectralForm = useAppStore((s) => s.setSpectralForm)
+  const appRunSpectral = useAppStore((s) => s.runSpectral)
   const appRunFPsp = useAppStore((s) => s.runFPsp)
   const appRunResistanceOnSweep = useAppStore((s) => s.runResistanceOnSweep)
   const appRunResistanceOnAverage = useAppStore((s) => s.runResistanceOnAverage)
@@ -844,6 +855,25 @@ export function BatchWindow({ backendUrl }: Props) {
       }
     })
   }, [forEachMatch, appRunBursts])
+
+  /** Spectral: copy the template's channel, params and named regions
+   *  onto each matched series, then compute every region. Regions with
+   *  explicit sweep ranges are copied verbatim; a range beyond a target
+   *  file's sweep count comes back as an error on that region only. */
+  const runSpectralRecipe = useCallback(async (
+    item: RunPlanItem, fileFraction: (frac: number) => void,
+  ) => {
+    const params = item.recipe.params as any
+    const regions = (item.recipe.regions ?? null) as any[] | null
+    await forEachMatch(item, fileFraction, async (g, s) => {
+      const channel = item.recipe.channel ?? 0
+      appSetSpectralForm(g, s, {
+        channel, params,
+        ...(regions && regions.length > 0 ? { regions } : {}),
+      }, channel)
+      await appRunSpectral(g, s)
+    })
+  }, [forEachMatch, appSetSpectralForm, appRunSpectral])
 
   /** Paired recording: needs BOTH a pre and a post channel, plus
    *  the four param sub-blobs (pre / post / failure / latency). The
@@ -1164,6 +1194,9 @@ export function BatchWindow({ backendUrl }: Props) {
             case 'bursts':
               // eslint-disable-next-line no-await-in-loop
               await runBurstsRecipe(item, slice); break
+            case 'spectral':
+              // eslint-disable-next-line no-await-in-loop
+              await runSpectralRecipe(item, slice); break
             case 'fpsp_curves':
               // eslint-disable-next-line no-await-in-loop
               await runFPspRecipe(item, slice); break
@@ -1220,7 +1253,7 @@ export function BatchWindow({ backendUrl }: Props) {
     cancelRef.current = false
   }, [buildPlan, appOpenFile,
       runEventsRecipe, runAPRecipe, runIVRecipe,
-      runBurstsRecipe, runFPspRecipe,
+      runBurstsRecipe, runSpectralRecipe, runFPspRecipe,
       runResistanceRecipe, runCursorRecipe, runPairedRecipe])
 
   const cancelRun = useCallback(() => {
@@ -1396,6 +1429,7 @@ export function BatchWindow({ backendUrl }: Props) {
 const ANALYSIS_LABELS: Record<string, string> = {
   events: 'Events',
   bursts: 'Bursts',
+  spectral: 'Spectral',
   ap: 'Action potentials',
   iv_curves: 'I-V curve',
   fpsp_curves: 'Field PSP',

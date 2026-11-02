@@ -242,6 +242,7 @@ export function CursorPanel() {
             series: state.currentSeries,
             trace: state.currentTrace,
             fieldBursts: state.fieldBursts,
+            spectralAnalyses: state.spectralAnalyses,
             burstFormParams: state.burstFormParams,
             trainParams: state.trainParams,
             ivCurves: state.ivCurves,
@@ -270,6 +271,11 @@ export function CursorPanel() {
         // main TraceViewer's burst-marker overlay has data to draw.
         if (ev.data?.type === 'bursts-update' && ev.data.fieldBursts) {
           useAppStore.setState({ fieldBursts: ev.data.fieldBursts })
+        }
+        // Spectral form + results from the Spectral window → adopt so
+        // the sidecar subscriber persists them.
+        if (ev.data?.type === 'spectral-update' && ev.data.spectralAnalyses) {
+          useAppStore.setState({ spectralAnalyses: ev.data.spectralAnalyses })
         }
         // Burst-detection form state (method + params) pushed from the
         // analysis window — adopt so the main-window store can persist

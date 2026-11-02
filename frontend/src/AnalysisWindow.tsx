@@ -12,6 +12,8 @@ const ResistanceWindow = lazy(() =>
   import('./components/AnalysisWindows/ResistanceWindow').then((m) => ({ default: m.ResistanceWindow })))
 const FieldBurstWindow = lazy(() =>
   import('./components/AnalysisWindows/FieldBurstWindow').then((m) => ({ default: m.FieldBurstWindow })))
+const SpectralWindow = lazy(() =>
+  import('./components/AnalysisWindows/SpectralWindow').then((m) => ({ default: m.SpectralWindow })))
 const IVCurveWindow = lazy(() =>
   import('./components/AnalysisWindows/IVCurveWindow').then((m) => ({ default: m.IVCurveWindow })))
 const FPspWindow = lazy(() =>
@@ -161,6 +163,9 @@ export function AnalysisWindow({ view }: { view: string }) {
           if (ev.data.fieldBursts) {
             useAppStore.setState({ fieldBursts: ev.data.fieldBursts })
           }
+          if (ev.data.spectralAnalyses) {
+            useAppStore.setState({ spectralAnalyses: ev.data.spectralAnalyses })
+          }
           if (ev.data.burstFormParams) {
             useAppStore.setState({ burstFormParams: ev.data.burstFormParams })
           }
@@ -227,6 +232,9 @@ export function AnalysisWindow({ view }: { view: string }) {
           if (targetPath === undefined || targetPath === currentPath) {
             useAppStore.setState({ recordingMeta: ev.data.recordingMeta })
           }
+        }
+        if (ev.data?.type === 'spectral-update' && ev.data.spectralAnalyses) {
+          useAppStore.setState({ spectralAnalyses: ev.data.spectralAnalyses })
         }
         if (ev.data?.type === 'iv-update' && ev.data.ivCurves) {
           useAppStore.setState({ ivCurves: ev.data.ivCurves })
@@ -370,6 +378,15 @@ export function AnalysisWindow({ view }: { view: string }) {
           />
         ) : view === 'bursts' ? (
           <FieldBurstWindow
+            backendUrl={backendUrl}
+            fileInfo={fileInfo}
+            currentSweep={currentSweep}
+            mainGroup={mainGroup}
+            mainSeries={mainSeries}
+            mainTrace={mainTrace}
+          />
+        ) : view === 'spectral' ? (
+          <SpectralWindow
             backendUrl={backendUrl}
             fileInfo={fileInfo}
             currentSweep={currentSweep}

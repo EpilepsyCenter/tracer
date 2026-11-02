@@ -87,6 +87,7 @@ const ANALYSIS_LABELS: Record<string, string> = {
   ap_spont: 'Action Potentials — spontaneous',
   iv_curves: 'I-V Curve',
   bursts: 'Bursts',
+  spectral: 'Spectral (band power per region)',
   cursors: 'Cursor Measurements',
   paired: 'Paired Recording',
   fpsp_io: 'fPSP — Input-Output',
