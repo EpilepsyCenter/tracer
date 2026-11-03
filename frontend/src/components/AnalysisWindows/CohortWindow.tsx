@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useThemeStore } from '../../stores/themeStore'
 import { usePlotMenu } from '../common/PlotMenu'
 import { displayGroupSeries } from '../../utils/groupSeriesKey'
+import { CohortQuality } from './CohortQuality'
 
 /**
  * Cohort Analysis window — Phases B.2 + B.3.
@@ -59,14 +60,45 @@ interface Cell {
   series_tags: Record<string, string[]>
   series_key: string
   series_specific_tags: string[]
+  /** Quality control verdict of this row, when the folder has QC rules. */
+  qc_status?: string | null
+  qc_reason?: string | null
   scalars: Record<string, number | null>
   distributions: Record<string, number[]>
   meta: Record<string, unknown>
 }
 
+/** Quality control (Cohort ▸ Quality): set when the folder has a
+ *  ``tracer_qc.json``. Rows were already filtered by ``include``. */
+type QcInclude = 'all' | 'pass' | 'pass_warn'
+interface QcExcludedRow {
+  file_name: string
+  cell_id?: string | null
+  group_tags: string[]
+  series_key: string
+  series_specific_tags: string[]
+  status: string
+  reason: string
+}
+interface AggregateQc {
+  active: boolean
+  include: QcInclude
+  cell_rule?: string | null
+  counts: Record<string, number>
+  excluded: QcExcludedRow[]
+}
+const QC_INCLUDE_LABEL: Record<QcInclude, string> = {
+  all: 'All cells', pass: 'Passing QC', pass_warn: 'Passing QC or warn',
+}
+const QC_INCLUDE_PHRASE: Record<QcInclude, string> = {
+  all: 'all cells included', pass: 'only cells passing QC included',
+  pass_warn: 'cells passing QC or with a warning included',
+}
+
 interface AggregateResponse {
   analysis_type: string
   folder: string
+  qc?: AggregateQc
   cells: Cell[]
   errors: AggregateError[]
   skipped_no_meta: SkippedFile[]
@@ -560,6 +592,14 @@ function inferDesign(
 
 export function CohortWindow({ backendUrl }: { backendUrl: string }) {
   const [folder, setFolder] = useState<string | null>(null)
+  // Analyses (the comparison wizard) or Quality (QC rules and verdicts).
+  const [view, setView] = useState<'analyses' | 'quality'>('analyses')
+  // Which cells Quality control lets through; 'default' = the backend's
+  // choice (pass + warn when the folder has QC rules, else all). A ref
+  // too, so a session restore's delayed aggregate sees the restored value.
+  const [qcInclude, setQcIncludeState] = useState<'default' | QcInclude>('default')
+  const qcIncludeRef = useRef<'default' | QcInclude>('default')
+  const setQcInclude = (v: 'default' | QcInclude) => { qcIncludeRef.current = v; setQcIncludeState(v) }
   const [analyses, setAnalyses] = useState<AnalysesIndex | null>(null)
   const [analysisType, setAnalysisType] = useState<string>('events')
   const [aggResult, setAggResult] = useState<AggregateResponse | null>(null)
@@ -725,7 +765,10 @@ export function CohortWindow({ backendUrl }: { backendUrl: string }) {
       const resp = await fetch(`${backendUrl}/api/cohort/aggregate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ folder, analysis_type: analysisType }),
+        body: JSON.stringify({
+          folder, analysis_type: analysisType,
+          qc_include: qcIncludeRef.current === 'default' ? null : qcIncludeRef.current,
+        }),
       })
       if (!resp.ok) {
         const text = await resp.text()
@@ -1110,6 +1153,7 @@ export function CohortWindow({ backendUrl }: { backendUrl: string }) {
     return {
       folder,
       analysis_type: analysisType,
+      qc_include: qcInclude,
       design: {
         comparison_shape: comparisonShape,
         selected_tags: selectedTags,
@@ -1131,7 +1175,7 @@ export function CohortWindow({ backendUrl }: { backendUrl: string }) {
       stats_results: statsResults,
       graph_prefs: graphPrefs,
     }
-  }, [folder, analysisType, comparisonShape, selectedTags, filterTags,
+  }, [folder, analysisType, qcInclude, comparisonShape, selectedTags, filterTags,
       seriesRole, nUnit, testOverride, subsampleMode, subsampleN,
       selectedMetrics, statsResults, graphPrefs,
       distMode, distAndersonDarling, distReferenceTag])
@@ -1151,6 +1195,8 @@ export function CohortWindow({ backendUrl }: { backendUrl: string }) {
       // the same defaults we'd use for a fresh session.
       const f = typeof data.folder === 'string' ? data.folder : null
       const at = typeof data.analysis_type === 'string' ? data.analysis_type : 'events'
+      const qi = data.qc_include
+      setQcInclude(qi === 'all' || qi === 'pass' || qi === 'pass_warn' ? qi : 'default')
       const design = (data.design as Record<string, unknown>) || {}
       const cs = (design.comparison_shape as ComparisonShape) || 'between'
       const st = Array.isArray(design.selected_tags) ? (design.selected_tags as string[]) : []
@@ -1531,6 +1577,15 @@ export function CohortWindow({ backendUrl }: { backendUrl: string }) {
           {folder ?? 'No folder picked'}
         </span>
 
+        <div className="segmented" style={{ marginLeft: 12 }}>
+          <button className={view === 'analyses' ? 'active' : undefined}
+            onClick={() => setView('analyses')}>Analyses</button>
+          <button className={view === 'quality' ? 'active' : undefined}
+            onClick={() => setView('quality')}
+            title="Rs, holding and Vm checks between conditions, and which cells to include">Quality</button>
+        </div>
+
+        {view === 'analyses' && (<>
         <span style={{ fontWeight: 600, marginLeft: 12 }}>Analysis:</span>
         <select
           value={analysisType}
@@ -1551,6 +1606,25 @@ export function CohortWindow({ backendUrl }: { backendUrl: string }) {
           disabled={!folder || aggLoading}
           style={{ padding: '0 16px' }}
         >{aggLoading ? 'Aggregating…' : 'Aggregate'}</button>
+        {aggResult?.qc?.active && (
+          <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}
+            title="Quality control rules from the Quality tab (tracer_qc.json in this folder)">
+            <span style={{ fontWeight: 600 }}>Include:</span>
+            <select
+              value={qcInclude === 'default' ? aggResult.qc.include : qcInclude}
+              disabled={aggLoading}
+              onChange={(e) => {
+                setQcInclude(e.target.value as QcInclude)
+                setTimeout(() => { void runAggregate() }, 0)
+              }}
+            >
+              {(Object.keys(QC_INCLUDE_LABEL) as QcInclude[]).map((k) => (
+                <option key={k} value={k}>{QC_INCLUDE_LABEL[k]}</option>
+              ))}
+            </select>
+          </label>
+        )}
+        </>)}
 
         {/* Session file — Save / Save As / Open. Sits at the
             far right of the top bar so the load/save flow has
@@ -1602,6 +1676,8 @@ export function CohortWindow({ backendUrl }: { backendUrl: string }) {
         </div>
       </div>
 
+      {view === 'quality' && <CohortQuality backendUrl={backendUrl} folder={folder} />}
+      {view === 'analyses' && (<>
       {/* ---- Body ----
           Pre-aggregation: full-width empty state.
           Post-aggregation: wizard column + preview column. */}
@@ -1712,10 +1788,12 @@ export function CohortWindow({ backendUrl }: { backendUrl: string }) {
               subsampleN={subsampleN}
             />
             <CellTable cells={aggResult.cells} columns={scalarColumns} />
+            <QcSection result={aggResult} onOpenQuality={() => setView('quality')} />
             <SkippedSection result={aggResult} />
           </div>
         </div>
       )}
+      </>)}
     </div>
   )
 }
@@ -4496,6 +4574,7 @@ function Pill({ label, color, tooltip }: { label: string; color: string; tooltip
 // the table dense without losing precision; nulls render as em-dash.
 // ---------------------------------------------------------------------
 function CellTable({ cells, columns }: { cells: Cell[]; columns: string[] }) {
+  const hasQc = cells.some((c) => c.qc_status != null)
   if (cells.length === 0) {
     return (
       <div style={{
@@ -4530,6 +4609,7 @@ function CellTable({ cells, columns }: { cells: Cell[]; columns: string[] }) {
             <Th>Series</Th>
             <Th>File tags</Th>
             <Th>Series tags</Th>
+            {hasQc && <Th>QC</Th>}
             {columns.map((c) => <Th key={c}>{c}</Th>)}
           </tr>
         </thead>
@@ -4546,6 +4626,22 @@ function CellTable({ cells, columns }: { cells: Cell[]; columns: string[] }) {
               <Td>{displayGroupSeries(cell.series_key)}</Td>
               <Td>{cell.group_tags.join(', ')}</Td>
               <Td>{cell.series_specific_tags.join(', ') || '—'}</Td>
+              {hasQc && (
+                <Td title={cell.qc_reason || undefined}>
+                  <span style={{
+                    color: cell.qc_status === 'warn' ? 'var(--warning)'
+                      : cell.qc_status === 'pass' ? 'var(--success)'
+                      : cell.qc_status === 'fail' ? 'var(--error)' : 'var(--text-muted)',
+                    fontWeight: cell.qc_status === 'warn' || cell.qc_status === 'fail' ? 600 : undefined,
+                  }}>
+                    {cell.qc_status === 'pass' ? 'Pass' : cell.qc_status === 'warn' ? 'Warn'
+                      : cell.qc_status === 'fail' ? 'Fail' : (cell.qc_status ?? '—')}
+                  </span>
+                  {cell.qc_status === 'warn' && cell.qc_reason ? (
+                    <span style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-xs)' }}> — {cell.qc_reason}</span>
+                  ) : null}
+                </Td>
+              )}
               {columns.map((col) => {
                 const v = cell.scalars[col]
                 return <Td key={col} numeric>{fmtScalar(v)}</Td>
@@ -4612,6 +4708,51 @@ function fmtScalar(v: number | null | undefined): string {
 // the events / AP / etc. analysis windows are how the user actually
 // fixes these; this section just makes the situation legible.
 // ---------------------------------------------------------------------
+/** Quality control report: which rows QC left out of this analysis, and why. */
+function QcSection({ result, onOpenQuality }: { result: AggregateResponse; onOpenQuality: () => void }) {
+  const qc = result.qc
+  const [expanded, setExpanded] = useState(false)
+  if (!qc?.active) return null
+  const n = qc.excluded.length
+  return (
+    <div style={{ marginTop: 14 }}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 'var(--font-size-sm)' }}>
+        {n > 0 ? (
+          <button onClick={() => setExpanded((x) => !x)} style={{
+            background: 'transparent', border: 'none', padding: 0, color: 'var(--text-muted)',
+            fontSize: 'var(--font-size-sm)',
+          }}>
+            {expanded ? '▼' : '▶'} Quality control left out {n} row{n === 1 ? '' : 's'} ({QC_INCLUDE_PHRASE[qc.include]}) — details
+          </button>
+        ) : (
+          <span style={{ color: 'var(--text-muted)' }}>
+            Quality control: nothing left out ({QC_INCLUDE_PHRASE[qc.include]}).
+          </span>
+        )}
+        <button className="btn btn-sm" onClick={onOpenQuality}>Open Quality</button>
+      </div>
+      {expanded && n > 0 && (
+        <table className="data-table" style={{ marginTop: 6, fontSize: 'var(--font-size-sm)' }}>
+          <thead>
+            <tr><th>File</th><th>Series</th><th>Group</th><th>Verdict</th><th>Reason</th></tr>
+          </thead>
+          <tbody>
+            {qc.excluded.map((x, i) => (
+              <tr key={i}>
+                <td>{x.file_name}{x.cell_id ? ` · ${x.cell_id}` : ''}</td>
+                <td>{displayGroupSeries(x.series_key)}{x.series_specific_tags.length ? ` (${x.series_specific_tags.join(', ')})` : ''}</td>
+                <td>{x.group_tags.join(', ')}</td>
+                <td>{x.status}</td>
+                <td style={{ whiteSpace: 'normal' }}>{x.reason}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  )
+}
+
 function SkippedSection({ result }: { result: AggregateResponse }) {
   const { skipped_no_meta, skipped_no_analysis, errors } = result
   const total = skipped_no_meta.length + skipped_no_analysis.length + errors.length

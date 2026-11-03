@@ -54,6 +54,7 @@ from api.paired import router as paired_router
 from api.cohort import router as cohort_router
 from api.trace_export import router as trace_export_router
 from api.spectral import router as spectral_router
+from api.qc import router as qc_router
 
 
 @asynccontextmanager
@@ -89,6 +90,7 @@ app.include_router(paired_router, prefix="/api/paired", tags=["paired"])
 app.include_router(cohort_router, prefix="/api/cohort", tags=["cohort"])
 app.include_router(trace_export_router, prefix="/api/trace_export", tags=["trace_export"])
 app.include_router(spectral_router, prefix="/api/spectral", tags=["spectral"])
+app.include_router(qc_router, prefix="/api/qc", tags=["qc"])
 
 
 @app.get("/health")

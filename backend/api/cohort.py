@@ -51,6 +51,13 @@ class AggregateRequest(BaseModel):
             "the cohort UI honor per-file checkbox selection."
         ),
     )
+    qc_include: Optional[str] = Field(
+        default=None,
+        description=(
+            "Quality control: 'all' | 'pass' | 'pass_warn'. Default: "
+            "'pass_warn' when the folder has a tracer_qc.json, else 'all'."
+        ),
+    )
     series_filter: Optional[dict[str, list[str]]] = Field(
         default=None,
         description=(
@@ -90,6 +97,7 @@ def aggregate(req: AggregateRequest) -> dict:
             analysis_type=req.analysis_type,
             file_filter=req.file_filter,
             series_filter=req.series_filter,
+            qc_include=req.qc_include,
         )
     except ValueError as exc:
         # Unknown analysis_type — caller error.

@@ -1158,6 +1158,7 @@ Failures shown with faint red row tint; manual-edited trials marked with `*`. Ri
 - Population statistics (`analysis/cohort_stats.py`)
 - Cohort graphs (`analysis/cohort_graphs.py`)
 - Export to CSV / Excel; Prism `.pzfx` export pipeline (`analysis/cohort_export.py`) — per-analysis-type sheets
+- Quality control (Analyses | Quality switch; `analysis/qc.py`, `api/qc.py`, `CohortQuality.tsx`): conditions from series tags (several per condition), rules with warn / fail levels, overrides with reasons, `tracer_qc.json` in the folder; table (row per condition) + plot across conditions; Include switch (all / pass / pass + warn) filters every Cohort analysis in `aggregate_folder`, with a QC report, `qc_status` / `qc_reason` columns and a *QC excluded* export sheet
 
 ---
 

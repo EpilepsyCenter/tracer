@@ -1580,13 +1580,17 @@ from there.
 
 ### Persistence
 
-Resistance results are saved per *(group, series)* pair and stored
-in the recording's sidecar, alongside the form parameters
-(V_step, exponential mode, fit duration, run mode). The window's
-own UI preferences — left-panel width, mini-viewer height — live
-in the global preferences file. Reopening a recording restores
-both, so you come back to the same view with the same numbers
-already in place.
+Resistance results are saved per *(group, series)* pair in the
+recording's sidecar. Every result also records the settings it was
+measured with — run mode and sweeps, V_step, exponential mode, fit
+duration, channel and the cursor windows — so each series remembers
+how it was measured: coming back to a series restores its settings.
+**Batch** uses the same record: each tagged series of the template
+is repeated on the matching series of the other files with that
+series' own settings (an averaged range stays an averaged range;
+*All sweeps* gives one row per sweep). The window's own UI
+preferences — left-panel width, mini-viewer height — live in the
+global preferences file.
 
 ---
 
@@ -4132,6 +4136,10 @@ becomes available as the previous one is filled in.
 5. **Metrics + Results** — pick which metrics to test and plot.
    Stats and graphs render in the right pane in three tabs.
 
+The **Analyses | Quality** switch next to the folder opens
+**Quality control**, which decides which cells the analyses
+include — see *Quality control* below.
+
 ![Cohort window overview — folder, groups, metrics, results](screenshots/cohort-window-overview.png)
 
 ### How groups are defined
@@ -4231,7 +4239,125 @@ selection, metric selection, graph customisations — can be saved
 to a `.tracer_cohort` JSON session file via Save / Open. Reopening
 the file restores the wizard exactly, recomputes the aggregate,
 and shows the same stats and graphs. Sessions are global rather
-than per-recording.
+than per-recording. The **Include** setting of Quality control
+is saved with the session too.
+
+### Quality control
+
+**Quality** (the switch next to the folder) checks each cell's
+recording quality — series resistance, input resistance,
+capacitance, holding current, resting potential — between the
+conditions of your experiment (for example baseline → drug →
+washout), and lets every Cohort analysis include only the cells
+that pass.
+
+Quality control measures nothing itself. It uses the results you
+already have:
+
+- **Rs, Rin, Cm and holding current** from the **Resistance**
+  analysis (holding current is its pre-pulse baseline);
+- **resting Vm** from a **Cursor** analysis on current-clamp
+  series (its baseline).
+
+The usual way to get them for a whole folder:
+
+1. Tag the series in **Metadata** (e.g. `baseline`, `drug`,
+   `washout`).
+2. Run **Resistance** (and Cursor, for current clamp) on the tagged
+   series of one cell. Each series remembers how it was measured —
+   run mode, sweeps, fit, channel and cursor windows.
+3. Use that cell as the template in **Batch**: every other file's
+   matching series is measured the same way.
+4. Open **Cohort ▸ Quality**.
+
+#### Conditions
+
+The left column starts with two conditions; **Add another** adds
+more, in order. For each condition:
+
+- **Measured in** — the series tags its values come from, picked
+  from a list of the tags that carry Resistance or Cursor results
+  (with how many cells have them). Add several tags when cells
+  differ: for example `drug` for cells with the test pulse inside
+  the drug sweeps and `tp_drug` for cells where it was a separate
+  test-pulse series. Each cell uses whichever it has; two series
+  with the same tag are averaged.
+- **Judges** — which data series the verdict applies to, for the
+  Include setting. Normally *the same series*; pick another tag when
+  Rs was measured in a separate test-pulse series.
+- **Reference** — changes (ΔRs, Δholding, ΔVm) in the other
+  conditions are measured against this one.
+
+Quality control never picks a test pulse by its position or time:
+only the tags you choose count.
+
+#### Rules
+
+Each measure can be switched on, with a **warn** level, a **fail**
+level, or both (leave one empty to skip it). The defaults are Rs
+above 25 MΩ, a change in Rs of more than 20 % (either way), holding
+current below −200 pA, and resting Vm above −55 mV. Changes are
+judged on their size, in either direction.
+
+- **Measurement missing** — what a condition counts as when its
+  tagged series has no Resistance (or Cursor) result: *warn*
+  (default), *fail*, or *ignore*. A cell is never passed silently
+  for lack of data. Vm is only checked on cells that have Cursor
+  results at all, so voltage-clamp cells aren't flagged.
+- **When a condition fails** — *exclude that condition* (the cell
+  still counts for the other conditions) or *exclude the whole
+  cell* (for paired designs, where a cell must count in every
+  condition or none).
+
+A condition a cell didn't record (no series with its tags) doesn't
+count against it.
+
+The conditions, rules and overrides are saved in the folder as
+`tracer_qc.json` as soon as you change something, so everyone
+analysing the folder applies the same rules. Quality control never
+changes the recordings' own `.tracer` files. Verdicts are not
+stored: they are worked out each time from the results and the
+current rules, so changing a threshold updates everything at once.
+
+#### The table and the plot
+
+The table has one block per cell and one row per condition: the
+cell's verdict (Pass / Warn / Fail), then each measure whose rule is
+switched on (Rs is always shown). A value that breaks a rule is
+coloured amber (warn) or red (fail), and the row says why. **Warn
+and fail only** hides the passing cells; right-click rows to **Copy
+as TSV**; **Refresh** reads the folder again after you run Resistance
+or Batch.
+
+**Override…** sets a cell, or one condition of it, to pass, warn or
+fail by hand — a reason is required, and it is shown with a ✎ and
+in every report. Choose *Automatic* to remove an override.
+
+The plot above the table shows one measure across the conditions,
+one line per cell, coloured by that measure's checks, with the warn
+and fail levels as dashed lines. Change plots start at 0 at the
+reference. Right-click it to copy or save it as a vector figure or
+**Export for ASTERISM** (one row per cell, one column per condition —
+the layout for a repeated-measures comparison).
+
+Below the table, **Missing measurements** lists the cells that need
+Resistance or Cursor run on a tagged series, and **Not checked**
+lists recordings with no series matching any condition (they are
+included in Cohort as usual).
+
+#### Include
+
+Once the folder has quality-control rules, the Cohort top bar shows
+**Include**: *All cells*, *Passing QC*, or *Passing QC or warn* (the
+default). A row is left out when the condition that judges its
+series fails (or, with *exclude the whole cell*, when any condition
+does). Rows from series no condition judges are kept.
+
+Below the cell table, **Quality control left out N rows** lists each
+left-out row with its reason. Exports carry the same information:
+the *Cells (wide)* sheet has `qc_status` and `qc_reason` columns, the
+*Cohort* sheet states which cells were included, and a *QC excluded*
+sheet lists the rows left out.
 
 ### Honest gaps
 

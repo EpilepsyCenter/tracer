@@ -1850,6 +1850,7 @@ def aggregate_folder(
     analysis_type: str,
     file_filter: Optional[list[str]] = None,
     series_filter: Optional[dict[str, list[str]]] = None,
+    qc_include: Optional[str] = None,
 ) -> dict:
     """Walk ``folder`` and extract per-cell metrics for ``analysis_type``.
 
@@ -1867,6 +1868,12 @@ def aggregate_folder(
         Optional ``{recording_path: [series_key, …]}`` map. When set
         for a given recording, only those ``"{group}:{series}"`` keys
         contribute. Lets the user trim multi-series recordings.
+    qc_include
+        Quality control (Cohort ▸ Quality, ``analysis/qc.py``). When the
+        folder has a ``tracer_qc.json``, every row gets ``qc_status`` /
+        ``qc_reason``, and rows are kept by ``'all'`` / ``'pass'`` /
+        ``'pass_warn'`` (None: ``'pass_warn'`` when rules exist). Excluded
+        rows are listed under ``qc.excluded`` for the report.
 
     Returns
     -------
@@ -1889,6 +1896,12 @@ def aggregate_folder(
     folder_path = Path(folder).expanduser().resolve()
     sidecars = _list_sidecars(folder_path)
     file_filter_set = set(file_filter) if file_filter else None
+
+    from analysis import qc as qcmod
+    qc_cfg = qcmod.load_config(str(folder_path))
+    include = qc_include or ('pass_warn' if qc_cfg else 'all')
+    qc_excluded: list[dict] = []
+    qc_counts: dict[str, int] = {}
 
     cells: list[dict] = []
     errors: list[dict] = []
@@ -1978,6 +1991,8 @@ def aggregate_folder(
             continue
 
         per_file_series_filter = (series_filter or {}).get(recording_path)
+        qc_cell = (qcmod.evaluate_cell(sidecar, qc_cfg, os.path.basename(recording_path))
+                   if qc_cfg else None)
 
         for series_key, slice_data in slices.items():
             if per_file_series_filter is not None \
@@ -2036,7 +2051,25 @@ def aggregate_folder(
                     seen_tag.add(t.lower())
                     specific_tags.append(t)
 
+            row_qc = (qcmod.row_status(qc_cell, series_key, specific_tags, qc_cfg.get('cell_rule', ''))
+                      if qc_cfg else None)
+            if row_qc is not None:
+                qc_counts[row_qc['status']] = qc_counts.get(row_qc['status'], 0) + 1
+                if not qcmod.included(row_qc['status'], include):
+                    qc_excluded.append({
+                        'file_path': recording_path,
+                        'file_name': os.path.basename(recording_path),
+                        'cell_id': cell_id,
+                        'group_tags': list(group_tags),
+                        'series_key': series_key,
+                        'series_specific_tags': specific_tags,
+                        'status': row_qc['status'],
+                        'reason': row_qc['reason'],
+                    })
+                    continue
             cells.append({
+                'qc_status': row_qc['status'] if row_qc else None,
+                'qc_reason': row_qc['reason'] if row_qc else None,
                 'file_path': recording_path,
                 'file_name': os.path.basename(recording_path),
                 'cell_id': cell_id,
@@ -2061,6 +2094,13 @@ def aggregate_folder(
         'errors': errors,
         'skipped_no_meta': skipped_no_meta,
         'skipped_no_analysis': skipped_no_analysis,
+        'qc': {
+            'active': qc_cfg is not None,
+            'include': include,
+            'cell_rule': (qc_cfg or {}).get('cell_rule'),
+            'counts': qc_counts,
+            'excluded': qc_excluded,
+        },
         'summary': {
             'n_cells': len(cells),
             'n_files_scanned': len(sidecars),

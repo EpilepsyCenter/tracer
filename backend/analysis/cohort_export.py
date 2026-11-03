@@ -371,7 +371,8 @@ def _write_cells_wide_sheet(ws, paired: list[tuple[dict, str]],
     # to cross-reference against the recording in HEKA.
     headers = (
         ['group', 'file_name', 'file_path', 'cell_id', 'animal_id',
-         'series_key (0-indexed)', 'series_specific_tags', 'group_tags']
+         'series_key (0-indexed)', 'series_specific_tags', 'group_tags',
+         'qc_status', 'qc_reason']
         + list(scalar_metrics)
         + [f'meta.{k}' for k in meta_fields]
     )
@@ -389,6 +390,8 @@ def _write_cells_wide_sheet(ws, paired: list[tuple[dict, str]],
                 c.get('series_key', '') or '',
                 ', '.join(c.get('series_specific_tags') or []),
                 ', '.join(c.get('group_tags') or []),
+                c.get('qc_status') or '',
+                c.get('qc_reason') or '',
             ]
             + [_excel_value(scalars.get(m)) for m in scalar_metrics]
             + [_excel_value(meta.get(k)) for k in meta_fields]
@@ -636,6 +639,12 @@ def _write_cohort_meta_sheet(ws, aggregate: dict, design: Optional[dict],
     ws.append(['Cells in folder', summary.get('n_cells', '')])
     ws.append(['Cells included in this export', n_cells_in_export])
     ws.append(['Files scanned', summary.get('n_files_scanned', '')])
+    qc = aggregate.get('qc') or {}
+    if qc.get('active'):
+        label = {'all': 'all cells', 'pass': 'passing QC only',
+                 'pass_warn': 'passing QC or with a warning'}.get(qc.get('include'), qc.get('include'))
+        ws.append(['Quality control', f"included: {label}; "
+                   f"rows excluded: {len(qc.get('excluded') or [])} (see 'QC excluded')"])
     if design:
         ws.append([])
         ws.append(['Design'])
@@ -697,6 +706,17 @@ def write_excel_summary(aggregate: dict,
 
     ws = wb.create_sheet(_safe_sheet_name('Cells (long)', used_names))
     _write_cells_long_sheet(ws, paired, scalar_metrics)
+
+    qc = aggregate.get('qc') or {}
+    if qc.get('active'):
+        ws = wb.create_sheet(_safe_sheet_name('QC excluded', used_names))
+        ws.append(['file_name', 'cell_id', 'group_tags', 'series_key (0-indexed)',
+                   'series_specific_tags', 'qc_status', 'qc_reason'])
+        for x in qc.get('excluded') or []:
+            ws.append([x.get('file_name', ''), x.get('cell_id') or '',
+                       ', '.join(x.get('group_tags') or []), x.get('series_key', ''),
+                       ', '.join(x.get('series_specific_tags') or []),
+                       x.get('status', ''), x.get('reason', '')])
 
     # Per-metric distribution sheets. Branch on kind:
     #   * timeseries (LTP normalised response, resistance traces…):

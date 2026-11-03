@@ -13,6 +13,22 @@ starts, and from Help ▸ What's New. Newest version first.
   `python3 scripts/release_notes.py <version> --apply`.
 -->
 
+## 1.2.0
+
+### New
+
+- **Quality control in Cohort.** Check Rs, Rin, Cm, holding current and resting Vm between the conditions of your experiment (baseline, drug, washout…) with rules you set, override with a reason, and let every Cohort analysis include only the cells that pass — with a report of what was left out and why. [Read more](manual:20. Cohort > Quality control)
+
+### Improved
+
+- **Resistance remembers how each series was measured** (run mode, sweeps, fit, channel, cursors), and Batch repeats exactly that on the other files. [Read more](manual:10. Resistance — Rs / Rin / Cm > Persistence)
+
+### Fixed
+
+- **Batch Resistance** results opened with an error in the Resistance window and were missing from Cohort; Batch also ignored the template's run mode and fit settings.
+- **What's new** appeared at every start instead of once after an update.
+- Settings could be lost when two windows saved them at the same moment.
+
 ## 1.1.0
 
 ### New
