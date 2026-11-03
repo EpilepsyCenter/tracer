@@ -3,6 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import manualMd from '../../../../docs/MANUAL.md?raw'
 import { Icon } from '../common/Icon'
+import { resolveManualPath, takePendingManualPath, clearPendingManualPath } from '../../utils/manualLink'
 
 // Bundle every PNG / JPG / SVG sitting in docs/screenshots/ so that
 // markdown ``![alt](screenshots/foo.png)`` references resolve to the
@@ -130,6 +131,55 @@ export function Manual() {
     const el = contentRef.current?.querySelector<HTMLElement>(`#${CSS.escape(id)}`)
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
+
+  // Deep links ("Read more" in What's new, utils/manualLink.ts): a request
+  // left in localStorage when this window was opened for it, or a message
+  // when the manual was already open.
+  useEffect(() => {
+    // Screenshots above the target load after the jump and push it down,
+    // so jump instantly and again as each image loads — until the user
+    // scrolls on their own (or 4 s pass).
+    let stop: (() => void) | null = null
+    const go = (path: string) => {
+      const id = resolveManualPath(headings, path)
+      if (!id) return
+      stop?.()
+      const root = contentRef.current
+      const snap = () => {
+        const el = root?.querySelector<HTMLElement>(`#${CSS.escape(id)}`)
+        if (el) el.scrollIntoView({ behavior: 'auto', block: 'start' })
+      }
+      const imgs = Array.from(root?.querySelectorAll('img') ?? [])
+      const onUser = () => stop?.()
+      imgs.forEach((im) => im.addEventListener('load', snap))
+      window.addEventListener('wheel', onUser, { passive: true })
+      window.addEventListener('keydown', onUser)
+      window.addEventListener('mousedown', onUser)
+      const timers = [setTimeout(snap, 80), setTimeout(snap, 600), setTimeout(() => stop?.(), 4000)]
+      stop = () => {
+        imgs.forEach((im) => im.removeEventListener('load', snap))
+        window.removeEventListener('wheel', onUser)
+        window.removeEventListener('keydown', onUser)
+        window.removeEventListener('mousedown', onUser)
+        timers.forEach(clearTimeout)
+        stop = null
+      }
+    }
+    const pending = takePendingManualPath()
+    if (pending) go(pending)
+    let ch: BroadcastChannel | null = null
+    try {
+      ch = new BroadcastChannel('tracer-sync')
+      ch.onmessage = (ev) => {
+        if (ev.data?.type === 'manual-goto' && typeof ev.data.path === 'string') {
+          clearPendingManualPath()
+          go(ev.data.path)
+        }
+      }
+    } catch { /* ignore */ }
+    return () => { ch?.close(); stop?.() }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [headings])
 
   return (
     <div className="manual">

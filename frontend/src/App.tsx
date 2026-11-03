@@ -11,6 +11,9 @@ import { ResizeHandle } from './components/ResizeHandle/ResizeHandle'
 import { TagToast } from './components/TagToast/TagToast'
 import { CommandPalette } from './components/CommandPalette/CommandPalette'
 import { HelpModal } from './components/HelpModal/HelpModal'
+import {
+  type ChangelogEntry, WhatsNewDialog, checkWhatsNewOnStartup, entriesForMenu,
+} from './components/WhatsNew/WhatsNew'
 import { BugReportModal } from './components/BugReportModal/BugReportModal'
 import { useGlobalTooltips } from './hooks/useGlobalTooltips'
 
@@ -53,6 +56,15 @@ export default function App() {
   // Help modal — mounted at the App root so it's reachable by the
   // ? keyboard shortcut, the toolbar button, and the command palette.
   const [showHelp, setShowHelp] = useState(false)
+  // What's new: once after a version change, and from Help ▸ What's New.
+  const [whatsNew, setWhatsNew] = useState<ChangelogEntry[] | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    checkWhatsNewOnStartup().then((entries) => {
+      if (!cancelled && entries.length > 0) setWhatsNew(entries)
+    }).catch(() => { /* ignore */ })
+    return () => { cancelled = true }
+  }, [])
   useEffect(() => {
     const onOpen = () => setShowHelp(true)
     const onKey = (e: KeyboardEvent) => {
@@ -139,6 +151,7 @@ export default function App() {
         case 'open-settings': window.dispatchEvent(new CustomEvent('open-settings')); break
         case 'open-scaling': window.dispatchEvent(new CustomEvent('open-scaling-modal', { detail: {} })); break
         case 'open-help': setShowHelp(true); break
+        case 'whats-new': setWhatsNew(entriesForMenu()); break
         case 'open-bug-report': setShowBugReport(true); break
         case 'command-palette': window.dispatchEvent(new CustomEvent('open-command-palette')); break
         case 'toggle-left': toggleLeft(); break
@@ -224,6 +237,9 @@ export default function App() {
       <TagToast />
       <CommandPalette />
       <HelpModal open={showHelp} onClose={() => setShowHelp(false)} />
+      {whatsNew && whatsNew.length > 0 && (
+        <WhatsNewDialog entries={whatsNew} onClose={() => setWhatsNew(null)} />
+      )}
       <BugReportModal
         open={showBugReport}
         onClose={() => setShowBugReport(false)}

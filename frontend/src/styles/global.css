@@ -2001,3 +2001,25 @@ body[data-platform="mac"] .toolbar.toolbar-mac-inset {
 .data-table tbody tr:hover td {
   background: var(--bg-hover);
 }
+
+/* ---- What's new dialog (components/WhatsNew) ---- */
+.whats-new-panel { max-width: 640px; }
+.whats-new-body { max-height: min(60vh, 560px); overflow: auto; line-height: 1.5; }
+.whats-new-body h2 { font-size: var(--font-size-base); margin: 12px 0 4px; color: var(--text-primary); }
+.whats-new-body h3 {
+  font-size: var(--font-size-label); font-weight: 600; color: var(--text-muted);
+  margin: 12px 0 4px;
+}
+.whats-new-body > section > h3:first-child { margin-top: 0; }
+.whats-new-body ul { margin: 0; padding-left: 18px; }
+.whats-new-body li { margin: 4px 0; color: var(--text-primary); }
+.whats-new-link {
+  background: none; border: none; padding: 0; margin-left: 2px;
+  color: var(--accent); cursor: pointer; font: inherit; text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.whats-new-link:hover { color: var(--text-primary); }
+.whats-new-footer {
+  display: flex; justify-content: flex-end; gap: 8px;
+  padding: 10px 14px; border-top: 1px solid var(--border);
+}

@@ -252,6 +252,7 @@ function buildAppMenu() {
     role: 'help',
     submenu: [
       { label: 'TRACER Manual', click: () => openAnalysisWindow('manual') },
+      { label: 'What\'s New…', click: () => sendMenuAction('whats-new') },
       { label: 'Keyboard Shortcuts', accelerator: '?', registerAccelerator: false, click: () => sendMenuAction('open-help') },
       { type: 'separator' },
       { label: 'Report a Bug…', click: () => sendMenuAction('open-bug-report') },

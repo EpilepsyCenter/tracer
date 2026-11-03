@@ -102,6 +102,17 @@ To switch to a different recording, simply open another file —
 TRACER replaces the current one. There is no separate close
 command; closing the application window quits the program.
 
+### What's new after an update
+
+The first time a new version of TRACER starts — after an in-app update
+or after installing it by hand — a **What's new** window lists the
+changes since the version you had before, grouped as *New*, *Improved*
+and *Fixed*. Each **Read more** opens this manual at the matching
+section; **Open the manual** opens it at the start, and **Close** (or
+`Esc`) dismisses the window. It appears once per version; open it
+again any time from **Help ▸ What's New…**. A fresh installation
+doesn't show it.
+
 ### Recent files
 
 The toolbar's **Open…** button has a small chevron (▾) next to
@@ -178,7 +189,8 @@ inside the window on Windows and Linux:
 - **Tools** — **Tags…**, **Batch…**, **Cohort…** and **Export
   Traces…**, which work across files.
 - **Window** — minimise, zoom and switch between TRACER's windows.
-- **Help** — the **TRACER Manual**, **Keyboard Shortcuts**, **Report a
+- **Help** — the **TRACER Manual**, **What's New…** (the release
+  notes for this version), **Keyboard Shortcuts**, **Report a
   Bug…**, and a link to TRACER on GitHub. On Windows and Linux,
   **Check for Updates…** is here too; on macOS it is under the
   **TRACER** menu.
