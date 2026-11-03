@@ -89,7 +89,8 @@ def build_project(payload: dict) -> dict:
     design_kind = payload.get('design_kind') or 'unpaired_2'
     paired = design_kind in PAIRED_KINDS
     branches = payload.get('branches') or {}
-    stats = payload.get('stats') or {}
+    stats = dict(payload.get('stats') or {})
+    override = payload.get('test_override') or 'auto'
     tables, graphs, analyses = [], [], []
 
     for t in payload.get('tables') or []:
@@ -112,7 +113,18 @@ def build_project(payload: dict) -> dict:
             'spec': {'title': name, 'default_style': dict(style), 'connect_rows': paired,
                      'y': {'title': name}},
         })
-        an = _analysis(design_kind, branches.get(t.get('metric'), 'parametric'), len(tags))
+        # The test Cohort ran — or, when its statistics weren't run, the
+        # one it would choose (normality, no-variation data → rank test),
+        # so the file never carries a t-test Cohort would refuse.
+        metric = t.get('metric')
+        branch = (stats.get(metric) or {}).get('branch') or branches.get(metric)
+        if not branch:
+            from analysis import cohort_stats
+            r = cohort_stats.run_test([{'tag': g, 'values': v} for g, v in zip(tags, cols)],
+                                      design_kind, override if override in cohort_stats.TEST_OVERRIDES else 'auto')
+            branch = r.get('branch') or ('nonparametric' if override == 'nonparametric' else 'parametric')
+            stats.setdefault(metric, r)
+        an = _analysis(design_kind, branch, len(tags))
         if an:
             analyses.append({'id': _id(), 'name': '', 'auto_name': True, 'type': an[0],
                              'table': tid, 'columns': list(range(len(tags))), 'params': an[1]})

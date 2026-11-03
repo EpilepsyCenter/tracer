@@ -1042,13 +1042,14 @@ export function CohortWindow({ backendUrl }: { backendUrl: string }) {
         values: groups.map((g) => g.values), row_titles: rowTitles,
       }
     }).filter(Boolean)
+    // Without a stats run the backend picks the test as Cohort would.
     const branches: Record<string, string> = {}
     for (const m of scalars) {
-      branches[m] = statsResults?.[m]?.branch
-        ?? (testOverride === 'nonparametric' ? 'nonparametric' : 'parametric')
+      const b = statsResults?.[m]?.branch
+      if (b) branches[m] = b
     }
     return {
-      design_kind: designKind, tables, branches,
+      design_kind: designKind, tables, branches, test_override: testOverride,
       stats: statsResults ?? null,
       design: {
         comparison_shape: comparisonShape, selected_tags: selectedTags, filter_tags: filterTags,

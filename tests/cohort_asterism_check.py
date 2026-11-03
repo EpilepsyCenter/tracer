@@ -110,6 +110,26 @@ print(json.dumps(out))
     else:
         print('  (ASTERISM repo not found next to TRACER: skipped opening the files in ASTERISM)')
 
+def _normal(mu, sd, n=12):
+    """Evenly spread normal quantiles: passes Shapiro-Wilk every time."""
+    from scipy.stats import norm
+    return list(mu + sd * norm.ppf((np.arange(n) + 0.5) / n))
+
+
+# Without Cohort's statistics, the export still picks Cohort's test:
+# identical paired values must not get a t-test.
+proj = cohort_asterism.build_project({
+    'design_kind': 'paired_2', 'tables': [{'metric': 'm', 'tags': ['a', 'b'],
+                                           'values': [[11.683] * 6, [10.969] * 6]}]})
+check('no stats run, identical pairs: Wilcoxon', proj['analyses'][0]['params'].get('test') == 'wilcoxon',
+      proj['analyses'][0]['params'])
+proj = cohort_asterism.build_project({
+    'design_kind': 'unpaired_2', 'tables': [{'metric': 'm', 'tags': ['a', 'b'],
+                                             'values': [_normal(10, 2), _normal(13, 2)]}]})
+check('no stats run, normal data: Welch', proj['analyses'][0]['params'].get('test') == 'welch',
+      proj['analyses'][0]['params'])
+check('no stats run: Cohort result in the info sheet', 'Welch' in proj['infos'][0]['notes'], proj['infos'][0]['notes'])
+
 if failures:
     print('FAILED')
     for f in failures:
