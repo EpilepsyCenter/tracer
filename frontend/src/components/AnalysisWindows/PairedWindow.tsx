@@ -1481,6 +1481,7 @@ function OverlayViewer({
   // right-click falls through to this menu.
   const plotMenu = usePlotMenu({
     getCanvas: () => plotRef.current?.ctx?.canvas ?? null,
+    getUplot: () => plotRef.current ?? null,
     defaultName: 'paired-overlay',
   })
 
@@ -2674,7 +2675,9 @@ function TrialSequencePlot({ trials }: { trials: PairedTrial[] }) {
   const plotRef = useRef<uPlot | null>(null)
   const menu = usePlotMenu({
     getCanvas: () => plotRef.current?.ctx?.canvas ?? null,
+    getUplot: () => plotRef.current ?? null,
     defaultName: 'paired-trial-sequence',
+    asterism: 'xy',
   })
 
   useEffect(() => {
@@ -2759,6 +2762,7 @@ function STATab({ data }: { data: PairedData | null }) {
   const [showFit, setShowFit] = useState(true)
   const staMenu = usePlotMenu({
     getCanvas: () => plotRef.current?.ctx?.canvas ?? null,
+    getUplot: () => plotRef.current ?? null,
     defaultName: 'paired-sta',
   })
 

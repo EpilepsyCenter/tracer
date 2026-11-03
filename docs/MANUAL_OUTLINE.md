@@ -934,6 +934,7 @@ Each burst's window is **extended outward** until the signal returns near its pr
 - `Escape` — close window
 
 ---
+- Dual-site propagation (two channels): setup, pairing, three lags, results tab, export / Batch / Cohort (`prop_*` metrics)
 
 ## 15. Field Potential (fEPSP / LTP)
 

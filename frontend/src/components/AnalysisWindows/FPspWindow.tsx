@@ -1457,6 +1457,7 @@ function FPspMiniViewer({
   const overlayRef = useRef<HTMLCanvasElement>(null)
   const { onContextMenu, menu } = usePlotMenu({
     getCanvas: () => plotRef.current?.ctx?.canvas ?? null,
+    getUplot: () => plotRef.current ?? null,
     defaultName: 'fpsp-trace',
   })
   // Default tuned range (recomputed on each plot rebuild) and the
@@ -1923,7 +1924,9 @@ function FPspOverTimeGraph({
   const plotRef = useRef<uPlot | null>(null)
   const { onContextMenu, menu } = usePlotMenu({
     getCanvas: () => plotRef.current?.ctx?.canvas ?? null,
+    getUplot: () => plotRef.current ?? null,
     defaultName: 'fpsp-over-time',
+    asterism: 'xy',
   })
   const selectedRef = useRef<number | null>(null)
   selectedRef.current = entry?.selectedIdx ?? null
@@ -2404,6 +2407,7 @@ function FPspSweepViewer({
   const plotRef = useRef<uPlot | null>(null)
   const { onContextMenu, menu } = usePlotMenu({
     getCanvas: () => plotRef.current?.ctx?.canvas ?? null,
+    getUplot: () => plotRef.current ?? null,
     defaultName: 'fpsp-sweep',
   })
 
@@ -3182,7 +3186,9 @@ function IOScatter({
   const plotRef = useRef<uPlot | null>(null)
   const { onContextMenu, menu } = usePlotMenu({
     getCanvas: () => plotRef.current?.ctx?.canvas ?? null,
+    getUplot: () => plotRef.current ?? null,
     defaultName: 'fpsp-io-curve',
+    asterism: 'xy',
   })
   // Mirror the selected index into a ref so the draw hook picks up
   // selection changes without having to rebuild the plot — which, if
@@ -3550,7 +3556,9 @@ function PPRScatter({
   const plotRef = useRef<uPlot | null>(null)
   const { onContextMenu, menu } = usePlotMenu({
     getCanvas: () => plotRef.current?.ctx?.canvas ?? null,
+    getUplot: () => plotRef.current ?? null,
     defaultName: 'fpsp-ppr',
+    asterism: 'xy',
   })
   const selectedRef = useRef<number | null>(entry?.selectedIdx ?? null)
   selectedRef.current = entry?.selectedIdx ?? null

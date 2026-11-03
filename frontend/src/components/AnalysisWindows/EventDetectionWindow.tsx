@@ -13,6 +13,7 @@ import {
   Viewport, SetViewport, ViewportBar, ViewportSlider, shiftViewportBy,
 } from '../common/ContinuousViewport'
 import { usePlotMenu } from '../common/PlotMenu'
+import { columnsTable } from '../../utils/plotExport'
 import { useRowSelection, buildTSV } from '../../utils/rowSelection'
 import { useRowCopyMenu } from '../common/RowCopyMenu'
 import { attachHoverCoords } from '../../utils/hoverCoords'
@@ -2340,6 +2341,7 @@ function EventsSweepViewer({
   const selectEvent = useAppStore((s) => s.selectEvent)
   const { onContextMenu: onContextMenuMenu, menu } = usePlotMenu({
     getCanvas: () => plotRef.current?.ctx?.canvas ?? null,
+    getUplot: () => plotRef.current ?? null,
     defaultName: 'events-sweep',
     getExtraItems: () => {
       const e = entryRef.current
@@ -3849,7 +3851,13 @@ function AmplitudeHistogram({
   const plotRef = useRef<uPlot | null>(null)
   const { onContextMenu, menu } = usePlotMenu({
     getCanvas: () => plotRef.current?.ctx?.canvas ?? null,
+    getUplot: () => plotRef.current ?? null,
     defaultName: 'events-amp-hist',
+    // Raw amplitudes (after the group / template filters), not bin counts.
+    asterism: () => stats?.amps?.length
+      ? columnsTable([{ header: `Amplitude (${entry?.units ?? ''})`, values: stats.amps }]) : null,
+    // Drawn in canvas hooks: pictures + ASTERISM table, no vector redraw.
+    vector: false,
   })
 
   const stats = useMemo(() => {
@@ -3879,7 +3887,7 @@ function AmplitudeHistogram({
     const peakCount = Math.max(...counts) || 1
     const gauss = centers.map((x) =>
       peakCount * Math.exp(-0.5 * ((x - m) / s) ** 2))
-    return { centers, counts, gauss, mean: m, sd: s, n, bw, autoBw }
+    return { centers, counts, gauss, mean: m, sd: s, n, bw, autoBw, amps }
   }, [entry, binW, groupFilter, templateFilter])
 
   useEffect(() => {
@@ -4052,7 +4060,9 @@ function EventRatePlot({
   const plotRef = useRef<uPlot | null>(null)
   const { onContextMenu, menu } = usePlotMenu({
     getCanvas: () => plotRef.current?.ctx?.canvas ?? null,
+    getUplot: () => plotRef.current ?? null,
     defaultName: 'events-rate',
+    asterism: 'xy',
   })
 
   const stats = useMemo(() => {
@@ -4213,7 +4223,11 @@ function AmpVsTimeScatter({
   const plotRef = useRef<uPlot | null>(null)
   const { onContextMenu, menu } = usePlotMenu({
     getCanvas: () => plotRef.current?.ctx?.canvas ?? null,
+    getUplot: () => plotRef.current ?? null,
     defaultName: 'events-amp-vs-time',
+    asterism: 'xy',
+    // Drawn in canvas hooks: pictures + ASTERISM table, no vector redraw.
+    vector: false,
   })
 
   const data = useMemo(() => {
@@ -4355,7 +4369,13 @@ function IEIHistogram({
   const plotRef = useRef<uPlot | null>(null)
   const { onContextMenu, menu } = usePlotMenu({
     getCanvas: () => plotRef.current?.ctx?.canvas ?? null,
+    getUplot: () => plotRef.current ?? null,
     defaultName: 'events-iei',
+    // Raw intervals, not bin counts.
+    asterism: () => stats?.iei?.length
+      ? columnsTable([{ header: 'IEI (ms)', values: stats.iei }]) : null,
+    // Drawn in canvas hooks: pictures + ASTERISM table, no vector redraw.
+    vector: false,
   })
 
   const stats = useMemo(() => {
@@ -4388,7 +4408,7 @@ function IEIHistogram({
     const centers = new Array<number>(nBinsFinal)
     for (let i = 0; i < nBinsFinal; i++) centers[i] = lo + (i + 0.5) * bw
     const meanIei = iei.reduce((s, v) => s + v, 0) / iei.length
-    return { centers, counts, bw, n, meanIei }
+    return { centers, counts, bw, n, meanIei, iei }
   }, [entry, binMs, groupFilter, templateFilter])
 
   useEffect(() => {

@@ -2440,7 +2440,9 @@ function APFICurve({
   const plotRef = useRef<uPlot | null>(null)
   const { onContextMenu, menu } = usePlotMenu({
     getCanvas: () => plotRef.current?.ctx?.canvas ?? null,
+    getUplot: () => plotRef.current ?? null,
     defaultName: 'fi-curve',
+    asterism: 'xy',
   })
   const fi = entry.fiCurve
 
@@ -2808,6 +2810,7 @@ function APPhasePlotPanel({
   const plotRef = useRef<uPlot | null>(null)
   const { onContextMenu, menu } = usePlotMenu({
     getCanvas: () => plotRef.current?.ctx?.canvas ?? null,
+    getUplot: () => plotRef.current ?? null,
     defaultName: 'phase-plot',
   })
   // Default 10 ms window — big enough to capture the full AP loop
@@ -3296,6 +3299,7 @@ function APSweepViewer({
   const overlayRef = useRef<HTMLCanvasElement>(null)
   const { onContextMenu, menu } = usePlotMenu({
     getCanvas: () => plotRef.current?.ctx?.canvas ?? null,
+    getUplot: () => plotRef.current ?? null,
     defaultName: 'ap-sweep',
   })
 
@@ -4249,6 +4253,7 @@ function APSpikesOverlayViewer({
   const plotRef = useRef<uPlot | null>(null)
   const { onContextMenu, menu } = usePlotMenu({
     getCanvas: () => plotRef.current?.ctx?.canvas ?? null,
+    getUplot: () => plotRef.current ?? null,
     defaultName: 'ap-spikes-overlay',
   })
   const [windowMs, setWindowMs] = useState(15)

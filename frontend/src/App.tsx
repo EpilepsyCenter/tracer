@@ -14,6 +14,14 @@ import { HelpModal } from './components/HelpModal/HelpModal'
 import { BugReportModal } from './components/BugReportModal/BugReportModal'
 import { useGlobalTooltips } from './hooks/useGlobalTooltips'
 
+// Same rule as the toolbar / start page: text recordings open through
+// the import wizard.
+const TEXT_EXTS = ['.csv', '.tsv', '.txt', '.atf']
+function isTextLikeExt(filePath: string): boolean {
+  const ext = filePath.toLowerCase().match(/\.[^.\\/]+$/)?.[0]
+  return ext != null && TEXT_EXTS.includes(ext)
+}
+
 const MIN_SIDEBAR = 160
 const MIN_TRACE = 200
 
@@ -24,6 +32,7 @@ function clamp(val: number, min: number, max: number) {
 export default function App() {
   const { initBackend } = useAppStore()
   const hasRecording = useAppStore((s) => !!s.recording)
+  const recentFiles = useAppStore((s) => s.recentFiles)
   const { initTheme, setThemePref } = useThemeStore()
   const {
     leftCollapsed, rightCollapsed, focusMode,
@@ -107,13 +116,26 @@ export default function App() {
   // Native menu bar: enable the Analysis items only with a recording
   // open, and route menu commands into the app.
   useEffect(() => {
-    window.electronAPI?.setMenuState?.({ hasRecording })
-  }, [hasRecording])
+    window.electronAPI?.setMenuState?.({ hasRecording, recentFiles })
+  }, [hasRecording, recentFiles])
 
   useEffect(() => {
     const off = window.electronAPI?.onMenuAction?.((action, arg) => {
       switch (action) {
         case 'open-file': window.dispatchEvent(new CustomEvent('menu-open-file')); break
+        case 'open-recent':
+          if (arg) {
+            // Text files go through the import wizard (owned by the
+            // toolbar), exactly like a click in the start page's list.
+            if (isTextLikeExt(arg)) {
+              window.dispatchEvent(new CustomEvent('welcome-open-text', { detail: { filePath: arg } }))
+            } else {
+              useAppStore.getState().openFile(arg).catch(() => { /* error shown by the store */ })
+            }
+          }
+          break
+        case 'clear-recent': useAppStore.getState().clearRecentFiles(); break
+        case 'close-file': useAppStore.getState().closeFile().catch(() => { /* ignore */ }); break
         case 'open-settings': window.dispatchEvent(new CustomEvent('open-settings')); break
         case 'open-scaling': window.dispatchEvent(new CustomEvent('open-scaling-modal', { detail: {} })); break
         case 'open-help': setShowHelp(true); break

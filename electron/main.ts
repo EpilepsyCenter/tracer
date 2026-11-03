@@ -1,4 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, shell, Menu, nativeTheme } from 'electron'
+import { svgToPdf, copyVectorToClipboard } from './vectorExport'
 import type { MenuItemConstructorOptions } from 'electron'
 import { spawn, ChildProcess } from 'child_process'
 import { join, dirname, basename } from 'path'
@@ -117,6 +118,9 @@ const MENU_TOOLS: Array<[string, string]> = [
 ]
 
 let menuHasRecording = false
+/** Recent recordings for File ▸ Open Recent (most recent first), pushed
+ *  from the renderer, which owns the list. */
+let menuRecentFiles: string[] = []
 
 function sendMenuAction(action: string, arg?: string, focusMain = true) {
   if (!mainWindow || mainWindow.isDestroyed()) return
@@ -155,6 +159,27 @@ function buildAppMenu() {
     label: 'File',
     submenu: [
       { label: 'Open…', accelerator: 'CmdOrCtrl+O', click: () => sendMenuAction('open-file') },
+      {
+        label: 'Open Recent',
+        submenu: menuRecentFiles.length === 0
+          ? [{ label: 'No Recent Files', enabled: false }]
+          : [
+            ...menuRecentFiles.slice(0, 10).map((p) => ({
+              // File name first, folder after — the full path is long.
+              label: `${basename(p)}  —  ${dirname(p)}`,
+              click: () => sendMenuAction('open-recent', p),
+            })),
+            { type: 'separator' as const },
+            { label: 'Clear Menu', click: () => sendMenuAction('clear-recent') },
+          ],
+      },
+      {
+        // Not ⌘W: that already closes the focused window (analysis
+        // windows included).
+        label: 'Close Recording',
+        enabled: menuHasRecording,
+        click: () => sendMenuAction('close-file'),
+      },
       { type: 'separator' },
       {
         label: 'Channel Scaling…',
@@ -249,10 +274,13 @@ ipcMain.on('set-theme-source', (_event, pref: ThemePref) => {
   buildAppMenu()
 })
 
-ipcMain.on('set-menu-state', (_event, state: { hasRecording?: boolean }) => {
+ipcMain.on('set-menu-state', (_event, state: { hasRecording?: boolean; recentFiles?: string[] }) => {
   const has = !!state?.hasRecording
-  if (has === menuHasRecording) return
+  const recent = Array.isArray(state?.recentFiles)
+    ? state.recentFiles.filter((p) => typeof p === 'string') : menuRecentFiles
+  if (has === menuHasRecording && recent.join('\n') === menuRecentFiles.join('\n')) return
   menuHasRecording = has
+  menuRecentFiles = recent
   buildAppMenu()
 })
 
@@ -622,6 +650,26 @@ ipcMain.handle('write-binary-file', (_event, targetPath: string, base64: string)
     return { ok: true }
   } catch (err) {
     console.error('Failed to write binary file:', targetPath, err)
+    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+  }
+})
+
+ipcMain.handle('svg-to-pdf', async (_event, svg: string, width: number, height: number) => {
+  try {
+    const pdf = await svgToPdf(svg, width, height, app.getPath('temp'))
+    return { ok: true, base64: pdf.toString('base64') }
+  } catch (err) {
+    console.error('SVG → PDF failed:', err)
+    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+  }
+})
+
+ipcMain.handle('copy-vector', async (_event, svg: string, width: number, height: number) => {
+  try {
+    const format = await copyVectorToClipboard(svg, width, height, app.getPath('temp'))
+    return { ok: true, format }
+  } catch (err) {
+    console.error('Vector copy failed:', err)
     return { ok: false, error: err instanceof Error ? err.message : String(err) }
   }
 })

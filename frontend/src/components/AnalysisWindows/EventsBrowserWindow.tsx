@@ -282,6 +282,7 @@ function EventBrowserPanel({
   const plotRef = useRef<uPlot | null>(null)
   const { onContextMenu, menu } = usePlotMenu({
     getCanvas: () => plotRef.current?.ctx?.canvas ?? null,
+    getUplot: () => plotRef.current ?? null,
     defaultName: 'event-browser',
   })
   const [preMs, setPreMs] = useState(10)
@@ -903,6 +904,7 @@ function AllEventsOverlayPanel({
   const plotRef = useRef<uPlot | null>(null)
   const { onContextMenu, menu } = usePlotMenu({
     getCanvas: () => plotRef.current?.ctx?.canvas ?? null,
+    getUplot: () => plotRef.current ?? null,
     defaultName: 'events-overlay',
   })
   const [data, setData] = useState<{
@@ -1129,7 +1131,9 @@ function AllEventsOverlayPanel({
           stroke: 'rgba(128,128,128,0.35)', width: 0.8, spanGaps: false,
         })
       }
-      seriesDefs.push({ stroke: cssVar('--trace-average'), width: 2, spanGaps: false })
+      // ±SD envelope is painted in a hook; ``vectorBand`` carries it into
+      // vector exports.
+      seriesDefs.push({ stroke: cssVar('--trace-average'), width: 2, spanGaps: false, vectorBand: { lo: dd.sdLo, hi: dd.sdHi, alpha: 0.18 } } as uPlot.Series)
       const opts: uPlot.Options = {
         width: w, height: h,
         legend: { show: false },

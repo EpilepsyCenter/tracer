@@ -60,6 +60,33 @@ interface FileInfo {
   groups: any[]
 }
 
+/** Catches a crash inside one analysis window and shows it, instead of
+ *  leaving a blank window. "Try again" re-mounts the window. */
+class WindowErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { error: Error | null }
+> {
+  state = { error: null as Error | null }
+  static getDerivedStateFromError(error: Error) { return { error } }
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error('Analysis window crashed:', error, info.componentStack)
+  }
+  render() {
+    if (!this.state.error) return this.props.children
+    return (
+      <div style={{ padding: 24, color: 'var(--text-primary)', fontSize: 'var(--font-size-label)' }}>
+        <div className="notice notice-error" style={{ marginBottom: 12 }}>
+          This window hit an error and stopped drawing.
+        </div>
+        <pre style={{ whiteSpace: 'pre-wrap', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+          {String(this.state.error?.message ?? this.state.error)}
+        </pre>
+        <button className="btn" onClick={() => this.setState({ error: null })}>Try again</button>
+      </div>
+    )
+  }
+}
+
 export function AnalysisWindow({ view }: { view: string }) {
   const { initTheme } = useThemeStore()
   const [backendUrl, setBackendUrl] = useState('')
@@ -169,6 +196,9 @@ export function AnalysisWindow({ view }: { view: string }) {
           if (ev.data.burstFormParams) {
             useAppStore.setState({ burstFormParams: ev.data.burstFormParams })
           }
+          if (ev.data.burstDualForm) {
+            useAppStore.setState({ burstDualForm: ev.data.burstDualForm })
+          }
           if (ev.data.trainParams) {
             useAppStore.setState({ trainParams: ev.data.trainParams })
           }
@@ -277,6 +307,9 @@ export function AnalysisWindow({ view }: { view: string }) {
         }
         // Burst-detection form-state broadcast from another window (e.g.
         // the main window pushing freshly-loaded prefs on file open).
+        if (ev.data?.type === 'burst-dual-form-update' && ev.data.burstDualForm) {
+          useAppStore.setState({ burstDualForm: ev.data.burstDualForm })
+        }
         if (ev.data?.type === 'burst-form-params-update' && ev.data.burstFormParams) {
           useAppStore.setState({ burstFormParams: ev.data.burstFormParams })
         }
@@ -357,6 +390,7 @@ export function AnalysisWindow({ view }: { view: string }) {
       {/* Analysis content. Each window is its own lazy chunk —
           Suspense covers the brief disk read + parse on first open. */}
       <div style={{ flex: 1, overflow: 'auto' }}>
+        <WindowErrorBoundary>
         <Suspense fallback={
           <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -498,6 +532,7 @@ export function AnalysisWindow({ view }: { view: string }) {
           </div>
         )}
         </Suspense>
+        </WindowErrorBoundary>
       </div>
     </div>
   )

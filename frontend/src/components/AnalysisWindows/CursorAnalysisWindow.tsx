@@ -1201,6 +1201,7 @@ function MiniViewer({
   const plotRef = useRef<uPlot | null>(null)
   const { onContextMenu: onPlotContextMenu, menu: plotMenu } = usePlotMenu({
     getCanvas: () => plotRef.current?.ctx?.canvas ?? null,
+    getUplot: () => plotRef.current ?? null,
     defaultName: 'cursor-trace',
   })
   // Latest state ref so hook callbacks (drawBands, drawFits, event

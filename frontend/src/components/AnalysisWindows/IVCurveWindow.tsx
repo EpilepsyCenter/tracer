@@ -843,7 +843,9 @@ function IVPlot({
   const plotRef = useRef<uPlot | null>(null)
   const { onContextMenu, menu } = usePlotMenu({
     getCanvas: () => plotRef.current?.ctx?.canvas ?? null,
+    getUplot: () => plotRef.current ?? null,
     defaultName: 'iv-curve',
+    asterism: 'xy',
   })
   const selectedRef = useRef<number | null>(null)
   selectedRef.current = entry?.selectedIdx ?? null
@@ -942,6 +944,7 @@ function IVPlot({
           points: { size: 6, stroke: cssVar('--trace-color-1'), fill: cssVar('--bg-surface') },
         },
         {
+          label: 'Fit',
           stroke: cssVar('--accent'),
           width: 1,
           dash: [4, 4],
@@ -1223,6 +1226,7 @@ function TraceMiniViewer({
   const plotRef = useRef<uPlot | null>(null)
   const { onContextMenu, menu } = usePlotMenu({
     getCanvas: () => plotRef.current?.ctx?.canvas ?? null,
+    getUplot: () => plotRef.current ?? null,
     defaultName: 'iv-trace',
   })
 

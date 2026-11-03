@@ -725,6 +725,7 @@ function TemplateGeneratorViewer({
   const plotRef = useRef<uPlot | null>(null)
   const { onContextMenu, menu } = usePlotMenu({
     getCanvas: () => plotRef.current?.ctx?.canvas ?? null,
+    getUplot: () => plotRef.current ?? null,
     defaultName: 'events-template-gen',
   })
   const cursorsRef = useRef(cursors)

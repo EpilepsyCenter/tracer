@@ -71,6 +71,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // decodes once and writes.
   writeBinaryFile: (targetPath: string, base64: string): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke('write-binary-file', targetPath, base64),
+
+  // Vector figures from the plot right-click menu: SVG → PDF (base64),
+  // and a vector copy to the clipboard (PDF on macOS, SVG elsewhere).
+  svgToPdf: (svg: string, width: number, height: number): Promise<{ ok: boolean; base64?: string; error?: string }> =>
+    ipcRenderer.invoke('svg-to-pdf', svg, width, height),
+  copyVector: (svg: string, width: number, height: number): Promise<{ ok: boolean; format?: 'pdf' | 'svg'; error?: string }> =>
+    ipcRenderer.invoke('copy-vector', svg, width, height),
   getPreferences: (): Promise<Record<string, unknown>> => ipcRenderer.invoke('get-preferences'),
   setPreferences: (prefs: Record<string, unknown>): Promise<boolean> => ipcRenderer.invoke('set-preferences', prefs),
 
@@ -135,7 +142,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   // Native menu bar
-  setMenuState: (state: { hasRecording?: boolean }): void => {
+  setMenuState: (state: { hasRecording?: boolean; recentFiles?: string[] }): void => {
     ipcRenderer.send('set-menu-state', state)
   },
   onMenuAction: (callback: (action: string, arg?: string) => void) => {

@@ -108,7 +108,12 @@ The toolbar's **Open…** button has a small chevron (▾) next to
 it that opens a list of recently opened files, most recent first.
 Clicking an entry reopens that file directly. The list holds up to
 ten entries and survives between sessions; **Clear recent** at the
-bottom of the list empties it.
+bottom of the list empties it. The same list is in the menu bar under
+**File ▸ Open Recent**, with **Clear Menu** at the bottom.
+
+To close the current recording and go back to the start page, choose
+**File ▸ Close Recording**. Any analysis changes not yet saved to the
+recording's `.tracer` file are saved first.
 
 ![Recent files dropdown](screenshots/toolbar-open-file-dropdown.png)
 
@@ -157,7 +162,8 @@ form; otherwise leave it blank to stay anonymous.
 TRACER has a standard menu bar — at the top of the screen on macOS,
 inside the window on Windows and Linux:
 
-- **File** — **Open…** (`⌘O` / `Ctrl+O`) and **Channel Scaling…**
+- **File** — **Open…** (`⌘O` / `Ctrl+O`), **Open Recent**, **Close
+  Recording** (back to the start page) and **Channel Scaling…**
   (the per-channel units and scaling dialog described below). On
   Windows and Linux, **Settings…** (`Ctrl+,`) is here too; on macOS
   it is under the **TRACER** menu (`⌘,`).
@@ -519,20 +525,46 @@ toggle (or the `Z` shortcut):
   viewer zooms into it on release. Useful for picking out a precise
   time-and-amplitude window in a single gesture.
 
-**Right-clicking** the trace opens a small context menu with two
-entries:
+**Right-clicking** a plot, here or in any analysis window, opens a
+context menu:
 
-- **Copy PNG** — copies the current view to the clipboard as a
-  raster image.
-- **Save PNG…** — writes a PNG to disk via a file dialog.
+- **Copy vector**: copies the plot as a vector drawing. On macOS it
+  goes on the clipboard as PDF, which Affinity, Illustrator, Word and
+  Keynote paste as editable paths and text. On Windows and Linux it is
+  copied as SVG.
+- **Save PDF…** / **Save SVG…**: the same vector drawing as a file.
+- **Copy PNG** / **Save PNG…**: a picture at the displayed resolution.
 
-Both export at the displayed resolution. The trace viewer does not
-offer vector export from this menu — for publication-ready figures
-with multiple sweeps, scale bars, and annotations, use the **Export
-Traces** window described in chapter 17, which writes vector SVG
-and PDF. (Cohort statistics plots are the one exception: their
-right-click menu also offers SVG, because the plot is rendered as
-SVG by the backend.)
+The vector drawing contains the traces (or points and bars), shaded
+SD / SEM bands and the axes with their ticks and labels, in black on
+white. The app's own overlays (cursors, detection markers, region
+shading) are left out, so what you paste is the data. Colours keep
+their on-screen values; recolour them in your drawing program. For
+figures with several sweeps, scale bars and a fixed layout, the
+**Export Traces** window (chapter 18) is still the better tool.
+
+Plots of computed results also offer:
+
+- **Export for ASTERISM…**: saves the plotted numbers as a CSV table
+  that ASTERISM imports directly. XY plots give an X column plus one
+  named column per curve (choose an XY table on import). Histograms
+  give the raw values (amplitudes, intervals, lags), not bin counts,
+  so ASTERISM can bin them itself.
+- **Copy values**: the same numbers without the header row, to paste
+  into an ASTERISM table you have already made.
+
+These plots offer the ASTERISM export: I-V curve; fEPSP time
+course, input–output and paired-pulse ratio; F–I curve; firing rate
+and ISI histogram; event amplitude histogram, rate, amplitude vs time
+and IEI histogram; the paired trial sequence; the power spectrum and
+band power over time; and the propagation lag histogram. Each export
+covers one recording. To compare groups, export each recording and
+combine them in ASTERISM, where columns with the same name become
+replicates, so *n* counts recordings rather than events.
+
+A few plots are drawn directly on the canvas (the event amplitude
+histogram, amplitude vs time and IEI histogram); they offer the
+picture and ASTERISM exports but not vector copy.
 
 ![Right-click context menu](screenshots/trace-viewer-right-click-menu.png)
 
@@ -3008,10 +3040,106 @@ prefixed with `*` in the table, and are drawn with an outer ring.
 
 Burst results, the manual-edits set, and the form parameters for
 each method are stored per *(group, series)* in the recording's
-sidecar. Crucially, **each method's last-used parameters are kept
+sidecar. The second-channel setup, the partner channel's bursts and the
+last propagation result are stored there too. Crucially, **each method's last-used parameters are kept
 independently** — switching to *Oscillation*, tuning its
 parameters, switching to *Threshold*, and coming back to
 *Oscillation* finds the parameters exactly as you left them.
+
+### Dual-site propagation (two channels)
+
+With two field electrodes recorded at the same time, for example in
+CA3 and CA1, the window can detect discharges on both channels, pair
+them, and measure how each one travels from one site to the other.
+
+**Setting up.** In the **Second channel** card, tick **Dual-site
+propagation** and choose the **Partner channel**. The channel picked in
+the top bar is the reference. Give both a name (default `CA3` → `CA1`);
+the names appear in the viewers, tables, exports and Cohort details. A
+**Detection for** switch above the method picks which channel the
+detection settings edit. Each channel has its own method, filter,
+threshold and polarity, and the partner starts as a copy of the
+reference. **Run** detects on both channels.
+
+The second trace appears under the first, on the same time axis; both
+move together. Add and remove discharges on either trace by hand, as
+usual. Propagation updates by itself a moment after any detection or
+edit, so the pairs always reflect the curated lists.
+
+**Pairing.** A partner discharge is paired with a reference discharge
+when their **peaks** are within the **Pairing window** (default
+±100 ms) on the same sweep. The closest peaks are paired first, one to
+one, so a busy stretch can't chain into mismatches. Peaks are used
+rather than the detector's start times, because the detector extends a
+discharge's start back to wherever the signal returns to baseline, and
+that can differ by 100 ms or more between two channels for the same
+discharge. A reference discharge
+with no partner counts as "not reached"; a partner discharge with no
+reference counts as "partner only".
+
+**Three lags.** Every lag is *partner − reference*, so a positive
+lag means the reference site fires first.
+
+| Measure | How |
+|---|---|
+| **Cross-correlation** (default) | Shifts the partner's waveform against the reference's, from the **Waveform window** before onset to the end of the discharge (capped), and takes the best match, refined below one sample. Uses the whole shape, so it is the most robust. |
+| **Onset** | Difference of the times each discharge first rises to 20 % of its peak above its pre-discharge baseline, on the pre-filtered signal. |
+| **Peak** | Difference of peak times; broad peaks make it noisy. |
+
+All three are always computed. **Main lag measure** picks the one used
+for the histogram, the "leads" share and Cohort's lag distribution.
+**Polarity** handles electrodes in different layers: *Auto* flips the
+partner per discharge when the two detected peaks have opposite signs.
+Cross-correlation runs on each channel's pre-filtered signal, the one
+you see and curate on.
+
+A pair whose best match sits at the edge of the pairing window is
+marked *at limit* and left out of the lag statistics; widen the
+window if you see many.
+
+**Results.** With two channels, the results area has three tabs: each
+channel's bursts, and **Propagation**, which shows:
+
+- discharges per channel, pairs, the share of reference discharges
+  that reached the partner, partner-only discharges (count and rate),
+  the median lag with its interquartile range, the share of pairs in
+  which the reference leads, and the median amplitude ratio;
+- a histogram of the main lag;
+- the average waveform of both channels aligned to the reference
+  onset (mean ± SEM; the partner is sign-flipped when its polarity is
+  opposite);
+- a table of pairs. Click a row to show it in the viewers; select
+  rows and right-click to **Copy as TSV**.
+
+On the traces, the partner viewer draws a bracket from each reference
+peak to where the partner lines up, labelled with the lag. Unpaired
+discharges get a small flag. In the main window, when both channels
+are shown, each channel's discharges are marked on its own trace.
+
+Two channels run with the same detection settings can still detect
+slightly different discharges: the threshold is relative to each
+channel's own noise level, so events near threshold may cross on one
+channel only. These show up as "partner only" or "not reached"; check
+them on the traces and add or remove discharges by hand where needed.
+
+**Export, Batch and Cohort.** **Export CSV** on the Propagation tab
+writes one row per pair (both times, the three lags, match quality,
+amplitudes, polarity), then the unpaired discharges of each channel.
+Batch copies a template's second-channel setup (partner channel, its
+detection settings, names and pairing settings) to every target, then
+detects and pairs. Cohort's **Bursts** analysis adds, for series with
+a second channel:
+
+- `prop_fraction`
+- `prop_lag_xcorr_median_ms`, `prop_lag_onset_median_ms`, `prop_lag_peak_median_ms`, each with an `_iqr_ms` partner metric
+- `prop_ref_leads_fraction`
+- `prop_partner_only_per_min`
+- `prop_amp_ratio_median`
+- `prop_xcorr_r_median`
+- `n_partner_bursts`, `n_pairs`
+- the per-pair main lag as the distribution `prop_lag_ms`
+
+Train grouping applies to the reference channel only.
 
 The window's left-panel width and viewer height live in the
 global preferences file.
@@ -3443,9 +3571,8 @@ A small header above the plot gives you:
   averaged trace and overlay it as a dashed line, with τ shown
   in the header.
 
-Right-click the plot for the standard Copy / Save PNG context
-menu (this viewer is canvas-based, so vector export is not
-offered here — use **Trace Export** for vector figures).
+Right-click the plot for the standard menu: vector copy, PDF / SVG
+and PNG (see chapter 4).
 
 ![STA tab — mean ± SEM with monoexponential decay fit](screenshots/paired-window-sta-tab.png)
 
@@ -4452,7 +4579,10 @@ behind the lines.
 **Band power** lists, per region: duration analysed, sweeps and
 segments used, RMS, total power, dominant frequency, then every
 band's power with its share of total power. Hover a band value for
-its peak frequency.
+its peak frequency. Select rows (click, shift-click, ⌘-click) and
+right-click to **Copy as TSV**, as in the other results tables; a
+"power and share" row copies as separate rows so each cell holds one
+number.
 
 If you change settings, regions or excluded sweeps after a run, an
 amber notice says the results are out of date, with a **Run again**

@@ -150,6 +150,7 @@ export function ResistanceWindow({
   const tracePlotRef = useRef<uPlot | null>(null)
   const { onContextMenu: onResContextMenu, menu: resPlotMenu } = usePlotMenu({
     getCanvas: () => tracePlotRef.current?.ctx?.canvas ?? null,
+    getUplot: () => tracePlotRef.current ?? null,
     defaultName: 'resistance-trace',
   })
 

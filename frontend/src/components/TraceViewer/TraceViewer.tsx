@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react'
 import uPlot from 'uplot'
 import 'uplot/dist/uPlot.min.css'
-import { useAppStore, CursorPositions, STIMULUS_TRACE_INDEX } from '../../stores/appStore'
+import { useAppStore, CursorPositions, STIMULUS_TRACE_INDEX, type BurstRecord } from '../../stores/appStore'
 import { useThemeStore } from '../../stores/themeStore'
 import { ViewportBar, ViewportSlider } from './ViewportBar'
 import { usePlotMenu } from '../common/PlotMenu'
@@ -51,6 +51,23 @@ const CURSOR_DEFS: {
 
 const SNAP_PX = 8
 
+/** Linear interpolation of (srcT, srcV) onto ``time``; null outside the
+ *  source's time span. Both time arrays are ascending. */
+function interpolateOnto(time: number[], srcT: Float64Array, srcV: Float64Array): (number | null)[] {
+  const out: (number | null)[] = new Array(time.length).fill(null)
+  const n = Math.min(srcT.length, srcV.length)
+  if (n === 0) return out
+  let j = 0
+  for (let i = 0; i < time.length; i++) {
+    const t = time[i]
+    if (t < srcT[0] || t > srcT[n - 1]) continue
+    while (j < n - 2 && srcT[j + 1] < t) j++
+    const t0 = srcT[j], t1 = srcT[j + 1] ?? t0
+    out[i] = t1 > t0 ? srcV[j] + ((t - t0) / (t1 - t0)) * (srcV[j + 1] - srcV[j]) : srcV[j]
+  }
+  return out
+}
+
 export function TraceViewer() {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -79,6 +96,8 @@ export function TraceViewer() {
   // counting-only (no kinetics) AP markers, so we can look up the
   // y-value at a peak time without relying on react render cycles.
   const traceDataRef = useRef(useAppStore.getState().traceData)
+  /** Recorded channel index → uPlot series index of the current plot. */
+  const channelSeriesRef = useRef<Record<number, number>>({})
   const showCoordinatesRef = useRef(useAppStore.getState().showCoordinates)
   const coordTooltipRef = useRef<HTMLDivElement>(null)
 
@@ -236,7 +255,42 @@ export function TraceViewer() {
     if (!showBurstMarkersRef.current) return
     const st = useAppStore.getState()
     const fbKey = `${st.currentGroup}:${st.currentSeries}`
-    const fb = fieldBurstsRef.current[fbKey]
+    let fb = fieldBurstsRef.current[fbKey]
+    // Dual-site: the OTHER channel's discharges, drawn on that channel's
+    // trace when it is shown as an additional channel.
+    const rawFb = fb
+    type OtherChannel = {
+      bursts: BurstRecord[]; channel: number
+      baselineValue: number; thresholdHigh: number | null; thresholdLow: number | null
+    }
+    const otherBursts: OtherChannel | null =
+      rawFb?.partner
+        ? (st.currentTrace === rawFb.partner.channel && st.currentTrace !== rawFb.channel
+          ? {
+            bursts: rawFb.bursts, channel: rawFb.channel, baselineValue: rawFb.baselineValue,
+            thresholdHigh: rawFb.thresholdHigh, thresholdLow: rawFb.thresholdLow,
+          }
+          : st.currentTrace === rawFb.channel
+            ? {
+              bursts: rawFb.partner.bursts, channel: rawFb.partner.channel,
+              baselineValue: rawFb.partner.baselineValue,
+              thresholdHigh: rawFb.partner.thresholdHigh, thresholdLow: rawFb.partner.thresholdLow,
+            }
+            : null)
+        : null
+    // Dual-site: when the partner channel is on screen, draw its own
+    // discharges rather than the reference channel's.
+    if (fb?.partner && st.currentTrace === fb.partner.channel && st.currentTrace !== fb.channel) {
+      fb = {
+        ...fb,
+        channel: fb.partner.channel,
+        bursts: fb.partner.bursts,
+        baselineValue: fb.partner.baselineValue,
+        thresholdHigh: fb.partner.thresholdHigh,
+        thresholdLow: fb.partner.thresholdLow,
+        selectedIdx: null,
+      }
+    }
     const yOffset = st.zeroOffset ? st.currentZeroOffset : 0
     if (fb) {
       // Horizontal dashed lines spanning the plot: detection baseline and
@@ -350,6 +404,80 @@ export function TraceViewer() {
         ctx.stroke()
         ctx.setLineDash([])
         ctx.restore()
+      }
+    }
+
+    // Dual-site: the other channel's baseline / thresholds and its
+    // discharges' start / peak / end dots, on that channel's own axis.
+    // Lines carry raw values: shift by that channel's zero offset; dots
+    // are sampled from its displayed trace.
+    const otherIdx = otherBursts ? channelSeriesRef.current[otherBursts.channel] : undefined
+    if (showBurstMarkersRef.current && otherBursts && otherIdx != null
+        && u.data[otherIdx] && u.series[otherIdx]?.show !== false) {
+      const xs = u.data[0] as unknown as number[]
+      const ys = u.data[otherIdx] as unknown as number[]
+      const scaleKey = u.series[otherIdx].scale ?? 'y'
+      const otherTd = useAppStore.getState().additionalTraces[otherBursts.channel]
+      const yOff2 = st.zeroOffset ? Number(otherTd?.zeroOffset ?? 0) : 0
+      const name = otherTd?.label || `Ch ${otherBursts.channel + 1}`
+      // Labels go at the right edge so they don't collide with the
+      // primary channel's labels on the left.
+      const hLine2 = (y: number, color: string, label: string) => {
+        const py = u.valToPos(y - yOff2, scaleKey, true) / dpr
+        if (!isFinite(py)) return
+        ctx.strokeStyle = color
+        ctx.lineWidth = 1
+        ctx.setLineDash([2, 4])
+        ctx.beginPath()
+        ctx.moveTo(bx, py)
+        ctx.lineTo(bx + bw, py)
+        ctx.stroke()
+        ctx.setLineDash([])
+        ctx.fillStyle = color
+        ctx.font = `${cssVar('--font-size-label')} ${cssVar('--font-ui')}`
+        const tw = ctx.measureText(label).width
+        ctx.fillText(label, bx + bw - tw - 4, py - 3)
+      }
+      ctx.save()
+      ctx.globalAlpha = 0.8
+      hLine2(otherBursts.baselineValue, cssVar('--text-muted'), `${name} baseline`)
+      ctx.restore()
+      ctx.save()
+      ctx.globalAlpha = 0.7
+      if (otherBursts.thresholdHigh != null) {
+        hLine2(otherBursts.thresholdHigh, cssVar('--marker-detected'), `${name} thr ↑`)
+      }
+      if (otherBursts.thresholdLow != null && otherBursts.thresholdLow !== otherBursts.thresholdHigh) {
+        hLine2(otherBursts.thresholdLow, cssVar('--marker-detected'), `${name} thr ↓`)
+      }
+      ctx.restore()
+      const xMin = u.scales.x?.min ?? -Infinity
+      const xMax = u.scales.x?.max ?? Infinity
+      const sweep = currentSweepRef.current
+      const outline = cssVar('--marker-outline')
+      const dot = (t: number, color: string) => {
+        const yv = sampleTraceYAt(xs, ys, t)
+        if (yv == null) return
+        const px = u.valToPos(t, 'x', true) / dpr
+        const py = u.valToPos(yv, scaleKey, true) / dpr
+        if (!isFinite(px) || !isFinite(py)) return
+        ctx.beginPath()
+        ctx.arc(px, py, 4, 0, 2 * Math.PI)
+        ctx.fillStyle = color
+        ctx.fill()
+        ctx.save()
+        ctx.strokeStyle = outline
+        ctx.globalAlpha = 0.6
+        ctx.lineWidth = 1
+        ctx.stroke()
+        ctx.restore()
+      }
+      for (const b of otherBursts.bursts) {
+        if (b.sweepIndex !== sweep || b.endS < xMin || b.startS > xMax) continue
+        dot(b.startS, cssVar('--text-muted'))
+        dot(b.peakTimeS, cssVar('--marker-detected'))
+        if (b.decayHalfTimeMs != null) dot(b.peakTimeS + b.decayHalfTimeMs / 1000, cssVar('--cursor-peak'))
+        dot(b.endS, cssVar('--success'))
       }
     }
 
@@ -609,6 +737,7 @@ export function TraceViewer() {
     const time = Array.from(traceData.time)
     const columns: number[][] = [time]
     const seriesOpts: uPlot.Series[] = [{}]
+    channelSeriesRef.current = { [currentTrace]: 1 }
 
     // Zero offset is now applied server-side (per-sweep, from the first ~3ms
     // of the full sweep) — frontend does no subtraction of its own.
@@ -629,23 +758,32 @@ export function TraceViewer() {
 
     // Additional recorded channels the user has turned on.
     const primaryUnits = traceData.units || ''
+    // When every extra channel has the primary's units (e.g. CA3 + CA1
+    // field channels, both mV), they get the right-hand axis so they can
+    // be dragged on their own. With mixed units, keep the long-standing
+    // rule: same units share the left axis, other units go right.
+    const extraUnits = visibleTracesForSeries
+      .filter((chIdx) => chIdx >= 0 && chIdx !== currentTrace && additionalTraces[chIdx])
+      .map((chIdx) => additionalTraces[chIdx].units || '')
+    const allExtraSameUnits = extraUnits.length > 0 && extraUnits.every((u) => u === primaryUnits)
     for (const chIdx of visibleTracesForSeries) {
       if (chIdx < 0 || chIdx === currentTrace) continue
       const td = additionalTraces[chIdx]
       if (!td) continue  // fetch may still be in flight
-      // Align to the primary time array by index (backend returns same length
-      // decimation for the same viewport). If lengths differ (rare edge on
-      // boundary fetches), pad with nulls.
-      const vals = new Array(time.length)
-      const src = td.values
-      for (let i = 0; i < time.length; i++) vals[i] = i < src.length ? src[i] : null
-      columns.push(vals)
+      // Place the channel on the primary time axis BY TIME. Each channel
+      // is decimated (LTTB) on its own, so the i-th point of two channels
+      // is not the same instant — index alignment could shift a channel
+      // by up to one display bucket (e.g. ~15 ms in a 1 min view).
+      columns.push(interpolateOnto(time, td.time, td.values) as any)
+      channelSeriesRef.current[chIdx] = columns.length - 1
       const sameUnits = (td.units || '') === primaryUnits
       seriesOpts.push({
         label: td.label || `Ch ${chIdx + 1}`,
         stroke: colorForChannel(chIdx),
         width: 1.25,
-        scale: sameUnits ? 'y' : 'y_alt',
+        // Same-unit-only case: own (right) axis, starting on the
+        // primary's range (see the y / y_alt range hooks).
+        scale: allExtraSameUnits || !sameUnits ? 'y_alt' : 'y',
       } as uPlot.Series)
     }
 
@@ -773,6 +911,7 @@ export function TraceViewer() {
     : 'trace'
   const { onContextMenu: onPlotContextMenu, menu: plotMenu } = usePlotMenu({
     getCanvas: () => plotRef.current?.ctx?.canvas ?? null,
+    getUplot: () => plotRef.current ?? null,
     defaultName: baseName,
   })
 
@@ -825,6 +964,35 @@ export function TraceViewer() {
       },
     ]
 
+    // Columns per scale, and whether the right-axis channels share the
+    // primary's units (then both axes start on one common range).
+    const primaryCols = seriesOpts
+      .map((so, i) => ((so as any).scale === 'y' ? i : -1)).filter((i) => i > 0)
+    const altCols = seriesOpts
+      .map((so, i) => ((so as any).scale === 'y_alt' ? i : -1)).filter((i) => i > 0)
+    const sharedUnits = altCols.length > 0 && visibleTracesForSeries
+      .filter((chIdx) => chIdx >= 0 && chIdx !== currentTrace && additionalTraces[chIdx])
+      .every((chIdx) => (additionalTraces[chIdx].units || '') === (traceData.units || ''))
+      ? altCols : []
+    const colExtent = (cols: number[]): [number, number] => {
+      let lo = Infinity, hi = -Infinity
+      for (const c of cols) {
+        const arr = data[c] as (number | null)[] | undefined
+        if (!arr) continue
+        for (const v of arr) {
+          if (v == null || !isFinite(v)) continue
+          if (v < lo) lo = v
+          if (v > hi) hi = v
+        }
+      }
+      return [lo, hi]
+    }
+    const widen = (lo: number, hi: number, ext: [number, number]): [number, number] => {
+      const a = Math.min(isFinite(lo) ? lo : Infinity, ext[0])
+      const b = Math.max(isFinite(hi) ? hi : -Infinity, ext[1])
+      return isFinite(a) && isFinite(b) ? [a, b] : [lo, hi]
+    }
+
     // Build scales object. The `stim` scale is only present when needed.
     //
     // X and Y `range` hooks read the CURRENT store on every call (not a
@@ -844,7 +1012,12 @@ export function TraceViewer() {
         },
       },
       y: {
-        range: (_u, dataMin, dataMax) => {
+        range: (_u, dataMinRaw, dataMaxRaw) => {
+          // Same-unit extra channels live on y_alt but start on the same
+          // range as the primary: widen by their data until either axis is
+          // dragged (saved ranges below take over).
+          const [dataMin, dataMax] = sharedUnits.length > 0
+            ? widen(dataMinRaw, dataMaxRaw, colExtent(altCols)) : [dataMinRaw, dataMaxRaw]
           const savedY = useAppStore.getState().getSeriesAxisRange(currentGroup, currentSeries)?.y
           if (savedY) {
             // Sanity check: if the saved range doesn't cover any of the data
@@ -888,23 +1061,19 @@ export function TraceViewer() {
     // scale name is already assigned in buildSeriesData.)
     const hasAltScale = seriesOpts.some((s) => (s as any).scale === 'y_alt')
     if (hasAltScale) {
-      // Find the first series on 'y_alt' to label the axis with its units.
-      const altSeriesIdx = seriesOpts.findIndex((s) => (s as any).scale === 'y_alt')
-      const altCols: any = data[altSeriesIdx]
-      void altCols  // unused — kept for clarity
-      // We don't know per-series units inside here, but additionalTraces
-      // does. Find the first additional channel with different units.
-      let altUnits = ''
-      for (const chIdx of visibleTracesForSeries) {
-        if (chIdx < 0 || chIdx === currentTrace) continue
-        const td = additionalTraces[chIdx]
-        if (td && td.units !== traceData.units) {
-          altUnits = td.units
-          break
-        }
-      }
+      // Label the right axis: the channel's name when there is exactly one
+      // extra channel (e.g. "CA1 (mV)"), otherwise the units.
+      const altTds = visibleTracesForSeries
+        .filter((chIdx) => chIdx >= 0 && chIdx !== currentTrace && additionalTraces[chIdx])
+        .map((chIdx) => additionalTraces[chIdx])
+      const altUnits = altTds.find((td) => td.units !== traceData.units)?.units ?? altTds[0]?.units ?? ''
+      const altLabel = altTds.length === 1
+        ? `${altTds[0].label || 'Ch'}${altTds[0].units ? ` (${altTds[0].units})` : ''}`
+        : altUnits
       scales.y_alt = {
-        range: (_u, dataMin, dataMax) => {
+        range: (_u, dataMinRaw, dataMaxRaw) => {
+          const [dataMin, dataMax] = sharedUnits.length > 0
+            ? widen(dataMinRaw, dataMaxRaw, colExtent(primaryCols)) : [dataMinRaw, dataMaxRaw]
           const savedAlt = useAppStore.getState()
             .getSeriesAxisRange(currentGroup, currentSeries)?.y_alt
           if (savedAlt) {
@@ -917,6 +1086,23 @@ export function TraceViewer() {
               return [savedAlt.min, savedAlt.max]
             }
           }
+          // Same units, not dragged yet: the same default the primary axis
+          // uses (common data range, or symmetric around 0 with zero
+          // offset), computed from the data — NOT from the primary's saved
+          // range, so dragging one axis never moves the other.
+          // First draw with a saved primary range: start aligned with it.
+          // (Each axis's range is saved on its first draw, so from then on
+          // dragging one never moves the other.)
+          const savedYForAlt = sharedUnits.length > 0
+            ? useAppStore.getState().getSeriesAxisRange(currentGroup, currentSeries)?.y : undefined
+          if (savedYForAlt && !(dataMax < savedYForAlt.min || dataMin > savedYForAlt.max)) {
+            return [savedYForAlt.min, savedYForAlt.max]
+          }
+          if (sharedUnits.length > 0 && zeroOffset) {
+            const [pLo, pHi] = colExtent(primaryCols.slice(0, 1))
+            const pad = Math.max(Math.abs(pLo), Math.abs(pHi)) * 1.1 || 1
+            if (isFinite(pad)) return [-pad, pad]
+          }
           return [dataMin, dataMax]
         },
       }
@@ -924,7 +1110,7 @@ export function TraceViewer() {
         stroke: cssVar('--chart-axis'),
         grid: { show: false },
         ticks: { stroke: cssVar('--chart-tick'), width: 1 },
-        label: altUnits || 'Alt',
+        label: altLabel || 'Alt',
         labelSize: 16,
         font: `500 ${cssVar('--font-size-sm')} ${cssVar('--font-ui')}`,
         labelFont: `600 ${cssVar('--font-size-sm')} ${cssVar('--font-ui')}`,
@@ -935,7 +1121,7 @@ export function TraceViewer() {
       // auto-zoom button can render. Setting state during the build
       // is safe because uPlot rebuild itself is debounced via the
       // outer useEffect — this is essentially the rebuild commit.
-      if (altScaleUnits !== altUnits) setAltScaleUnits(altUnits || 'Alt')
+      if (altScaleUnits !== (altLabel || 'Alt')) setAltScaleUnits(altLabel || 'Alt')
     } else if (altScaleUnits !== null) {
       setAltScaleUnits(null)
     }

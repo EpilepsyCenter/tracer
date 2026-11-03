@@ -676,6 +676,41 @@ def extract_iv(slice_data: dict, sidecar: dict) -> CellExtraction:
 # Bursts extractor (field bursts, ISI bursts, threshold bursts)
 # ---------------------------------------------------------------------
 
+def _add_propagation(slice_data: dict, scalars: dict, distributions: dict, meta: dict) -> None:
+    """Dual-site burst propagation metrics (Burst window with a second
+    channel). Lags are partner − reference, so positive = the reference
+    channel (e.g. CA3) leads. Names are channel-neutral (``prop_*``); the
+    channel names the user gave go into ``meta``."""
+    block = slice_data.get('propagation') or {}
+    res = block.get('result') or {}
+    s = res.get('summary') or {}
+    if not slice_data.get('partner') or not s:
+        return
+    lag = s.get('lagMs') or {}
+    for m in ('xcorr', 'onset', 'peak'):
+        st = lag.get(m) or {}
+        scalars[f'prop_lag_{m}_median_ms'] = st.get('median')
+        scalars[f'prop_lag_{m}_iqr_ms'] = (
+            st['q75'] - st['q25'] if st.get('q75') is not None and st.get('q25') is not None else None)
+    scalars['prop_fraction'] = s.get('propagationFraction')
+    scalars['prop_ref_leads_fraction'] = s.get('refLeadsFraction')
+    scalars['prop_partner_only_per_min'] = s.get('partnerOnlyPerMin')
+    scalars['prop_partner_only_fraction'] = s.get('partnerOnlyFraction')
+    scalars['prop_amp_ratio_median'] = (s.get('ampRatio') or {}).get('median')
+    scalars['prop_xcorr_r_median'] = (s.get('xcorrR') or {}).get('median')
+    scalars['n_partner_bursts'] = float(s.get('nPartner') or 0)
+    scalars['n_pairs'] = float(s.get('nPairs') or 0)
+    primary = s.get('primary') or 'xcorr'
+    key = {'xcorr': 'xcorrLagMs', 'onset': 'onsetLagMs', 'peak': 'peakLagMs'}.get(primary, 'xcorrLagMs')
+    distributions['prop_lag_ms'] = _clean([p.get(key) for p in res.get('pairs') or []])
+    meta['propagation'] = {
+        'ref_label': block.get('refLabel'), 'partner_label': block.get('partnerLabel'),
+        'partner_channel': (slice_data.get('partner') or {}).get('channel'),
+        'primary_lag': primary, 'lag_sign': 'partner minus reference',
+    }
+    meta['distribution_counts'] = {k: len(v) for k, v in distributions.items()}
+
+
 def extract_bursts(slice_data: dict, sidecar: dict) -> CellExtraction:
     """Per-cell burst summary + IBI distribution.
 
@@ -778,6 +813,7 @@ def extract_bursts(slice_data: dict, sidecar: dict) -> CellExtraction:
             'min_inter_train_ms': cfg['min_inter_train_ms'],
         }
 
+    _add_propagation(slice_data, scalars, distributions, meta)
     return CellExtraction(scalars=scalars, distributions=distributions, meta=meta)
 
 

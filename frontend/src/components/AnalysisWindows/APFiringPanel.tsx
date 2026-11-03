@@ -5,6 +5,7 @@ import type { APData, APPerSweep } from '../../stores/appStore'
 import { useThemeKey } from '../../stores/themeStore'
 import { NumInput } from '../common/NumInput'
 import { usePlotMenu } from '../common/PlotMenu'
+import { columnsTable } from '../../utils/plotExport'
 import { useRowSelection, buildTSV } from '../../utils/rowSelection'
 import { useRowCopyMenu } from '../common/RowCopyMenu'
 import {
@@ -303,8 +304,9 @@ function RatePlot({
         stroke: cssVar('--trace-color-1'), width: 1.5,
         fill: cssVar('--accent-muted'),
         paths: uPlot.paths.stepped!({ align: 1 }),
+        vectorStyle: 'stepped',
         points: { show: false },
-      }],
+      } as uPlot.Series],
     }, [xs, ys], el)
     const over = el.querySelector<HTMLDivElement>('.u-over')
     if (over) {
@@ -319,7 +321,14 @@ function RatePlot({
   }, [bins, win[1]], heightSignal)
   const { onContextMenu, menu } = usePlotMenu({
     getCanvas: () => plotRef.current?.ctx?.canvas ?? null,
+    getUplot: () => plotRef.current ?? null,
     defaultName: 'ap-rate-over-time',
+    // One row per bin (the plot repeats the last value only to draw the
+    // final step).
+    asterism: () => bins.t.length === 0 ? null : columnsTable([
+      { header: 'Bin start (s)', values: bins.t },
+      { header: 'Rate (Hz)', values: bins.rate },
+    ]),
   })
   return (
     <MiniPlotFrame
@@ -361,13 +370,20 @@ function IsiHistogramPlot({ times, heightSignal }: { times: number[]; heightSign
         stroke: cssVar('--trace-color-1'), width: 1,
         fill: cssVar('--accent-muted'),
         paths: uPlot.paths.bars!({ size: [0.9, Infinity] }),
+        vectorStyle: 'bars',
         points: { show: false },
-      }],
+      } as uPlot.Series],
     }, [xs, hist.counts], el)
   }, [hist], heightSignal)
   const { onContextMenu, menu } = usePlotMenu({
     getCanvas: () => plotRef.current?.ctx?.canvas ?? null,
+    getUplot: () => plotRef.current ?? null,
     defaultName: 'ap-isi-histogram',
+    // Raw intervals, not bin counts: ASTERISM bins them itself.
+    asterism: () => {
+      const isis = isisOf(times)
+      return isis.length === 0 ? null : columnsTable([{ header: 'ISI (ms)', values: isis }])
+    },
   })
   return (
     <MiniPlotFrame

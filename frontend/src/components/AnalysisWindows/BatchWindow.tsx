@@ -23,6 +23,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { withDualDefaults } from '../../utils/propagation'
 import { useAppStore } from '../../stores/appStore'
 import { displayGroupSeries } from '../../utils/groupSeriesKey'
 
@@ -172,6 +173,9 @@ export interface BatchRecipe {
    *  blob beside ``params``). Copied as-is, so region names match
    *  across files for Cohort. */
   regions?: AnyBlob[] | null
+  /** Bursts only: the template's dual-site setup (partner channel +
+   *  its detection params, names, pairing settings), or null. */
+  burstDual?: AnyBlob | null
   /** For analyses that span multiple series (FPsp LTP needs a baseline
    *  series AND a post-tetanus one), this captures the tags of any
    *  *secondary* series the template references. The runner uses these
@@ -330,6 +334,15 @@ export function extractRecipes(sidecar: SidecarShape): {
           trainParams,
           regions: type === 'spectral' && Array.isArray((blob as any).regions)
             ? ((blob as any).regions as AnyBlob[]) : null,
+          burstDual: type === 'bursts' && (blob as any).partner
+            ? {
+              channel: (blob as any).partner.channel,
+              params: (blob as any).partner.params,
+              refLabel: (blob as any).propagation?.refLabel,
+              partnerLabel: (blob as any).propagation?.partnerLabel,
+              propagation: (blob as any).propagation?.params,
+            } as AnyBlob
+            : null,
         })
       }
     }
@@ -852,6 +865,21 @@ export function BatchWindow({ backendUrl }: Props) {
       await appRunBursts(g, s, channel, params)
       if (item.recipe.trainParams) {
         useAppStore.getState().setTrainParams('bursts', g, s, item.recipe.trainParams as any)
+      }
+      // Dual-site template: same partner channel, detection settings,
+      // names and pairing settings, then detect + pair on this file.
+      const dual = item.recipe.burstDual as any
+      if (dual && typeof dual.channel === 'number' && dual.params) {
+        const st = useAppStore.getState()
+        const form = withDualDefaults({
+          enabled: true, channel: dual.channel, params: dual.params,
+          ...(dual.refLabel ? { refLabel: dual.refLabel } : {}),
+          ...(dual.partnerLabel ? { partnerLabel: dual.partnerLabel } : {}),
+          ...(dual.propagation ? { propagation: dual.propagation } : {}),
+        })
+        st.setBurstDualForm(g, s, form)
+        await st.runBurstPartner(g, s, dual.channel, dual.params)
+        await useAppStore.getState().computePropagation(g, s)
       }
     })
   }, [forEachMatch, appRunBursts])

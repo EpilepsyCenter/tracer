@@ -115,3 +115,47 @@ async def measure_at(req: MeasureAtRequest):
         "manual": True,
         **burst,
     }
+
+
+# ---------------------------------------------------------------------------
+# Dual-site propagation
+# ---------------------------------------------------------------------------
+
+class PropagationRequest(BaseModel):
+    group: int
+    series: int
+    ref_channel: int
+    partner_channel: int
+    # Burst records as the frontend stores them (camelCase): only
+    # sweepIndex, startS, endS, peakTimeS, peakSigned, peakAmplitude are used.
+    ref_bursts: list[dict] = []
+    partner_bursts: list[dict] = []
+    # Each channel's detection params — their pre-filter is applied to the
+    # waveforms before cross-correlation.
+    ref_params: dict = {}
+    partner_params: dict = {}
+    params: dict = {}
+    excluded_sweeps: Optional[list[int]] = None
+
+
+@router.post("/propagation")
+async def propagation(req: PropagationRequest):
+    """Pair reference and partner discharges and measure their lags."""
+    from analysis.propagation import analyse_propagation
+
+    rec = get_current_recording()
+    try:
+        ser = rec.groups[req.group].series_list[req.series]
+    except IndexError:
+        raise HTTPException(status_code=400, detail="Invalid group/series index")
+    if req.ref_channel == req.partner_channel:
+        raise HTTPException(status_code=400, detail="Pick two different channels")
+    try:
+        return analyse_propagation(
+            ser, req.ref_channel, req.partner_channel,
+            req.ref_bursts, req.partner_bursts,
+            req.ref_params, req.partner_params, req.params,
+            req.excluded_sweeps or [], scaled,
+        )
+    except (ValueError, IndexError) as e:
+        raise HTTPException(status_code=400, detail=str(e))

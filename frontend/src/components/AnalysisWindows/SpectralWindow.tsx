@@ -7,6 +7,8 @@ import { NumInput } from '../common/NumInput'
 import { ViewportBar, ViewportSlider, type Viewport } from '../common/ContinuousViewport'
 import { usePlotMenu } from '../common/PlotMenu'
 import { attachHoverCoords } from '../../utils/hoverCoords'
+import { useRowSelection, buildTSV } from '../../utils/rowSelection'
+import { useRowCopyMenu } from '../common/RowCopyMenu'
 import {
   type SpectralBand, type SpectralData, type SpectralParams, type SpectralRegion,
   type SpectralRegionResult, type SpectralTimecourse,
@@ -881,6 +883,7 @@ function SpectralViewer({
   const [plotBox, setPlotBox] = useState<PlotBox | null>(null)
   const { onContextMenu, menu } = usePlotMenu({
     getCanvas: () => plotRef.current?.ctx?.canvas ?? null,
+    getUplot: () => plotRef.current ?? null,
     defaultName: 'spectral-trace',
   })
 
@@ -1615,7 +1618,9 @@ function PsdPlot({
   const [showBands, setShowBands] = useState(true)
   const { onContextMenu, menu } = usePlotMenu({
     getCanvas: () => plotRef.current?.ctx?.canvas ?? null,
+    getUplot: () => plotRef.current ?? null,
     defaultName: 'power-spectrum',
+    asterism: 'xy',
   })
 
   const ok = results.filter((r) => !r.error && r.freqs.length > 1)
@@ -1816,7 +1821,9 @@ function BandTimecourse({
   const [hidden, setHidden] = useState<Set<string>>(new Set())
   const { onContextMenu, menu } = usePlotMenu({
     getCanvas: () => plotRef.current?.ctx?.canvas ?? null,
+    getUplot: () => plotRef.current ?? null,
     defaultName: 'band-power-over-time',
+    asterism: 'xy',
   })
 
   // Regions that can serve as a normalisation reference (any region
@@ -2100,6 +2107,60 @@ function RegionHeaderCells({ results, regions }: { results: SpectralRegionResult
   )
 }
 
+/** One displayed row of a measures × regions table. ``copy`` is what
+ *  "Copy as TSV" writes for it — one or more rows of plain numbers (a
+ *  "power + share" cell becomes two rows, so every TSV cell is one value). */
+interface MeasureRow {
+  key: string
+  label: React.ReactNode
+  cells: React.ReactNode[]
+  copy: { label: string; values: (number | string | null)[] }[]
+}
+
+/** Measures × regions table with row selection and right-click
+ *  "Copy as TSV", like the other results tables. */
+function MeasureTable({ results, regions, rows }: {
+  results: SpectralRegionResult[]
+  regions: SpectralRegion[]
+  rows: MeasureRow[]
+}) {
+  const sel = useRowSelection(rows.length)
+  const copyMenu = useRowCopyMenu({
+    selectionCount: sel.selectedIndexes.length,
+    getTSV: () => sel.selectedIndexes.length === 0 ? null
+      : buildTSV(['Measure', ...results.map((r) => r.label)],
+        sel.selectedIndexes.flatMap((i) => rows[i].copy.map((c) => [c.label, ...c.values]))),
+  })
+  return (
+    <>
+      <table className="data-table" style={{ width: '100%' }}>
+        <thead>
+          <tr><th style={{ textAlign: 'left' }}>Measure</th><RegionHeaderCells results={results} regions={regions} /></tr>
+        </thead>
+        <tbody>
+          {rows.map((row, i) => (
+            <tr key={row.key}
+              onClick={(ev) => sel.onRowClick(i, ev)}
+              onContextMenu={(ev) => copyMenu.onContextMenu(ev, () => {
+                if (!sel.isSelected(i)) sel.setSelected([i])
+              })}
+              style={{ background: sel.isSelected(i) ? 'var(--accent-muted)' : 'transparent' }}>
+              <td>{row.label}</td>
+              {row.cells.map((c, k) => (
+                <td key={k} className="num" style={{ textAlign: 'right' }}>{c}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {copyMenu.menu}
+    </>
+  )
+}
+
+// 10 significant digits: drops float noise such as 120.00000000398359.
+const num = (v: number | null | undefined) => (v == null || !isFinite(v) ? null : Number(v.toPrecision(10)))
+
 function BandTable({
   results, regions, params, units,
 }: {
@@ -2111,48 +2172,57 @@ function BandTable({
   const pu = powerUnits(units)
   const bandNames: string[] = []
   for (const r of results) for (const n of Object.keys(r.bands ?? {})) if (!bandNames.includes(n)) bandNames.push(n)
-  const cell = (r: SpectralRegionResult, f: (r: SpectralRegionResult) => React.ReactNode) =>
-    <td key={r.regionId} className="num" style={{ textAlign: 'right' }}>{r.error ? '—' : f(r)}</td>
+  const ok = (r: SpectralRegionResult) => !r.error
+  const simple = (key: string, label: string, get: (r: SpectralRegionResult) => number | null | undefined,
+    show: (v: number | null | undefined, r: SpectralRegionResult) => React.ReactNode = (v) => fmtNum(v)): MeasureRow => ({
+    key, label,
+    cells: results.map((r) => (ok(r) ? show(get(r), r) : '—')),
+    copy: [{ label, values: results.map((r) => (ok(r) ? num(get(r)) : null)) }],
+  })
+  const rows: MeasureRow[] = [
+    simple('dur', 'Duration analysed (s)', (r) => r.durationS, (v) => fmtNum(v, 4)),
+    {
+      key: 'segs', label: 'Sweeps · segments',
+      cells: results.map((r) => (ok(r) ? `${r.sweepsUsed.length} · ${r.nSegments}` : '—')),
+      copy: [
+        { label: 'Sweeps', values: results.map((r) => (ok(r) ? r.sweepsUsed.length : null)) },
+        { label: 'Segments', values: results.map((r) => (ok(r) ? r.nSegments : null)) },
+      ],
+    },
+    simple('rms', `RMS (${units || 'units'})`, (r) => r.rms),
+    simple('total', `Total power ${params.fmin}–${params.fmax} Hz (${pu.power})`, (r) => r.totalPower),
+    simple('dom', 'Dominant frequency (Hz)', (r) => r.dominantFreqHz),
+    ...bandNames.map((n): MeasureRow => {
+      const b0 = results.find((r) => r.bands?.[n])?.bands[n]
+      const range = b0 ? `${b0.low}–${b0.high} Hz` : ''
+      return {
+        key: `band-${n}`,
+        label: <>{n} <span style={{ color: 'var(--text-muted)' }}>{range}</span></>,
+        cells: results.map((r) => {
+          const b = r.bands?.[n]
+          if (!ok(r) || !b || b.power == null) return <span title={b?.note}>—</span>
+          return (
+            <span title={`peak ${fmtNum(b.peakFreqHz)} Hz`}>
+              {fmtNum(b.power)}
+              <span style={{ color: 'var(--text-muted)', marginLeft: 6 }}>{fmtPct(b.relative)}</span>
+            </span>
+          )
+        }),
+        copy: [
+          { label: `${n} ${range} power (${pu.power})`, values: results.map((r) => (ok(r) ? num(r.bands?.[n]?.power) : null)) },
+          { label: `${n} ${range} share of total`, values: results.map((r) => (ok(r) ? num(r.bands?.[n]?.relative) : null)) },
+          { label: `${n} ${range} peak (Hz)`, values: results.map((r) => (ok(r) ? num(r.bands?.[n]?.peakFreqHz) : null)) },
+        ],
+      }
+    }),
+  ]
   return (
     <div style={{ padding: 6 }}>
-      <table className="data-table" style={{ width: '100%' }}>
-        <thead>
-          <tr><th style={{ textAlign: 'left' }}>Measure</th><RegionHeaderCells results={results} regions={regions} /></tr>
-        </thead>
-        <tbody>
-          <tr><td>Duration analysed (s)</td>{results.map((r) => cell(r, (x) => fmtNum(x.durationS, 4)))}</tr>
-          <tr><td>Sweeps · segments</td>{results.map((r) => cell(r, (x) => `${x.sweepsUsed.length} · ${x.nSegments}`))}</tr>
-          <tr><td>RMS ({units || 'units'})</td>{results.map((r) => cell(r, (x) => fmtNum(x.rms)))}</tr>
-          <tr>
-            <td>Total power {params.fmin}–{params.fmax} Hz ({pu.power})</td>
-            {results.map((r) => cell(r, (x) => fmtNum(x.totalPower)))}
-          </tr>
-          <tr><td>Dominant frequency (Hz)</td>{results.map((r) => cell(r, (x) => fmtNum(x.dominantFreqHz)))}</tr>
-          {bandNames.map((n) => {
-            const b0 = results.find((r) => r.bands?.[n])?.bands[n]
-            return (
-              <tr key={n}>
-                <td>
-                  {n} <span style={{ color: 'var(--text-muted)' }}>{b0 ? `${b0.low}–${b0.high} Hz` : ''}</span>
-                </td>
-                {results.map((r) => cell(r, (x) => {
-                  const b = x.bands?.[n]
-                  if (!b || b.power == null) return <span title={b?.note}>—</span>
-                  return (
-                    <span title={`peak ${fmtNum(b.peakFreqHz)} Hz`}>
-                      {fmtNum(b.power)}
-                      <span style={{ color: 'var(--text-muted)', marginLeft: 6 }}>{fmtPct(b.relative)}</span>
-                    </span>
-                  )
-                }))}
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
+      <MeasureTable results={results} regions={regions} rows={rows} />
       <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)', marginTop: 6, lineHeight: 1.5 }}>
         Band power in {pu.power}; percentage = share of total power in {params.fmin}–{params.fmax} Hz
-        (blank for bands outside that range). Hover a value for the band's peak frequency.
+        (blank for bands outside that range). Hover a value for the band's peak frequency. Select rows
+        and right-click to copy them.
         {params.exclude_line_noise && <> Mains bins ({params.line_freq} Hz and harmonics) are interpolated across.</>}
       </div>
     </div>
@@ -2171,8 +2241,41 @@ function LineNoiseTable({
   for (const r of results) for (const h of r.lineNoise?.harmonics ?? []) if (!freqs.includes(h.freqHz)) freqs.push(h.freqHz)
   freqs.sort((a, b) => a - b)
   const unreliable = results.some((r) => !r.error && r.lineNoise && !r.lineNoise.reliable)
-  const cell = (r: SpectralRegionResult, f: (r: SpectralRegionResult) => React.ReactNode) =>
-    <td key={r.regionId} className="num" style={{ textAlign: 'right' }}>{r.error ? '—' : f(r)}</td>
+  const ok = (r: SpectralRegionResult) => !r.error
+  const u = units || 'units'
+  const harm = (r: SpectralRegionResult, f: number) => r.lineNoise?.harmonics.find((hh) => hh.freqHz === f)
+  const rows: MeasureRow[] = [
+    {
+      key: 'rms', label: `Broadband RMS (${u})`,
+      cells: results.map((r) => (ok(r) ? fmtNum(r.rms) : '—')),
+      copy: [{ label: `Broadband RMS (${u})`, values: results.map((r) => (ok(r) ? num(r.rms) : null)) }],
+    },
+    {
+      key: 'mains', label: `Mains RMS, all harmonics (${u})`,
+      cells: results.map((r) => (ok(r) ? fmtNum(r.lineNoise?.rms) : '—')),
+      copy: [{ label: `Mains RMS, all harmonics (${u})`, values: results.map((r) => (ok(r) ? num(r.lineNoise?.rms) : null)) }],
+    },
+    ...freqs.map((f): MeasureRow => ({
+      key: `h-${f}`,
+      label: <>{f} Hz <span style={{ color: 'var(--text-muted)' }}>above floor · RMS</span></>,
+      cells: results.map((r) => {
+        const h = ok(r) ? harm(r, f) : undefined
+        if (!h) return '—'
+        const db = h.prominenceDb
+        const strong = db != null && db >= 10
+        return (
+          <span>
+            <span style={{ color: strong ? 'var(--warning)' : undefined }}>{db != null ? fmtDb(db) : '—'}</span>
+            <span style={{ color: 'var(--text-muted)', marginLeft: 6 }}>{fmtNum(h.rms)}</span>
+          </span>
+        )
+      }),
+      copy: [
+        { label: `${f} Hz above floor (dB)`, values: results.map((r) => (ok(r) ? num(harm(r, f)?.prominenceDb) : null)) },
+        { label: `${f} Hz RMS (${u})`, values: results.map((r) => (ok(r) ? num(harm(r, f)?.rms) : null)) },
+      ],
+    })),
+  ]
   return (
     <div style={{ padding: 6 }}>
       {unreliable && (
@@ -2181,34 +2284,7 @@ function LineNoiseTable({
           segment length of at least 1 s for line-noise checks.
         </div>
       )}
-      <table className="data-table" style={{ width: '100%' }}>
-        <thead>
-          <tr><th style={{ textAlign: 'left' }}>Measure</th><RegionHeaderCells results={results} regions={regions} /></tr>
-        </thead>
-        <tbody>
-          <tr><td>Broadband RMS ({units || 'units'})</td>{results.map((r) => cell(r, (x) => fmtNum(x.rms)))}</tr>
-          <tr><td>Mains RMS, all harmonics ({units || 'units'})</td>{results.map((r) => cell(r, (x) => fmtNum(x.lineNoise?.rms)))}</tr>
-          {freqs.map((f) => (
-            <tr key={f}>
-              <td>{f} Hz <span style={{ color: 'var(--text-muted)' }}>above floor · RMS</span></td>
-              {results.map((r) => cell(r, (x) => {
-                const h = x.lineNoise?.harmonics.find((hh) => hh.freqHz === f)
-                if (!h) return '—'
-                const db = h.prominenceDb
-                const strong = db != null && db >= 10
-                return (
-                  <span>
-                    <span style={{ color: strong ? 'var(--warning)' : undefined }}>
-                      {db != null ? fmtDb(db) : '—'}
-                    </span>
-                    <span style={{ color: 'var(--text-muted)', marginLeft: 6 }}>{fmtNum(h.rms)}</span>
-                  </span>
-                )
-              }))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <MeasureTable results={results} regions={regions} rows={rows} />
       <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)', marginTop: 6, lineHeight: 1.5 }}>
         "Above floor" compares each {params.line_freq} Hz harmonic with the median of the spectrum 2–6 Hz
         either side; about +10 dB or more (amber) is clearly visible interference. RMS is the amplitude of

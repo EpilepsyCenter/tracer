@@ -6,6 +6,11 @@ import {
   regionToBackend, regionResultFromBackend, buildSpectralBandCSV,
   buildSpectralPsdCSV, downloadText,
 } from '../utils/spectral'
+import {
+  type BurstDualForm, type BurstPartnerData, type PropagationBlock,
+  propagationSignature, propagationFromBackend, burstsForBackend,
+  buildPropagationCSV, withDualDefaults,
+} from '../utils/propagation'
 
 /** Modules that can group their detected events into trains. Bursts =
  *  the FieldBurstWindow's epileptiform burst detection; events = the
@@ -30,6 +35,10 @@ export interface TraceData {
   samplingRate: number
   units: string
   label: string
+  /** Baseline the backend subtracted (zero-offset mode); 0 when off.
+   *  Kept for additional channels so raw-valued overlays (detection
+   *  thresholds) can be shifted to match the displayed trace. */
+  zeroOffset?: number
 }
 
 export interface SweepInfo {
@@ -151,6 +160,8 @@ export const CONTINUOUS_SWEEP_THRESHOLD_S = 60
  *  (e.g. when the user drags the scroll slider, we fire many requests and
  *  only the latest one should be committed to state). */
 let _viewportFetchSeq = 0
+// Same idea for the additional (non-primary) channels' refetches.
+let _additionalFetchSeq = 0
 
 /** Stable empty visible-traces reference. Returned by `getVisibleTraces` when
  *  a series' defaults haven't been materialized yet. Keeping this stable means
@@ -275,11 +286,13 @@ export function fileCloseResetSlices(): Record<string, unknown> {
     recording: null,
     currentGroup: 0, currentSeries: 0, currentSweep: 0, currentTrace: 0,
     traceData: null,
+    // The view belongs to the closed recording too (time bar readout).
+    viewport: null, sweepDuration: 0,
     overlayEntries: [],
     averageTrace: null,
     additionalTraces: {},
     visibleTraces: {},
-    fieldBursts: {}, burstFormParams: {},
+    fieldBursts: {}, burstFormParams: {}, burstDualForm: {},
     trainParams: defaultTrainParamsBundle(),
     ivCurves: {}, fpspCurves: {}, cursorAnalyses: {},
     spectralAnalyses: {},
@@ -402,6 +415,8 @@ type SidecarPayload = {
     paired?: PairedFormState
   }
   burst_form_params?: Record<string, FieldBurstsParams>
+  /** Burst window dual-site form (second channel + propagation settings). */
+  burst_dual_form?: Record<string, BurstDualForm>
   /** Per-module train-grouping form state. Results are not stored —
    *  computed on demand from each module's existing event timestamps
    *  via the shared algorithm in `utils/trains.ts`. */
@@ -459,6 +474,8 @@ function _sidecarPayloadFromState(state: AppState): SidecarPayload {
       paired: state.pairedForm,
     },
     burst_form_params: state.burstFormParams,
+    burst_dual_form: Object.keys(state.burstDualForm).length > 0
+      ? state.burstDualForm : undefined,
     train_params: state.trainParams,
     excluded_sweeps: state.excludedSweeps,
     averaged_sweeps: state.averagedSweeps,
@@ -681,6 +698,14 @@ function _broadcastBursts(fieldBursts: Record<string, FieldBurstsData>, params: 
  *  its store; the disk-persistence subscribe then writes to Electron
  *  prefs. Without this round-trip, the analysis window's updates would
  *  never reach disk. */
+function _broadcastBurstDualForm(burstDualForm: Record<string, BurstDualForm>) {
+  try {
+    const ch = new BroadcastChannel('tracer-sync')
+    ch.postMessage({ type: 'burst-dual-form-update', burstDualForm })
+    ch.close()
+  } catch { /* ignore */ }
+}
+
 function _broadcastBurstFormParams(
   burstFormParams: Record<string, FieldBurstsParams>,
 ) {
@@ -968,6 +993,10 @@ export interface FieldBurstsData {
   bursts: BurstRecord[]
   selectedIdx: number | null
   diag?: FieldBurstsDiag         // signal-scale diagnostics (from the latest run)
+  /** Dual-site mode: the second channel's detected bursts. */
+  partner?: BurstPartnerData
+  /** Dual-site mode: pairing / lag result and the settings it used. */
+  propagation?: PropagationBlock
 }
 
 export interface ResistanceResult {
@@ -1872,6 +1901,8 @@ interface AppState {
    *  the user never clicked Run. Keyed by `${group}:${series}`;
    *  persisted per-recording in the .tracer sidecar. */
   burstFormParams: Record<string, FieldBurstsParams>
+  /** Burst window dual-site form per series. Persisted. */
+  burstDualForm: Record<string, BurstDualForm>
 
   /** Train-grouping form state for the Burst, Event, and AP windows.
    *  Only the parameters live here — train results are derived on the
@@ -2031,7 +2062,9 @@ interface AppState {
   /** Fetch/drop `additionalTraces` entries so they match `visibleTraces`
    *  for the currently-viewed series. Idempotent; safe to call on every
    *  sweep/viewport/filter change. */
-  syncAdditionalTraces: () => Promise<void>
+  /** ``refresh``: refetch channels already held too (the viewport
+   *  moved), not just the missing ones. */
+  syncAdditionalTraces: (opts?: { refresh?: boolean }) => Promise<void>
   openFile: (filePath: string, options?: Record<string, unknown>) => Promise<void>
   /** Close the currently-active recording across the whole app:
    *  hits the backend's ``/api/files/close`` so its
@@ -2158,11 +2191,26 @@ interface AppState {
   /** Append a manually-measured burst (from a left-click in the sweep
    *  viewer). The burst is pre-populated by the backend; we just
    *  splice it into the current list, sort, and broadcast. */
-  addManualBurst: (group: number, series: number, burst: BurstRecord) => void
+  addManualBurst: (group: number, series: number, burst: BurstRecord, target?: 'ref' | 'partner') => void
   /** Remove the burst whose span contains `timeS` on the given sweep.
    *  If multiple match, removes the one whose peak is closest in time.
-   *  No-op when nothing matches. */
-  removeBurstAt: (group: number, series: number, sweep: number, timeS: number) => void
+   *  No-op when nothing matches. ``target`` picks the reference list
+   *  (default) or the dual-site partner list. */
+  removeBurstAt: (group: number, series: number, sweep: number, timeS: number, target?: 'ref' | 'partner') => void
+  /** Dual-site form (second channel, labels, its detection params,
+   *  pairing settings). Broadcast + persisted. */
+  setBurstDualForm: (group: number, series: number, form: BurstDualForm) => void
+  /** Detect bursts on the partner channel — whole series, or one sweep
+   *  (replacing that sweep's partner bursts). Needs the reference
+   *  entry to exist (run reference detection first). */
+  runBurstPartner: (
+    group: number, series: number, channel: number,
+    params: FieldBurstsParams, sweep?: number | null,
+  ) => Promise<void>
+  /** Pair reference and partner bursts and measure lags (backend). */
+  computePropagation: (group: number, series: number) => Promise<void>
+  /** Pairs + unpaired events of one series as CSV. */
+  exportPropagationCSV: (group: number, series: number) => Promise<void>
   /** Store the burst-detection form state for a given series so the
    *  window can restore it after close/reopen. Broadcast + persisted. */
   setBurstFormParams: (group: number, series: number, params: FieldBurstsParams) => void
@@ -2532,6 +2580,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   fieldBursts: {},
   spectralAnalyses: {},
   burstFormParams: {},
+  burstDualForm: {},
   trainParams: defaultTrainParamsBundle(),
   ivCurves: {},
   fpspCurves: {},
@@ -2964,8 +3013,9 @@ export const useAppStore = create<AppState>((set, get) => ({
         sweepDuration: data.duration ?? s.sweepDuration,
         currentZeroOffset: Number(data.zero_offset ?? 0),
       }))
-      // Keep additional channels in sync with the new viewport/filter.
-      get().syncAdditionalTraces().catch(() => { /* ignore */ })
+      // Keep additional channels in sync with the new viewport/filter —
+      // refetch them too, or they'd keep showing the previous window.
+      get().syncAdditionalTraces({ refresh: true }).catch(() => { /* ignore */ })
     } catch { /* ignore transient errors */ }
   },
 
@@ -3022,7 +3072,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     get().setVisibleTraces(group, series, next)
   },
 
-  syncAdditionalTraces: async () => {
+  syncAdditionalTraces: async (opts) => {
     // Fetch TraceData for every visible channel that isn't the primary
     // (currentTrace — already held in `traceData`). Drop any that are no
     // longer visible. Fire the fetches in parallel.
@@ -3040,9 +3090,13 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (wanted.includes(k)) kept[k] = existing[k]
     }
     set({ additionalTraces: kept })
-    // Fetch the missing ones in parallel.
-    const toFetch = wanted.filter((i) => !(i in kept))
+    // Fetch the missing ones (or, on refresh, all of them — the old data
+    // stays on screen until the new window arrives) in parallel.
+    const toFetch = opts?.refresh ? wanted : wanted.filter((i) => !(i in kept))
     if (toFetch.length === 0) return
+    // Only viewport refreshes take a new sequence number; a plain sync
+    // (e.g. a channel toggled on) must not cancel an in-flight refresh.
+    const mySeq = opts?.refresh ? ++_additionalFetchSeq : _additionalFetchSeq
     await Promise.all(toFetch.map(async (chIdx) => {
       try {
         // Each channel gets its own filter (see getFilterForChannel).
@@ -3055,6 +3109,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         // Check still wanted before committing (user may have toggled off meanwhile).
         const stillWanted = get().getVisibleTraces(currentGroup, currentSeries).includes(chIdx)
         if (!stillWanted) return
+        // A newer refetch (the user kept scrolling) supersedes this one.
+        if (opts?.refresh && mySeq !== _additionalFetchSeq) return
         set((s) => ({
           additionalTraces: {
             ...s.additionalTraces,
@@ -3064,6 +3120,7 @@ export const useAppStore = create<AppState>((set, get) => ({
               samplingRate: data.sampling_rate,
               units: data.units,
               label: data.label,
+              zeroOffset: Number(data.zero_offset ?? 0),
             },
           },
         }))
@@ -3119,6 +3176,13 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   closeFile: async () => {
     const { backendUrl, recording } = get()
+    // Flush a pending (debounced) sidecar save first, as openFile does,
+    // so an edit made just before closing isn't lost.
+    if (recording?.filePath && _sidecarTimer) {
+      clearTimeout(_sidecarTimer)
+      _sidecarTimer = null
+      try { await _saveSidecar(recording.filePath, get()) } catch { /* ignore */ }
+    }
     // Best-effort backend close — silently swallow failures so a
     // backend that never had a file open (rare race) doesn't block
     // the rest of the cleanup.
@@ -3166,6 +3230,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       fieldBursts: {},
       spectralAnalyses: {},
       burstFormParams: {},
+      burstDualForm: {},
       trainParams: defaultTrainParamsBundle(),
       ivCurves: {},
       fpspCurves: {},
@@ -3298,6 +3363,10 @@ export const useAppStore = create<AppState>((set, get) => ({
           if ((a as any).resistance && Object.keys((a as any).resistance).length > 0) {
             patch.resistanceResults = (a as any).resistance
             sidecarPopulated.resistance = true
+          }
+          if (sidecar.burst_dual_form && Object.keys(sidecar.burst_dual_form).length > 0) {
+            patch.burstDualForm = sidecar.burst_dual_form
+            post({ type: 'burst-dual-form-update', burstDualForm: sidecar.burst_dual_form })
           }
           if (sidecar.burst_form_params && Object.keys(sidecar.burst_form_params).length > 0) {
             patch.burstFormParams = sidecar.burst_form_params
@@ -4149,6 +4218,9 @@ export const useAppStore = create<AppState>((set, get) => ({
           bursts: merged,
           selectedIdx: null,
           diag: diagFromResponse(m),
+          // Dual-site data belongs to the other channel; keep it.
+          ...(prev?.partner ? { partner: prev.partner } : {}),
+          ...(prev?.propagation ? { propagation: prev.propagation } : {}),
         }
         return { fieldBursts: { ...s.fieldBursts, [key]: next }, loading: false }
       })
@@ -4309,7 +4381,15 @@ export const useAppStore = create<AppState>((set, get) => ({
         diag,
       }
       set((s) => ({
-        fieldBursts: { ...s.fieldBursts, [key]: next },
+        fieldBursts: {
+          ...s.fieldBursts,
+          [key]: {
+            ...next,
+            // Dual-site data belongs to the other channel; keep it.
+            ...(s.fieldBursts[key]?.partner ? { partner: s.fieldBursts[key].partner } : {}),
+            ...(s.fieldBursts[key]?.propagation ? { propagation: s.fieldBursts[key].propagation } : {}),
+          },
+        },
         loading: false,
         error: sweepErrors.length > 0 ? sweepErrors.join('; ') : null,
       }))
@@ -4348,15 +4428,25 @@ export const useAppStore = create<AppState>((set, get) => ({
     })
   },
 
-  addManualBurst: (group, series, burst) => {
+  addManualBurst: (group, series, burst, target = 'ref') => {
     const key = `${group}:${series}`
+    const sortB = (a: BurstRecord, b: BurstRecord) =>
+      a.sweepIndex !== b.sweepIndex ? a.sweepIndex - b.sweepIndex : a.startS - b.startS
     set((s) => {
       const entry = s.fieldBursts[key]
+      if (target === 'partner') {
+        // Partner bursts only exist once partner detection has run.
+        if (!entry?.partner) return s
+        const next = [...entry.partner.bursts, { ...burst, manual: true }].sort(sortB)
+        return {
+          fieldBursts: {
+            ...s.fieldBursts,
+            [key]: { ...entry, partner: { ...entry.partner, bursts: next } },
+          },
+        }
+      }
       const existing = entry?.bursts ?? []
-      const next = [...existing, { ...burst, manual: true }].sort((a, b) => {
-        if (a.sweepIndex !== b.sweepIndex) return a.sweepIndex - b.sweepIndex
-        return a.startS - b.startS
-      })
+      const next = [...existing, { ...burst, manual: true }].sort(sortB)
       // If there's no existing entry yet (user happens to click before any
       // auto-detection has run), create a minimal one so the burst still
       // renders. Thresholds stay null; params are echoed as empty.
@@ -4379,29 +4469,43 @@ export const useAppStore = create<AppState>((set, get) => ({
     _broadcastBursts(get().fieldBursts, get().fieldBursts[key]?.params ?? { method: 'threshold', baseline_mode: 'percentile' } as FieldBurstsParams)
   },
 
-  removeBurstAt: (group, series, sweep, timeS) => {
+  removeBurstAt: (group, series, sweep, timeS, target = 'ref') => {
     const key = `${group}:${series}`
-    set((s) => {
-      const entry = s.fieldBursts[key]
-      if (!entry) return s
-      // Find candidate bursts on the clicked sweep. Prefer bursts whose
-      // [startS, endS] span contains the click; fall back to the one
-      // whose peak is closest in time within 0.5 s so the click still
-      // lands when the user hits the marker dot outside the span.
-      let best: { idx: number; dist: number } | null = null
-      entry.bursts.forEach((b, i) => {
+    // Find candidate bursts on the clicked sweep. Prefer bursts whose
+    // [startS, endS] span contains the click; fall back to the one
+    // whose peak is closest in time within 0.5 s so the click still
+    // lands when the user hits the marker dot outside the span.
+    const pick = (list: BurstRecord[]): number | null => {
+      let bestIdx: number | null = null
+      let bestDist = Infinity
+      list.forEach((b, i) => {
         if (b.sweepIndex !== sweep) return
         const inside = timeS >= b.startS && timeS <= b.endS
         const peakDist = Math.abs(timeS - b.peakTimeS)
         const dist = inside ? 0 : peakDist
-        if (inside || peakDist < 0.5) {
-          if (!best || dist < best.dist) best = { idx: i, dist }
-        }
+        if ((inside || peakDist < 0.5) && dist < bestDist) { bestIdx = i; bestDist = dist }
       })
-      if (!best) return s
-      // `best` is narrowed inside the callbacks above; TS doesn't follow
-      // the mutation back out so assert it here.
-      const removeIdx = (best as { idx: number; dist: number }).idx
+      return bestIdx
+    }
+    set((s) => {
+      const entry = s.fieldBursts[key]
+      if (!entry) return s
+      if (target === 'partner') {
+        if (!entry.partner) return s
+        const idx = pick(entry.partner.bursts)
+        if (idx == null) return s
+        return {
+          fieldBursts: {
+            ...s.fieldBursts,
+            [key]: {
+              ...entry,
+              partner: { ...entry.partner, bursts: entry.partner.bursts.filter((_, i) => i !== idx) },
+            },
+          },
+        }
+      }
+      const removeIdx = pick(entry.bursts)
+      if (removeIdx == null) return s
       const nextBursts = entry.bursts.filter((_, i) => i !== removeIdx)
       return {
         fieldBursts: {
@@ -4411,6 +4515,130 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
     })
     _broadcastBursts(get().fieldBursts, get().fieldBursts[key]?.params ?? { method: 'threshold', baseline_mode: 'percentile' } as FieldBurstsParams)
+  },
+
+  setBurstDualForm: (group, series, form) => {
+    const key = `${group}:${series}`
+    set((s) => ({ burstDualForm: { ...s.burstDualForm, [key]: form } }))
+    _broadcastBurstDualForm(get().burstDualForm)
+  },
+
+  runBurstPartner: async (group, series, channel, params, sweep = null) => {
+    const { backendUrl } = get()
+    const key = `${group}:${series}`
+    if (!get().fieldBursts[key]) {
+      set({ error: 'Run detection on the reference channel first.' })
+      return
+    }
+    set({ loading: true, error: null })
+    try {
+      let records: BurstRecord[] = []
+      let first: any = null
+      const sweepErrors: string[] = []
+      if (sweep == null) {
+        const excluded = get().excludedSweeps[key] ?? []
+        const resp = await apiFetch(backendUrl, '/api/analysis/batch', {
+          method: 'POST',
+          body: JSON.stringify({
+            analysis_type: 'bursts', group, series, trace: channel,
+            sweep_start: 0, sweep_end: -1,
+            excluded_sweeps: excluded.length > 0 ? excluded : undefined,
+            params,
+          }),
+        })
+        for (const per of (resp.results ?? []) as any[]) {
+          const sw = Number(per.sweep_index ?? 0)
+          if (per.error) { sweepErrors.push(`sweep ${sw + 1}: ${per.error}`); continue }
+          records.push(...burstsFromResponse(per, sw))
+          if (!first && per.baseline_value != null) first = per
+        }
+      } else {
+        const resp = await apiFetch(backendUrl, '/api/analysis/run', {
+          method: 'POST',
+          body: JSON.stringify({ analysis_type: 'bursts', group, series, sweep, trace: channel, params }),
+        })
+        const m = resp.measurement || {}
+        if (m.error) { set({ error: `Partner detection: ${m.error}`, loading: false }); return }
+        records = burstsFromResponse(m, sweep)
+        first = m
+      }
+      set((s) => {
+        const entry = s.fieldBursts[key]
+        if (!entry) return { loading: false }
+        const kept = sweep == null || !entry.partner || entry.partner.channel !== channel
+          ? [] : entry.partner.bursts.filter((b) => b.sweepIndex !== sweep)
+        const partner: BurstPartnerData = {
+          channel, params,
+          baselineValue: Number(first?.baseline_value ?? 0),
+          thresholdHigh: first?.threshold_high != null ? Number(first.threshold_high) : null,
+          thresholdLow: first?.threshold_low != null ? Number(first.threshold_low) : null,
+          bursts: [...kept, ...records].sort(
+            (a, b) => a.sweepIndex - b.sweepIndex || a.startS - b.startS),
+        }
+        return {
+          fieldBursts: { ...s.fieldBursts, [key]: { ...entry, partner } },
+          loading: false,
+          error: sweepErrors.length > 0 ? sweepErrors.join('; ') : null,
+        }
+      })
+      _broadcastBursts(get().fieldBursts, get().fieldBursts[key]?.params ?? params)
+    } catch (err: any) {
+      set({ error: err.message, loading: false })
+    }
+  },
+
+  computePropagation: async (group, series) => {
+    const { backendUrl } = get()
+    const key = `${group}:${series}`
+    const entry = get().fieldBursts[key]
+    const form = withDualDefaults(get().burstDualForm[key])
+    if (!entry?.partner) return
+    const excluded = get().excludedSweeps[key] ?? []
+    const signature = propagationSignature(entry, form, excluded)
+    if (!signature) return
+    try {
+      const resp = await apiFetch(backendUrl, '/api/bursts/propagation', {
+        method: 'POST',
+        body: JSON.stringify({
+          group, series,
+          ref_channel: entry.channel, partner_channel: entry.partner.channel,
+          ref_bursts: burstsForBackend(entry.bursts),
+          partner_bursts: burstsForBackend(entry.partner.bursts),
+          ref_params: entry.params, partner_params: entry.partner.params,
+          params: form.propagation,
+          excluded_sweeps: excluded,
+        }),
+      })
+      const result = propagationFromBackend(resp, signature)
+      set((s) => {
+        const cur = s.fieldBursts[key]
+        if (!cur) return s
+        const block: PropagationBlock = {
+          params: form.propagation, refLabel: form.refLabel, partnerLabel: form.partnerLabel, result,
+        }
+        return { fieldBursts: { ...s.fieldBursts, [key]: { ...cur, propagation: block } } }
+      })
+      _broadcastBursts(get().fieldBursts, get().fieldBursts[key]?.params ?? entry.params)
+    } catch (err: any) {
+      set({ error: `Propagation: ${err.message}` })
+    }
+  },
+
+  exportPropagationCSV: async (group, series) => {
+    const { fieldBursts, recording, backendUrl } = get()
+    const entry = fieldBursts[`${group}:${series}`]
+    if (!entry?.propagation) return
+    let fileName: string = recording?.fileName ?? ''
+    if (!fileName && backendUrl) {
+      try {
+        const info = await fetch(`${backendUrl}/api/files/info`).then((r) => r.ok ? r.json() : null)
+        if (info?.fileName) fileName = info.fileName
+      } catch { /* ignore */ }
+    }
+    const csv = buildPropagationCSV(fileName, group, series, entry, entry.propagation)
+    if (!csv) return
+    const base = (fileName || 'recording').replace(/\.[^.]+$/, '')
+    downloadText(csv, `${base}_G${group + 1}S${series + 1}_propagation.csv`)
   },
 
   setBurstFormParams: (group, series, params) => {
@@ -6141,6 +6369,7 @@ let _sidecarRefs = {
   cursorAnalyses: null as any,
   resistanceResults: null as any,
   burstFormParams: null as any,
+  burstDualForm: null as any,
   trainParams: null as any,
   excluded: null as any,
   averaged: null as any,
@@ -6167,6 +6396,7 @@ useAppStore.subscribe((state) => {
     cursorAnalyses: state.cursorAnalyses,
     resistanceResults: state.resistanceResults,
     burstFormParams: state.burstFormParams,
+    burstDualForm: state.burstDualForm,
     trainParams: state.trainParams,
     excluded: state.excludedSweeps,
     averaged: state.averagedSweeps,
@@ -6220,6 +6450,11 @@ declare global {
       saveFileDialog: (defaultName: string, filters?: { name: string; extensions: string[] }[]) => Promise<string | null>
       writeTextFile: (targetPath: string, contents: string) => Promise<{ ok: boolean; error?: string }>
       writeBinaryFile: (targetPath: string, base64: string) => Promise<{ ok: boolean; error?: string }>
+      /** SVG → vector PDF (Chromium print), returned as base64. */
+      svgToPdf?: (svg: string, width: number, height: number) => Promise<{ ok: boolean; base64?: string; error?: string }>
+      /** Put a vector figure on the clipboard: PDF on macOS (what Affinity,
+       *  Illustrator and Office paste as vectors), SVG text elsewhere. */
+      copyVector?: (svg: string, width: number, height: number) => Promise<{ ok: boolean; format?: 'pdf' | 'svg'; error?: string }>
       getPreferences: () => Promise<Record<string, unknown>>
       setPreferences: (prefs: Record<string, unknown>) => Promise<boolean>
       readSidecar: (recordingPath: string) => Promise<Record<string, unknown> | null>
@@ -6249,7 +6484,7 @@ declare global {
       /** Native menu-bar commands, delivered to the focused window. */
       onMenuAction?: (callback: (action: string, arg?: string) => void) => () => void
       /** Tell the menu bar whether a recording is open (enables Analysis items). */
-      setMenuState?: (state: { hasRecording?: boolean }) => void
+      setMenuState?: (state: { hasRecording?: boolean; recentFiles?: string[] }) => void
     }
   }
 }

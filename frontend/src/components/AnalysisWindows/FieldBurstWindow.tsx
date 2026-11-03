@@ -17,6 +17,10 @@ import { useRowSelection, buildTSV } from '../../utils/rowSelection'
 import { useRowCopyMenu } from '../common/RowCopyMenu'
 import { attachHoverCoords } from '../../utils/hoverCoords'
 import { sampleTraceYAt } from '../../utils/sampleTraceY'
+import { DualChannelCard, PropagationPanel } from './BurstPropagation'
+import {
+  type BurstDualForm, withDualDefaults, propagationSignature,
+} from '../../utils/propagation'
 
 /** Burst marker colours as theme tokens. Canvas code resolves them
  *  with ``cssVar`` at draw time; the legend uses ``var(...)``. */
@@ -131,6 +135,8 @@ export function FieldBurstWindow({
     clearFieldBursts, selectFieldBurst, exportFieldBurstsCSV,
     exportFieldBurstTrainsCSV,
     addManualBurst, removeBurstAt,
+    burstDualForm, setBurstDualForm, runBurstPartner, computePropagation,
+    exportPropagationCSV, excludedSweeps,
     loading, error, setError,
   } = useAppStore()
   const theme = useThemeStore((s) => s.theme)
@@ -335,6 +341,41 @@ export function FieldBurstWindow({
   const key = `${group}:${series}`
   const entry = fieldBursts[key]
 
+  // ---- Dual-site (second channel) ----
+  const otherChannel = channels.find((c: any) => c.index !== channel)?.index ?? 1
+  const dual: BurstDualForm = withDualDefaults(burstDualForm[key], otherChannel)
+  const dualOn = dual.enabled && channels.length > 1 && dual.channel !== channel
+  const setDual = useCallback((patch: Partial<BurstDualForm>) => {
+    const cur = withDualDefaults(useAppStore.getState().burstDualForm[key], otherChannel)
+    const next = { ...cur, ...patch }
+    // First time on: start the partner's detection settings from this
+    // channel's, so both channels detect alike until the user changes it.
+    if (next.enabled && !next.params) next.params = { ...params, peak_direction: 'auto' }
+    setBurstDualForm(group, series, next)
+  }, [key, otherChannel, params, group, series, setBurstDualForm])
+  /** Which channel the detection form edits (and the table shows). */
+  const [side, setSide] = useState<'ref' | 'partner'>('ref')
+  const editingPartner = dualOn && side === 'partner'
+  const partnerParams: FieldBurstsParams = dual.params ?? params
+  const formMethod: Method = editingPartner ? ((partnerParams.method as Method) ?? 'threshold') : method
+  const formBaseline: BaselineMode = editingPartner
+    ? ((partnerParams.baseline_mode as BaselineMode) ?? 'percentile') : baselineMode
+  const formParams: FieldBurstsParams = editingPartner ? partnerParams : params
+  const setPartnerParams = (p: FieldBurstsParams) => setDual({ params: p })
+  const [resultTab, setResultTab] = useState<'ref' | 'partner' | 'propagation'>('ref')
+  useEffect(() => { if (!dualOn) { setSide('ref'); setResultTab('ref') } }, [dualOn])
+
+  // Propagation recomputes by itself whenever its inputs change (both
+  // burst lists, channels, filters, pairing settings, exclusions).
+  const propSig = dualOn ? propagationSignature(entry, dual, excludedSweeps[key]) : null
+  const storedPropSig = entry?.propagation?.result?.signature ?? null
+  const propStale = dualOn && !!propSig && propSig !== storedPropSig
+  useEffect(() => {
+    if (!dualOn || !propSig || propSig === storedPropSig) return
+    const t = setTimeout(() => { computePropagation(group, series) }, 400)
+    return () => clearTimeout(t)
+  }, [dualOn, propSig, storedPropSig, group, series, computePropagation])
+
   // Train-grouping (Easy-Electrophysiology-style cluster of closely
   // spaced bursts). Pure derivation: read params from the store, walk
   // bursts per-sweep (never cross sweep boundaries — different trials),
@@ -398,6 +439,7 @@ export function FieldBurstWindow({
   const [zeroOffset, setZeroOffset] = useState(false)
 
   const onParamChange = (name: string, value: number) => {
+    if (editingPartner) { setPartnerParams({ ...partnerParams, [name]: value }); return }
     setParams((p) => {
       const next = { ...p, [name]: value }
       commitForm(method, baselineMode, next)
@@ -405,6 +447,7 @@ export function FieldBurstWindow({
     })
   }
   const onParamChangeRaw = (name: string, value: string | boolean) => {
+    if (editingPartner) { setPartnerParams({ ...partnerParams, [name]: value }); return }
     setParams((p) => {
       const next = { ...p, [name]: value }
       commitForm(method, baselineMode, next)
@@ -412,12 +455,16 @@ export function FieldBurstWindow({
     })
   }
 
-  const onRun = () => {
+  const onRun = async () => {
+    const idx = Math.max(0, Math.min(totalSweeps - 1, sweepOne - 1))
     if (runMode === 'all') {
-      runFieldBurstsOnSeries(group, series, channel, params)
+      await runFieldBurstsOnSeries(group, series, channel, params)
     } else {
-      const idx = Math.max(0, Math.min(totalSweeps - 1, sweepOne - 1))
-      runFieldBurstsOnSweep(group, series, idx, channel, params)
+      await runFieldBurstsOnSweep(group, series, idx, channel, params)
+    }
+    if (dualOn) {
+      if (!dual.params) setDual({ params: partnerParams })
+      await runBurstPartner(group, series, dual.channel, partnerParams, runMode === 'all' ? null : idx)
     }
   }
 
@@ -436,15 +483,18 @@ export function FieldBurstWindow({
     }
   }
 
-  /** Left-click on the sweep viewer → add a manual burst at that time. */
-  const onAddManualBurst = useCallback(async (timeS: number) => {
+  /** Left-click on the sweep viewer → add a manual burst at that time.
+   *  ``target`` = which channel's list (dual-site partner or reference). */
+  const addManualAt = useCallback(async (timeS: number, target: 'ref' | 'partner') => {
+    const ch = target === 'partner' ? dual.channel : channel
+    const prm = target === 'partner' ? partnerParams : params
     try {
       const resp = await fetch(`${backendUrl}/api/bursts/measure_at`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          group, series, sweep: previewSweep, trace: channel,
-          time_s: timeS, params,
+          group, series, sweep: previewSweep, trace: ch,
+          time_s: timeS, params: prm,
         }),
       })
       if (!resp.ok) {
@@ -470,16 +520,61 @@ export function FieldBurstWindow({
         meanFrequencyHz: b.mean_frequency_hz != null ? Number(b.mean_frequency_hz) : null,
         manual: true,
       }
-      addManualBurst(group, series, burst)
+      addManualBurst(group, series, burst, target)
     } catch (err: any) {
       setError(err.message ?? String(err))
     }
-  }, [backendUrl, group, series, previewSweep, channel, params, addManualBurst, setError])
+  }, [backendUrl, group, series, previewSweep, channel, params, dual.channel, partnerParams, addManualBurst, setError])
+  const onAddManualBurst = useCallback((t: number) => addManualAt(t, 'ref'), [addManualAt])
+  const onAddPartnerBurst = useCallback((t: number) => addManualAt(t, 'partner'), [addManualAt])
 
   /** Right-click / double-click on a burst → remove it. */
   const onRemoveBurstAt = useCallback((timeS: number) => {
     removeBurstAt(group, series, previewSweep, timeS)
   }, [group, series, previewSweep, removeBurstAt])
+  const onRemovePartnerBurstAt = useCallback((timeS: number) => {
+    removeBurstAt(group, series, previewSweep, timeS, 'partner')
+  }, [group, series, previewSweep, removeBurstAt])
+
+  /** Zoom the viewer(s) to a time on a sweep, with 1 s of context. */
+  const zoomTo = useCallback((sw: number, t0: number, t1?: number) => {
+    setPreviewSweep(sw)
+    setViewport({ tStart: Math.max(0, t0 - 1.0), tEnd: (t1 ?? t0) + 1.0 })
+  }, [])
+
+  // Lag brackets / unpaired flags drawn on the two viewers.
+  const dualMarks = useMemo(() => {
+    const res = entry?.propagation?.result
+    if (!dualOn || !res || !entry?.partner) return { ref: null, partner: null }
+    const prim = res.summary.primary
+    const pairs = res.pairs.filter((p) => p.sweep === previewSweep).map((p) => {
+      const lag = prim === 'xcorr' ? p.xcorrLagMs : prim === 'onset' ? p.onsetLagMs : p.peakLagMs
+      // Bracket from the reference peak to where the partner lines up.
+      const t0 = p.refPeakS ?? p.refStartS
+      return {
+        t0,
+        t1: t0 + (lag ?? p.peakLagMs) / 1000,
+        label: lag != null ? `${lag >= 0 ? '+' : ''}${lag.toFixed(1)} ms` : 'lag at limit',
+      }
+    })
+    const refOnly = res.refOnly.map((i) => entry.bursts[i]).filter((b) => b && b.sweepIndex === previewSweep)
+      .map((b) => ({ t: b.peakTimeS, label: `no ${dual.partnerLabel || 'partner'}` }))
+    const partnerOnly = res.partnerOnly.map((j) => entry.partner!.bursts[j])
+      .filter((b) => b && b.sweepIndex === previewSweep)
+      .map((b) => ({ t: b.peakTimeS, label: `${dual.partnerLabel || 'partner'} only` }))
+    return {
+      ref: { pairs: [], unpaired: refOnly },
+      partner: { pairs, unpaired: partnerOnly },
+    }
+  }, [dualOn, entry, previewSweep, dual.partnerLabel])
+
+  /** Partner data in the shape the sweep viewer draws. */
+  const partnerEntry: FieldBurstsData | undefined = useMemo(() => entry?.partner ? {
+    channel: entry.partner.channel, params: entry.partner.params,
+    baselineValue: entry.partner.baselineValue,
+    thresholdHigh: entry.partner.thresholdHigh, thresholdLow: entry.partner.thresholdLow,
+    bursts: entry.partner.bursts, selectedIdx: null,
+  } : undefined, [entry?.partner])
 
   return (
     <div style={{
@@ -527,25 +622,52 @@ export function FieldBurstWindow({
             {/* Method + Baseline-mode dropdowns. These two drive which
                 params show in ParamsForm below, so they live at the
                 top of the left panel. */}
+            <DualChannelCard
+              channels={channels}
+              refChannel={channel}
+              dual={dual}
+              setDual={setDual}
+            />
+
             <div className="section-card">
+              {dualOn && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 'var(--font-size-label)' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Detection for</span>
+                  <div className="segmented">
+                    <button className={side === 'ref' ? 'active' : ''} onClick={() => setSide('ref')}>
+                      {dual.refLabel || 'Reference'}
+                    </button>
+                    <button className={side === 'partner' ? 'active' : ''} onClick={() => setSide('partner')}>
+                      {dual.partnerLabel || 'Partner'}
+                    </button>
+                  </div>
+                </div>
+              )}
               <label style={{ display: 'flex', flexDirection: 'column', fontSize: 'var(--font-size-label)', gap: 2 }}>
                 <span style={{ color: 'var(--text-muted)' }}>Method</span>
-                <select value={method} onChange={(e) => onMethodChange(e.target.value as Method)}>
+                <select value={formMethod} onChange={(e) => {
+                  const m = e.target.value as Method
+                  if (editingPartner) setPartnerParams(defaultParamsFor(m, formBaseline))
+                  else onMethodChange(m)
+                }}>
                   <option value="threshold">Threshold</option>
                   <option value="oscillation">Oscillation envelope</option>
                   <option value="isi">ISI clustering</option>
                 </select>
               </label>
-              {method !== 'isi' && (
-                <BaselineModeSelect value={baselineMode} onChange={onBaselineModeChange} />
+              {formMethod !== 'isi' && (
+                <BaselineModeSelect value={formBaseline} onChange={(bm) => {
+                  if (editingPartner) setPartnerParams(defaultParamsFor(formMethod, bm as BaselineMode))
+                  else onBaselineModeChange(bm as BaselineMode)
+                }} />
               )}
             </div>
 
-            {/* Params form */}
+            {/* Params form — edits whichever channel is selected above. */}
             <ParamsForm
-              method={method}
-              baselineMode={baselineMode}
-              params={params}
+              method={formMethod}
+              baselineMode={formBaseline}
+              params={formParams}
               onChange={onParamChange}
               onChangeRaw={onParamChangeRaw}
             />
@@ -651,26 +773,63 @@ export function FieldBurstWindow({
           display: 'flex', flexDirection: 'column', minHeight: 0,
           paddingLeft: 8,
         }}>
-          <div style={{ height: miniHeight, minHeight: 150, flexShrink: 0 }}>
-            <BurstSweepViewer
-              backendUrl={backendUrl}
-              entry={entry}
-              liveParams={params}
-              group={group}
-              series={series}
-              channel={channel}
-              sweep={previewSweep}
-              viewport={viewport}
-              setViewport={setViewport}
-              heightSignal={miniHeight}
-              onAddBurst={onAddManualBurst}
-              onRemoveBurst={onRemoveBurstAt}
-              zeroOffset={zeroOffset}
-              onZeroOffsetChange={setZeroOffset}
-              theme={theme}
-              fontSize={fontSize}
-              trainsForSweep={trainData.summariesBySweep.get(previewSweep) ?? []}
-            />
+          <div style={{
+            // Two stacked traces need more room than one.
+            height: dualOn ? Math.max(miniHeight, 480) : miniHeight,
+            minHeight: 150, flexShrink: 0,
+            display: 'flex', flexDirection: 'column', gap: 4,
+          }}>
+            <div style={{ flex: dualOn ? 1.25 : 1, minHeight: 0 }}>
+              <BurstSweepViewer
+                backendUrl={backendUrl}
+                entry={entry}
+                liveParams={params}
+                group={group}
+                series={series}
+                channel={channel}
+                sweep={previewSweep}
+                viewport={viewport}
+                setViewport={setViewport}
+                heightSignal={dualOn ? Math.max(miniHeight, 480) + 1 : miniHeight}
+                onAddBurst={onAddManualBurst}
+                onRemoveBurst={onRemoveBurstAt}
+                zeroOffset={zeroOffset}
+                onZeroOffsetChange={setZeroOffset}
+                theme={theme}
+                fontSize={fontSize}
+                trainsForSweep={trainData.summariesBySweep.get(previewSweep) ?? []}
+                label={dualOn ? dual.refLabel || 'Reference' : undefined}
+                yAxisSize={dualOn ? 64 : undefined}
+                dualMarks={dualMarks.ref}
+              />
+            </div>
+            {dualOn && (
+              <div style={{ flex: 1, minHeight: 0 }}>
+                <BurstSweepViewer
+                  backendUrl={backendUrl}
+                  entry={partnerEntry}
+                  liveParams={partnerParams}
+                  group={group}
+                  series={series}
+                  channel={dual.channel}
+                  sweep={previewSweep}
+                  viewport={viewport}
+                  setViewport={setViewport}
+                  heightSignal={Math.max(miniHeight, 480) + 1}
+                  onAddBurst={onAddPartnerBurst}
+                  onRemoveBurst={onRemovePartnerBurstAt}
+                  zeroOffset={zeroOffset}
+                  onZeroOffsetChange={setZeroOffset}
+                  theme={theme}
+                  fontSize={fontSize}
+                  trainsForSweep={[]}
+                  compact
+                  label={dual.partnerLabel || 'Partner'}
+                  yAxisSize={64}
+                  dualMarks={dualMarks.partner}
+                />
+              </div>
+            )}
           </div>
 
           {/* Horizontal splitter — thin (3px hit / 2px grip). */}
@@ -694,6 +853,55 @@ export function FieldBurstWindow({
             }} />
           </div>
 
+          {dualOn && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, flexShrink: 0 }}>
+              <div className="segmented">
+                <button className={resultTab === 'ref' ? 'active' : ''} onClick={() => setResultTab('ref')}>
+                  {dual.refLabel || 'Reference'} bursts
+                </button>
+                <button className={resultTab === 'partner' ? 'active' : ''} onClick={() => setResultTab('partner')}>
+                  {dual.partnerLabel || 'Partner'} bursts
+                </button>
+                <button className={resultTab === 'propagation' ? 'active' : ''} onClick={() => setResultTab('propagation')}>
+                  Propagation
+                </button>
+              </div>
+            </div>
+          )}
+          {dualOn && resultTab === 'propagation' && entry && (
+            <div style={{ flex: 1, minHeight: 0, marginTop: 6 }}>
+              <PropagationPanel
+                entry={entry}
+                block={entry.propagation}
+                dual={dual}
+                stale={propStale}
+                onSelectPair={(sw, t) => zoomTo(sw, t)}
+                onExport={() => exportPropagationCSV(group, series)}
+              />
+            </div>
+          )}
+          {dualOn && resultTab === 'partner' && (
+            <div style={{
+              flex: 1, overflow: 'auto', minHeight: 0, marginTop: 6,
+              border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
+            }}>
+              {entry?.partner ? (
+                <BurstTable
+                  bursts={entry.partner.bursts}
+                  selectedIdx={null}
+                  onSelect={(i) => {
+                    const b = entry.partner!.bursts[i]
+                    if (b) zoomTo(b.sweepIndex, b.startS, b.endS)
+                  }}
+                />
+              ) : (
+                <div style={{ padding: 12, fontSize: 'var(--font-size-label)', color: 'var(--text-muted)' }}>
+                  Press <strong>Run</strong> to detect on both channels.
+                </div>
+              )}
+            </div>
+          )}
+          {(!dualOn || resultTab === 'ref') && (<>
           {/* Summary strip — baseline + threshold + signal diag. Sits
               right above the table so the "why did I get zero bursts"
               context is visually adjacent to the results. */}
@@ -781,6 +989,7 @@ export function FieldBurstWindow({
               trainIdByIdx={trainsEnabled ? trainData.idByGlobalIdx : null}
             />
           </div>
+          </>)}
         </div>{/* close RIGHT panel */}
       </div>{/* close two-column body */}
     </div>
@@ -1042,7 +1251,16 @@ function BurstSweepViewer({
   zeroOffset, onZeroOffsetChange,
   theme, fontSize,
   trainsForSweep,
+  label, compact, yAxisSize, dualMarks,
 }: {
+  /** Dual-site: name shown in the header (e.g. CA3). */
+  label?: string
+  /** Dual-site second viewer: no viewport bar / slider / help line. */
+  compact?: boolean
+  /** Fixed y-axis width so stacked viewers' time axes line up. */
+  yAxisSize?: number
+  /** Dual-site lag brackets and unpaired-discharge flags for this sweep. */
+  dualMarks?: DualMarks | null
   backendUrl: string
   entry: FieldBurstsData | undefined
   /** Live params from the form (as opposed to `entry.params`, which
@@ -1073,8 +1291,11 @@ function BurstSweepViewer({
   const themeKey = useThemeKey()
   const containerRef = useRef<HTMLDivElement>(null)
   const plotRef = useRef<uPlot | null>(null)
+  const dualMarksRef = useRef<DualMarks | null>(dualMarks ?? null)
+  dualMarksRef.current = dualMarks ?? null
   const { onContextMenu: onBurstContextMenu, menu: burstPlotMenu } = usePlotMenu({
     getCanvas: () => plotRef.current?.ctx?.canvas ?? null,
+    getUplot: () => plotRef.current ?? null,
     defaultName: 'burst-trace',
   })
   const overlayRef = useRef<HTMLCanvasElement>(null)
@@ -1159,7 +1380,8 @@ function BurstSweepViewer({
 
     const opts: uPlot.Options = {
       width: container.clientWidth || 400,
-      height: Math.max(120, container.clientHeight || 180),
+      // Stacked dual-site viewers are shorter; let them fit their box.
+      height: Math.max(yAxisSize ? 60 : 120, container.clientHeight || 180),
       scales: { x: { time: false }, y: {} },
       // Hide uPlot's top legend — the header row already shows sweep
       // number, burst count, etc., and the "Time / Value / Trace"
@@ -1177,12 +1399,13 @@ function BurstSweepViewer({
           grid: { stroke: cssVar('--chart-grid'), width: 1 },
           ticks: { stroke: cssVar('--chart-tick'), width: 1 },
           font: `${cssVar('--font-size-label')} ${cssVar('--font-ui')}`,
+          ...(yAxisSize ? { size: yAxisSize } : {}),
         },
       ],
       cursor: { drag: { x: false, y: false } },
       series: [
         {},
-        { stroke: cssVar('--trace-color-1'), width: 1.25, points: { show: false } },
+        { stroke: cssVar(compact ? '--trace-color-3' : '--trace-color-1'), width: 1.25, points: { show: false } },
       ],
       hooks: {
         draw: [() => drawBurstOverlay(
@@ -1190,6 +1413,7 @@ function BurstSweepViewer({
           data.zeroOffsetApplied,
           primedRemoveIdxRef.current,
           trainsForSweep,
+          dualMarksRef.current,
         )],
       },
     }
@@ -1202,9 +1426,10 @@ function BurstSweepViewer({
       data.zeroOffsetApplied,
       primedRemoveIdxRef.current,
       trainsForSweep,
+      dualMarksRef.current,
     )
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, themeKey])
+  }, [data, themeKey, yAxisSize, compact])
 
   // Redraw overlays when the burst list or entry thresholds change
   // without a fresh fetch (e.g. manual add/remove on the same view).
@@ -1214,8 +1439,9 @@ function BurstSweepViewer({
       data?.zeroOffsetApplied ?? 0,
       primedRemoveIdxRef.current,
       trainsForSweep,
+      dualMarksRef.current,
     )
-  }, [entry, sweepBursts, trainsForSweep, theme, fontSize, data])
+  }, [entry, sweepBursts, trainsForSweep, theme, fontSize, data, dualMarks])
 
   // Imperative redraw after a click toggles the primed index. Avoids
   // adding the ref to a useEffect dep list (refs aren't reactive).
@@ -1225,6 +1451,7 @@ function BurstSweepViewer({
       data?.zeroOffsetApplied ?? 0,
       primedRemoveIdxRef.current,
       trainsForSweep,
+      dualMarksRef.current,
     )
   }, [entry, sweepBursts, trainsForSweep, data])
 
@@ -1530,7 +1757,8 @@ function BurstSweepViewer({
         color: 'var(--text-muted)',
         borderRadius: 'var(--radius) var(--radius) 0 0',
       }}>
-        <span>Sweep <span className="num">{sweep + 1}</span></span>
+        {label && <strong style={{ color: 'var(--text-primary)' }}>{label}</strong>}
+        {!compact && <span>Sweep <span className="num">{sweep + 1}</span></span>}
         <span><span className="num">{sweepBursts.length}</span> bursts{manualCount > 0 ? ` (${manualCount} manual)` : ''}</span>
         <span style={{ marginLeft: 'auto', display: 'flex', gap: 10, alignItems: 'center' }}>
           <label
@@ -1563,14 +1791,16 @@ function BurstSweepViewer({
           (presets + custom seconds + ⟨⟨ ⟪ ◀ ▶ ⟫ ⟩⟩ arrows + time
           readout) so the burst window feels identical to the main
           continuous-mode UI the user already knows. */}
-      <BurstViewportBar
-        viewport={viewport}
-        sweepDuration={data?.sweepDurationS ?? 0}
-        setViewport={setViewport}
-        shiftViewport={shiftViewport}
-        goHome={goHome}
-        goEnd={goEnd}
-      />
+      {!compact && (
+        <BurstViewportBar
+          viewport={viewport}
+          sweepDuration={data?.sweepDurationS ?? 0}
+          setViewport={setViewport}
+          shiftViewport={shiftViewport}
+          goHome={goHome}
+          goEnd={goEnd}
+        />
+      )}
 
       <div
         ref={containerRef}
@@ -1589,13 +1819,15 @@ function BurstSweepViewer({
 
       {/* Scroll indicator: shows where the visible viewport sits
           inside the full sweep. Drag or click to pan. */}
-      <BurstViewportSlider
-        viewport={viewport}
-        sweepDuration={data?.sweepDurationS ?? 0}
-        setViewport={setViewport}
-      />
+      {!compact && (
+        <BurstViewportSlider
+          viewport={viewport}
+          sweepDuration={data?.sweepDurationS ?? 0}
+          setViewport={setViewport}
+        />
+      )}
 
-      <div style={{
+      {!compact && <div style={{
         padding: '2px 8px', fontSize: 'var(--font-size-label)',
         color: 'var(--text-muted)', fontStyle: 'italic',
         background: 'var(--bg-secondary)',
@@ -1603,7 +1835,7 @@ function BurstSweepViewer({
         borderRadius: '0 0 var(--radius) var(--radius)',
       }}>
         Scroll = zoom X · ⌥ scroll = zoom Y · drag = pan · left-click = add burst · right-click / double-click = remove
-      </div>
+      </div>}
       {err && (
         <div style={{
           position: 'absolute', top: 30, left: 10,
@@ -1635,6 +1867,8 @@ function drawBurstOverlay(
    *  behind the per-burst markers. Empty when train-grouping is off
    *  or no clusters qualify. */
   trains: TrainSummary[] = [],
+  /** Dual-site lag brackets / unpaired flags (drawn last). */
+  dual: DualMarks | null = null,
 ) {
   if (!u || !canvas) return
   const ctx = canvas.getContext('2d')
@@ -1786,6 +2020,67 @@ function drawBurstOverlay(
     ctx.stroke()
     ctx.restore()
   }
+  if (dual) drawDualMarks(u, ctx, cssH, dual)
+}
+
+/** Dual-site marks for one viewer: a bracket from the reference onset to
+ *  where the partner's discharge lines up (with the lag), and a small flag
+ *  on discharges that have no partner. */
+export interface DualMarks {
+  pairs: { t0: number; t1: number; label: string }[]
+  unpaired: { t: number; label: string }[]
+}
+
+function drawDualMarks(u: uPlot, ctx: CanvasRenderingContext2D, cssH: number, marks: DualMarks) {
+  const dpr = devicePixelRatio || 1
+  const top = u.bbox.top / dpr
+  const left = u.bbox.left / dpr
+  const right = left + u.bbox.width / dpr
+  const px = (t: number) => u.valToPos(t, 'x', true) / dpr
+  ctx.save()
+  ctx.beginPath()
+  ctx.rect(left, 0, right - left, cssH)
+  ctx.clip()
+  ctx.font = `${cssVar('--font-size-xs')} ${cssVar('--font-ui')}`
+  ctx.textBaseline = 'top'
+  const accent = cssVar('--accent')
+  // Labels that would overprint the previous one are skipped (the
+  // bracket is still drawn); zoom in to read them.
+  let labelRight = -Infinity
+  for (const p of [...marks.pairs].sort((a, b) => a.t0 - b.t0)) {
+    const a = px(p.t0), b = px(p.t1)
+    if (!isFinite(a) || !isFinite(b) || Math.max(a, b) < left || Math.min(a, b) > right) continue
+    const y = top + 4
+    ctx.strokeStyle = accent
+    ctx.fillStyle = accent
+    ctx.lineWidth = 1.5
+    ctx.beginPath()
+    ctx.moveTo(a, y); ctx.lineTo(b, y)
+    ctx.moveTo(a, y - 3); ctx.lineTo(a, y + 3)
+    ctx.moveTo(b, y - 3); ctx.lineTo(b, y + 3)
+    ctx.stroke()
+    ctx.setLineDash([2, 3])
+    ctx.globalAlpha = 0.5
+    ctx.beginPath(); ctx.moveTo(b, y); ctx.lineTo(b, cssH); ctx.stroke()
+    ctx.setLineDash([])
+    ctx.globalAlpha = 1
+    const lx = Math.max(a, b) + 4
+    if (lx > labelRight + 4) {
+      ctx.fillText(p.label, lx, y + 2)
+      labelRight = lx + ctx.measureText(p.label).width
+    }
+  }
+  const muted = cssVar('--warning')
+  for (const f of marks.unpaired) {
+    const x = px(f.t)
+    if (!isFinite(x) || x < left || x > right) continue
+    ctx.fillStyle = muted
+    ctx.beginPath()
+    ctx.moveTo(x, top + 1); ctx.lineTo(x + 5, top + 1); ctx.lineTo(x, top + 9); ctx.closePath()
+    ctx.fill()
+    ctx.fillText(f.label, x + 6, top + 1)
+  }
+  ctx.restore()
 }
 
 function LegendDot({ color, label }: { color: string; label: string }) {

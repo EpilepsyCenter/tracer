@@ -1,4 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react'
+import type uPlot from 'uplot'
+import {
+  type AsterismTable, uplotToSvg, uplotToTable, tableToCsv, tableToTsv,
+} from '../../utils/plotExport'
 
 /**
  * Reusable right-click "Copy / Save as PNG / SVG" menu for any plot
@@ -31,6 +35,16 @@ export interface PlotMenuSources {
   getCanvas?: () => HTMLCanvasElement | null
   /** Returns the SVG string to copy/save, or null if unavailable. */
   getSvg?: () => string | null
+  /** The uPlot instance behind the canvas. Enables vector output
+   *  (PDF / SVG redrawn from the plotted data and axes). */
+  getUplot?: () => uPlot | null
+  /** Enables "Export for ASTERISM": ``'xy'`` exports the plotted data
+   *  (X column + one column per visible series); a function returns a
+   *  custom table, e.g. raw values behind a histogram. */
+  asterism?: 'xy' | (() => AsterismTable | null)
+  /** ``false`` hides the vector items — for plots whose content is
+   *  drawn in canvas hooks, where a redraw from the data would be empty. */
+  vector?: boolean
   /** Default base filename used in Save dialogs (no extension). */
   defaultName?: string
   /** Caller-supplied items prepended above the Copy / Save block.
@@ -49,7 +63,7 @@ export function usePlotMenu(sources: PlotMenuSources) {
     // Only fire when at least one source is actually available right
     // now — otherwise let the platform menu through (avoids confusing
     // empty-state menus on a viewer with nothing rendered yet).
-    const hasCanvas = sources.getCanvas?.() != null
+    const hasCanvas = sources.getCanvas?.() != null || sources.getUplot?.() != null
     const hasSvg = sources.getSvg?.() != null
     const hasExtra = (sources.getExtraItems?.()?.length ?? 0) > 0
     if (!hasCanvas && !hasSvg && !hasExtra) return
@@ -101,10 +115,27 @@ function PlotContextMenu({ x, y, sources, onClose }: PlotContextMenuProps) {
   // Re-evaluate availability on every render — the canvas pointer
   // changes when uPlot rebuilds, and SVG strings are passed through
   // closures that may have updated since the menu opened.
-  const canvas = sources.getCanvas?.() ?? null
+  const uplot = sources.getUplot?.() ?? null
+  const canvas = sources.getCanvas?.() ?? uplot?.ctx?.canvas ?? null
   const svg = sources.getSvg?.() ?? null
   const hasCanvas = canvas != null
   const hasSvg = svg != null
+  // Vector source: a caller-supplied SVG (Cohort) or one redrawn from
+  // the uPlot instance.
+  const hasVector = sources.vector !== false && (hasSvg || uplot != null)
+  const vectorSvg = (): { svg: string; width: number; height: number } | null => {
+    if (svg) {
+      const w = Number(/\bwidth="([\d.]+)/.exec(svg)?.[1] ?? 600)
+      const h = Number(/\bheight="([\d.]+)/.exec(svg)?.[1] ?? 400)
+      return { svg, width: w, height: h }
+    }
+    return uplot ? uplotToSvg(uplot) : null
+  }
+  const asterismTable = (): AsterismTable | null => {
+    if (!sources.asterism) return null
+    if (sources.asterism === 'xy') return uplot ? uplotToTable(uplot) : null
+    return sources.asterism()
+  }
 
   async function ok(text: string) {
     setToast({ kind: 'ok', text })
@@ -143,6 +174,98 @@ function PlotContextMenu({ x, y, sources, onClose }: PlotContextMenuProps) {
       const result = await api.writeBinaryFile(path, arrayBufferToBase64(buf))
       if (!result.ok) throw new Error(result.error || 'write failed')
       ok('PNG saved')
+    } catch (e) {
+      err(e instanceof Error ? e.message : String(e))
+    } finally { setBusy(null) }
+  }
+
+  // ----- ASTERISM actions -------------------------------------------------
+  async function exportAsterism() {
+    setBusy('asterism')
+    try {
+      const t = asterismTable()
+      if (!t || t.columns.length === 0) throw new Error('Nothing to export yet.')
+      const api = window.electronAPI
+      if (!api) throw new Error('Electron API unavailable.')
+      const path = await api.saveFileDialog?.(`${baseName}.csv`, [
+        { name: 'CSV', extensions: ['csv'] },
+      ])
+      if (!path) { setBusy(null); return }
+      const result = await api.writeTextFile(path, tableToCsv(t))
+      if (!result.ok) throw new Error(result.error || 'write failed')
+      ok('Saved — import it in ASTERISM')
+    } catch (e) {
+      err(e instanceof Error ? e.message : String(e))
+    } finally { setBusy(null) }
+  }
+
+  async function copyAsterism() {
+    setBusy('asterism-copy')
+    try {
+      const t = asterismTable()
+      if (!t || t.columns.length === 0) throw new Error('Nothing to copy yet.')
+      await navigator.clipboard.writeText(tableToTsv(t))
+      ok(`${t.columns.length} columns copied — paste into an ASTERISM table`)
+    } catch (e) {
+      err(e instanceof Error ? e.message : String(e))
+    } finally { setBusy(null) }
+  }
+
+  // ----- Vector actions (PDF / SVG) -----------------------------------------
+  async function copyVector() {
+    setBusy('copy-vector')
+    try {
+      const v = vectorSvg()
+      if (!v) throw new Error('No vector source for this view.')
+      const api = window.electronAPI
+      if (api?.copyVector) {
+        const r = await api.copyVector(v.svg, v.width, v.height)
+        if (!r.ok) throw new Error(r.error || 'copy failed')
+        ok(r.format === 'pdf' ? 'Vector copied — paste into Affinity / Illustrator' : 'SVG copied')
+      } else {
+        await navigator.clipboard.writeText(v.svg)
+        ok('SVG copied')
+      }
+    } catch (e) {
+      err(e instanceof Error ? e.message : String(e))
+    } finally { setBusy(null) }
+  }
+
+  async function savePdf() {
+    setBusy('save-pdf')
+    try {
+      const v = vectorSvg()
+      if (!v) throw new Error('No vector source for this view.')
+      const api = window.electronAPI
+      if (!api?.svgToPdf) throw new Error('PDF export unavailable.')
+      const path = await api.saveFileDialog?.(`${baseName}.pdf`, [
+        { name: 'PDF', extensions: ['pdf'] },
+      ])
+      if (!path) { setBusy(null); return }
+      const r = await api.svgToPdf(v.svg, v.width, v.height)
+      if (!r.ok || !r.base64) throw new Error(r.error || 'PDF failed')
+      const w = await api.writeBinaryFile(path, r.base64)
+      if (!w.ok) throw new Error(w.error || 'write failed')
+      ok('PDF saved')
+    } catch (e) {
+      err(e instanceof Error ? e.message : String(e))
+    } finally { setBusy(null) }
+  }
+
+  async function saveVectorSvg() {
+    setBusy('save-svg')
+    try {
+      const v = vectorSvg()
+      if (!v) throw new Error('No vector source for this view.')
+      const api = window.electronAPI
+      if (!api) throw new Error('Electron API unavailable.')
+      const path = await api.saveFileDialog?.(`${baseName}.svg`, [
+        { name: 'SVG', extensions: ['svg'] },
+      ])
+      if (!path) { setBusy(null); return }
+      const result = await api.writeTextFile(path, v.svg)
+      if (!result.ok) throw new Error(result.error || 'write failed')
+      ok('SVG saved')
     } catch (e) {
       err(e instanceof Error ? e.message : String(e))
     } finally { setBusy(null) }
@@ -191,8 +314,8 @@ function PlotContextMenu({ x, y, sources, onClose }: PlotContextMenuProps) {
   }
 
   // Clamp inside viewport.
-  const W = 240
-  const H = hasSvg ? 200 : 150
+  const W = 260
+  const H = 60 + (hasVector ? 80 : 0) + (sources.asterism ? 60 : 0) + (hasSvg ? 30 : 0)
   const left = Math.min(x, window.innerWidth - W - 4)
   const top = Math.min(y, window.innerHeight - H - 4)
 
@@ -227,10 +350,22 @@ function PlotContextMenu({ x, y, sources, onClose }: PlotContextMenuProps) {
           </>
         )
       })()}
-      {hasSvg && (
+      {sources.asterism && (
         <>
-          <Item label="Copy SVG" hint="paste into Illustrator" busy={busy === 'copy-svg'} onClick={copySvg} />
-          <Item label="Save SVG…" hint="vector, fully editable" busy={busy === 'save-svg'} onClick={saveSvg} />
+          <Item label="Export for ASTERISM…" hint="CSV table" busy={busy === 'asterism'} onClick={exportAsterism} />
+          <Item label="Copy values" hint="paste into a table" busy={busy === 'asterism-copy'} onClick={copyAsterism} />
+          <Divider />
+        </>
+      )}
+      {hasVector && (
+        <>
+          <Item label="Copy vector" hint="paste into Affinity / Illustrator" busy={busy === 'copy-vector'} onClick={copyVector} />
+          <Item label="Save PDF…" hint="vector" busy={busy === 'save-pdf'} onClick={savePdf} />
+          <Item label="Save SVG…" hint="vector, fully editable"
+            busy={busy === 'save-svg'} onClick={hasSvg ? saveSvg : saveVectorSvg} />
+          {hasSvg && (
+            <Item label="Copy SVG code" hint="as text" busy={busy === 'copy-svg'} onClick={copySvg} />
+          )}
           <Divider />
         </>
       )}

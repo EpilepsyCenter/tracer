@@ -263,6 +263,7 @@ function OverlayBody({
 }) {
   const { onContextMenu, menu } = usePlotMenu({
     getCanvas: () => plotRef.current?.ctx?.canvas ?? null,
+    getUplot: () => plotRef.current ?? null,
     defaultName: channelLabel || 'overlay',
   })
   return (

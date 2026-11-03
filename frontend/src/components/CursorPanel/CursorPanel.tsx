@@ -244,6 +244,7 @@ export function CursorPanel() {
             fieldBursts: state.fieldBursts,
             spectralAnalyses: state.spectralAnalyses,
             burstFormParams: state.burstFormParams,
+            burstDualForm: state.burstDualForm,
             trainParams: state.trainParams,
             ivCurves: state.ivCurves,
             fpspCurves: state.fpspCurves,
@@ -282,6 +283,9 @@ export function CursorPanel() {
         // it to electron prefs. Without this the settings wouldn't
         // survive an app restart because only the main window has
         // `recording.filePath` set for the persistence subscribe.
+        if (ev.data?.type === 'burst-dual-form-update' && ev.data.burstDualForm) {
+          useAppStore.setState({ burstDualForm: ev.data.burstDualForm })
+        }
         if (ev.data?.type === 'burst-form-params-update' && ev.data.burstFormParams) {
           useAppStore.setState({ burstFormParams: ev.data.burstFormParams })
         }
