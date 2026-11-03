@@ -4217,7 +4217,7 @@ axes, group colours, and labels.
 
 ### Export
 
-Three buttons sit at the bottom right.
+Four buttons sit above the cell table.
 
 - **Excel summary** — a multi-sheet `.xlsx` workbook with a
   Cohort summary sheet, a Stats summary sheet, a wide *cells ×
@@ -4231,6 +4231,25 @@ Three buttons sit at the bottom right.
   produce three tables each (pooled events, ECDF by group, ECDF
   by cell); timeseries metrics produce two (group mean / SEM
   per bin, plus per-cell traces).
+- **ASTERISM (.asterism)** — an ASTERISM project that opens
+  directly, with nothing to import. For each selected scalar metric
+  it holds:
+  - a data table with exactly the values Cohort's statistics use,
+    one column per group or condition. Within-recording designs have
+    one row per cell (titled with its cell ID), so the pairs are kept;
+  - a graph in ASTERISM's own style: *Scatter, mean ± SEM* between
+    groups, *Before-after* within recordings;
+  - the matching test (Welch's t, Mann-Whitney, paired t, Wilcoxon,
+    one-way or repeated-measures ANOVA, Kruskal-Wallis, Friedman),
+    parametric or not as Cohort chose. ASTERISM recomputes it when the
+    file opens, and gets the same p-value as Cohort;
+  - an info sheet, *TRACER cohort*, recording the folder, the
+    design, the quality-control setting and the rows it left out, and
+    Cohort's own results for comparison.
+
+  Set up the comparison first (tags to compare); run the statistics
+  if you want Cohort's results in the info sheet. Distribution
+  metrics aren't included — use the Excel or Prism export for those.
 
 ### Sessions
 

@@ -442,7 +442,7 @@ class ExportRequest(BaseModel):
         One Grouped table per scalar metric, one Column table per
         (distribution metric × group).
     """
-    format: str = Field(..., description="'excel_summary' | 'excel_cells' | 'prism'")
+    format: str = Field(..., description="'excel_summary' | 'excel_cells' | 'prism' | 'asterism'")
     aggregate: dict
     stats: Optional[dict] = None
     selected_metrics: Optional[list[str]] = None
@@ -452,6 +452,9 @@ class ExportRequest(BaseModel):
     # this directly without re-filtering server-side, so the file
     # exactly matches the on-screen cards.
     design_groups: Optional[list[dict]] = None
+    # ``asterism`` format: the per-metric tables the window built from
+    # the same values its statistics used (see cohort_asterism.py).
+    asterism: Optional[dict] = None
 
 
 @router.post("/export")
@@ -491,6 +494,17 @@ def export(req: ExportRequest) -> dict:
         return {
             'format': 'pzfx',
             'filename': 'cohort.pzfx',
+            'base64': base64.b64encode(data).decode('ascii'),
+        }
+    if fmt == 'asterism':
+        from analysis import cohort_asterism
+        try:
+            data = cohort_asterism.write_asterism(req.asterism or {})
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {
+            'format': 'asterism',
+            'filename': 'cohort.asterism',
             'base64': base64.b64encode(data).decode('ascii'),
         }
     raise HTTPException(status_code=400, detail=f"Unknown export format: {fmt!r}")

@@ -1025,6 +1025,42 @@ export function CohortWindow({ backendUrl }: { backendUrl: string }) {
     }))
   }, [aggResult, design, comparisonShape, seriesRole])
 
+  /** ASTERISM project export: one table per selected scalar metric with
+   *  exactly the values the statistics use (paired rows aligned by cell),
+   *  the test branch Cohort chose, and provenance for the info sheet. */
+  const buildAsterismPayload = useCallback(() => {
+    if (!aggResult || !design || !design.ready || !designKind) return null
+    const scalars = selectedMetrics.filter((m) => metricKindOf(m) === 'scalar')
+    const skipped = selectedMetrics.filter((m) => metricKindOf(m) !== 'scalar')
+    const rowTitles = comparisonShape === 'within'
+      ? design.groups[0].cells.map((c) => c.cell_id || c.file_name)
+      : null
+    const tables = scalars.map((m) => {
+      const groups = extractValuesForMetric(m)
+      return groups && {
+        metric: m, label: m, tags: groups.map((g) => g.tag),
+        values: groups.map((g) => g.values), row_titles: rowTitles,
+      }
+    }).filter(Boolean)
+    const branches: Record<string, string> = {}
+    for (const m of scalars) {
+      branches[m] = statsResults?.[m]?.branch
+        ?? (testOverride === 'nonparametric' ? 'nonparametric' : 'parametric')
+    }
+    return {
+      design_kind: designKind, tables, branches,
+      stats: statsResults ?? null,
+      design: {
+        comparison_shape: comparisonShape, selected_tags: selectedTags, filter_tags: filterTags,
+        series_role: seriesRole, n_unit: nUnit,
+      },
+      folder, analysis_type: analysisType, qc: aggResult.qc ?? null,
+      skipped_metrics: skipped,
+      app_version: typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : '',
+    }
+  }, [aggResult, design, designKind, selectedMetrics, comparisonShape, extractValuesForMetric,
+      statsResults, testOverride, selectedTags, filterTags, seriesRole, nUnit, folder, analysisType])
+
   // Per-cell array extraction for graphs. Same per-mode rules as
   // the stats extractor (within = paired by file, between = role-
   // gated), but each cell contributes an ARRAY of values:
@@ -1786,6 +1822,7 @@ export function CohortWindow({ backendUrl }: { backendUrl: string }) {
               testOverride={testOverride}
               subsampleMode={subsampleMode}
               subsampleN={subsampleN}
+              getAsterismPayload={buildAsterismPayload}
             />
             <CellTable cells={aggResult.cells} columns={scalarColumns} />
             <QcSection result={aggResult} onOpenQuality={() => setView('quality')} />
@@ -4251,10 +4288,12 @@ function StatsTable({ metrics, results, metricKindOf }: {
 function ExportButtons({
   backendUrl, aggregate, designGroups, stats, selectedMetrics,
   comparisonShape, selectedTags, filterTags, seriesRole, nUnit, testOverride,
-  subsampleMode, subsampleN,
+  subsampleMode, subsampleN, getAsterismPayload,
 }: {
   backendUrl: string
   aggregate: any
+  /** Tables for the ASTERISM project (null until the design is ready). */
+  getAsterismPayload: () => Record<string, unknown> | null
   // Wizard's grouped cells (with subsampling already applied to
   // distributions). NULL when the wizard isn't ready — in that
   // case the export endpoint falls back to a raw "every cell in
@@ -4271,13 +4310,18 @@ function ExportButtons({
   subsampleMode: SubsampleMode
   subsampleN: number
 }) {
-  const [busy, setBusy] = useState<null | 'excel_summary' | 'excel_cells' | 'prism'>(null)
+  const [busy, setBusy] = useState<null | 'excel_summary' | 'excel_cells' | 'prism' | 'asterism'>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const doExport = useCallback(async (format: 'excel_summary' | 'excel_cells' | 'prism') => {
+  const doExport = useCallback(async (format: 'excel_summary' | 'excel_cells' | 'prism' | 'asterism') => {
     const api = window.electronAPI
     if (!api?.saveFileDialog || !api?.writeBinaryFile) {
       setError('Save not available — Electron bridge missing.')
+      return
+    }
+    const asterism = format === 'asterism' ? getAsterismPayload() : null
+    if (format === 'asterism' && !asterism) {
+      setError('Set up the comparison first (tags to compare) — the ASTERISM project follows it.')
       return
     }
     setBusy(format)
@@ -4308,6 +4352,7 @@ function ExportButtons({
           test_override: testOverride,
           subsample: { mode: subsampleMode, n: subsampleN },
         },
+        asterism,
       }
       const resp = await fetch(`${backendUrl}/api/cohort/export`, {
         method: 'POST',
@@ -4320,8 +4365,9 @@ function ExportButtons({
       // File-extension picker per format. Prism uses ``.pzfx``;
       // Excel uses ``.xlsx``. The default filename mirrors what the
       // backend suggested but stays customisable in the dialog.
-      const ext = json.format === 'pzfx' ? 'pzfx' : 'xlsx'
-      const filterName = json.format === 'pzfx' ? 'Prism' : 'Excel'
+      const ext = json.format === 'pzfx' ? 'pzfx' : json.format === 'asterism' ? 'asterism' : 'xlsx'
+      const filterName = json.format === 'pzfx' ? 'Prism'
+        : json.format === 'asterism' ? 'ASTERISM project' : 'Excel'
       const target = await api.saveFileDialog(
         json.filename || `cohort.${ext}`,
         [{ name: filterName, extensions: [ext] }],
@@ -4336,7 +4382,7 @@ function ExportButtons({
     }
   }, [backendUrl, aggregate, designGroups, stats, selectedMetrics,
       comparisonShape, selectedTags, filterTags, seriesRole, nUnit,
-      testOverride, subsampleMode, subsampleN])
+      testOverride, subsampleMode, subsampleN, getAsterismPayload])
 
   // Disable when there's nothing useful to export. ``aggregate`` is
   // always defined here (we render inside the post-aggregate
@@ -4387,6 +4433,15 @@ function ExportButtons({
              + "scalar metric, one Column table per distribution metric × "
              + "group. Open in Prism to continue your figure work."}
       >{busy === 'prism' ? 'Saving…' : 'Prism (.pzfx)'}</button>
+      <button
+        className="btn btn-sm"
+        onClick={() => doExport('asterism')}
+        disabled={disabled}
+        title={"ASTERISM project (.asterism) that opens directly: one data table per "
+             + "selected scalar metric (the values the stats use; paired designs one row "
+             + "per cell), a graph of it, and the matching test, which ASTERISM "
+             + "recomputes. An info sheet records the folder, design and quality control."}
+      >{busy === 'asterism' ? 'Saving…' : 'ASTERISM (.asterism)'}</button>
       {!stats && nCellsInGroups > 0 && (
         <span style={{ color: 'var(--text-muted)', marginLeft: 4 }}>
           (run stats first to include the stats sheet)
