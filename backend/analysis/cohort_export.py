@@ -320,8 +320,12 @@ def _write_summary_sheet(ws, stats: dict, selected_metrics: list[str]) -> None:
         elif pf < 0.01: stars = '**'
         elif pf < 0.05: stars = '*'
         else: stars = 'ns'
-        norm = r.get('normality') or {}
-        failed = [t for t, d in norm.items() if d and d.get('verdict') == 'fail']
+        # Paired designs are judged on the paired differences.
+        norm = ({'differences': r['normality_differences']} if r.get('normality_differences')
+                else (r.get('normality') or {}))
+        failed = [t + (' (no variation)' if d.get('verdict') == 'no variation' else '')
+                  for t, d in norm.items()
+                  if d and d.get('verdict') in ('non-normal', 'no variation')]
         any_known = any(d and d.get('verdict') != 'unknown' for d in norm.values())
         if not any_known:
             normality_label = ''

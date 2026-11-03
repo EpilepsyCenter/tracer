@@ -2125,7 +2125,9 @@ function DesignPreview({
                 marginTop: 4,
                 fontStyle: 'italic',
               }}>
-                Shapiro-Wilk on each group decides which branch runs.
+                {design.test_normal === 'Paired t-test'
+                  ? 'Shapiro-Wilk on the paired differences decides which branch runs.'
+                  : 'Shapiro-Wilk on each group decides which branch runs.'}
               </div>
             </>
           ) : (
@@ -2812,8 +2814,10 @@ function StatsResult({ metric, kind, result, graph, backendUrl, themeName,
               const norm = result.normality?.[tag]
               const shapiroLabel = norm
                 ? (norm.verdict === 'unknown'
-                    ? 'n<3, no Shapiro'
-                    : `Shapiro p=${formatP(norm.p)} (${norm.verdict})`)
+                    ? 'n<4, no Shapiro'
+                    : norm.verdict === 'no variation'
+                      ? 'all values identical — no Shapiro'
+                      : `Shapiro p=${formatP(norm.p)} (${norm.verdict})`)
                 : null
               return (
                 <div key={tag}>
@@ -2828,13 +2832,28 @@ function StatsResult({ metric, kind, result, graph, backendUrl, themeName,
                     <div style={{
                       display: 'flex', justifyContent: 'flex-end',
                       fontSize: 'var(--font-size-xs)',
-                      color: norm?.verdict === 'non-normal' ? 'var(--warning)' : 'var(--text-muted)',
+                      color: norm?.verdict === 'non-normal' || norm?.verdict === 'no variation' ? 'var(--warning)' : 'var(--text-muted)',
                     }}>{shapiroLabel}</div>
                   )}
                 </div>
               )
             })}
           </div>
+          {result.normality_differences && (() => {
+            const nd = result.normality_differences
+            const text = nd.verdict === 'unknown' ? 'n<4, no Shapiro'
+              : nd.verdict === 'no variation' ? 'all identical — no Shapiro'
+              : `Shapiro p=${formatP(nd.p)} (${nd.verdict})`
+            return (
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginTop: 3,
+                fontSize: 'var(--font-size-xs)' }}
+                title="A paired test assumes the paired differences are normal, so they decide the test">
+                <span>Paired differences</span>
+                <span style={{ color: nd.verdict === 'non-normal' || nd.verdict === 'no variation'
+                  ? 'var(--warning)' : 'var(--text-muted)' }}>{text}</span>
+              </div>
+            )
+          })()}
           {Array.isArray(result.posthoc) && result.posthoc.length > 0 && (
             <div style={{ marginTop: 6 }}>
               <div style={{ color: 'var(--text-muted)', marginBottom: 2 }}>
@@ -2866,11 +2885,13 @@ function StatsResult({ metric, kind, result, graph, backendUrl, themeName,
             fontStyle: 'italic',
             fontSize: 'var(--font-size-xs)',
           }}>
-            {result.override
-              ? (result.override === 'auto'
-                  ? `Branch chosen automatically (${result.branch}); Shapiro decided.`
-                  : `Branch forced (${result.branch}) by override.`)
-              : (typeof result.note === 'string' ? result.note : '')}
+            {typeof result.note === 'string' && result.note
+              ? result.note
+              : result.override
+                ? (result.override === 'auto'
+                    ? `Branch chosen automatically (${result.branch}); Shapiro decided${result.normality_differences ? ' on the paired differences' : ''}.`
+                    : `Branch forced (${result.branch}) by override.`)
+                : ''}
           </div>
         </>
       ) : kind && kind !== 'scalar' ? (
@@ -3875,7 +3896,9 @@ function nPerGroupLabel(result: any): string {
  *  when normality isn't reported (Wilcoxon / Friedman branches
  *  skip the test). */
 function normalityLabel(result: any): string {
-  const norm = result?.normality
+  const norm = result?.normality_differences
+    ? { differences: result.normality_differences }
+    : result?.normality
   if (!norm || typeof norm !== 'object') return '—'
   const failed: string[] = []
   let any = false
@@ -3883,7 +3906,8 @@ function normalityLabel(result: any): string {
     const verdict = (d as any)?.verdict
     if (verdict === 'unknown') continue
     any = true
-    if (verdict === 'fail' || (d as any)?.is_normal === false) failed.push(tag)
+    if (verdict === 'non-normal' || verdict === 'fail' || (d as any)?.is_normal === false) failed.push(tag)
+    else if (verdict === 'no variation') failed.push(`${tag} (no variation)`)
   }
   if (!any) return '—'
   if (failed.length === 0) return '✓ all'

@@ -95,12 +95,29 @@ def _descriptives(values: list[float]) -> dict:
     }
 
 
+def _no_variation(values: list[float]) -> bool:
+    """All values (practically) identical: there is no spread, so
+    normality can't be tested and a t-test / ANOVA is undefined."""
+    if len(values) < 2:
+        return False
+    lo, hi = min(values), max(values)
+    scale = max(1.0, abs(float(np.mean(values))))
+    return (hi - lo) <= 1e-12 * scale
+
+
 def _shapiro(values: list[float]) -> dict:
     """Shapiro-Wilk normality. Returns p plus a verdict. Skipped
     (verdict 'unknown') when n < 4 — pingouin's ``normality``
     asserts ``data.size > 3`` so anything below that crashes the
-    request with an unhelpful 500."""
+    request with an unhelpful 500.
+
+    Identical values get ``'no variation'``: Shapiro-Wilk returns p = 1
+    on them (it can't detect anything), which must not be read as
+    "normal" — the parametric test would then divide by a zero spread
+    (t = ∞, p = 0)."""
     n = len(values)
+    if _no_variation(values):
+        return {'n': n, 'p': None, 'is_normal': None, 'verdict': 'no variation'}
     if n < 4:
         return {'n': n, 'p': None, 'is_normal': None, 'verdict': 'unknown'}
     df = pg.normality(np.array(values, dtype=float))
@@ -431,9 +448,47 @@ def run_test(
             'descriptives': dict(zip(tags, descriptives)),
         }
 
-    # Normality per group (skipped if override forces a branch).
+    # Normality per group (shown for every design). A paired design's
+    # assumption is about the paired differences, so that is what
+    # decides its branch.
     normality = [_shapiro(v) for v in cleaned]
-    branch = _decide_branch(normality, test_override)
+    diff_normality: Optional[dict] = None
+    basis = normality
+    if design_kind == 'paired_2':
+        diffs = list(np.asarray(cleaned[1], dtype=float) - np.asarray(cleaned[0], dtype=float))
+        if all(abs(d) <= 1e-12 * max(1.0, abs(float(np.mean(cleaned[0])))) for d in diffs):
+            return {
+                'error': 'Every paired difference is zero — the conditions are identical, nothing to test.',
+                'descriptives': dict(zip(tags, descriptives)),
+                'normality': dict(zip(tags, normality)),
+            }
+        diff_normality = _shapiro(diffs)
+        basis = [diff_normality]
+    elif all(_no_variation(v) for v in cleaned) and len({round(v[0], 12) for v in cleaned}) == 1:
+        return {
+            'error': 'All values are identical in every group — nothing to compare.',
+            'descriptives': dict(zip(tags, descriptives)),
+            'normality': dict(zip(tags, normality)),
+        }
+
+    no_variation = [g for g in basis if g.get('verdict') == 'no variation']
+    note = None
+    if no_variation:
+        what = 'the paired differences are all the same' if diff_normality is not None \
+            else 'a group has no variation (all values identical)'
+        if test_override == 'parametric':
+            return {
+                'error': (f'The parametric test is undefined here: {what}, so the spread is zero. '
+                          f'Use the nonparametric test, or check the data.'),
+                'descriptives': dict(zip(tags, descriptives)),
+                'normality': dict(zip(tags, normality)),
+                **({'normality_differences': diff_normality} if diff_normality else {}),
+            }
+        branch = 'nonparametric'
+        note = (f'Normality can\'t be tested because {what}; a parametric test would be '
+                f'undefined, so the rank-based test was used.')
+    else:
+        branch = _decide_branch(basis, test_override)
 
     runner = {
         'unpaired_2': _run_unpaired_2,
@@ -456,6 +511,8 @@ def run_test(
         **test_result,
         'branch': branch,
         'override': test_override,
+        **({'note': note} if note else {}),
+        **({'normality_differences': diff_normality} if diff_normality else {}),
         'normality': dict(zip(tags, normality)),
         'descriptives': dict(zip(tags, descriptives)),
         'design_kind': design_kind,
