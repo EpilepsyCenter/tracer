@@ -1595,6 +1595,20 @@ def extract_spectral(slice_data: dict, sidecar: dict) -> CellExtraction:
         if harmonics:
             scalars[f'{region}_line_noise_1st_db'] = _spectral_num(harmonics[0].get('prominenceDb'))
         scalars[f'{region}_duration_s'] = _spectral_num(r.get('durationS'))
+        # Two-channel coupling (Spectral window "Second channel"): lags are
+        # partner − reference, positive = reference leads.
+        cp = r.get('coupling') or {}
+        if cp and not cp.get('error'):
+            x = cp.get('xcorr') or {}
+            scalars[f'{region}_xcorr_peak_r'] = _spectral_num(x.get('peakR'))
+            scalars[f'{region}_xcorr_lag_ms'] = _spectral_num(x.get('peakLagMs'))
+            scalars[f'{region}_xcorr_zero_lag_r'] = _spectral_num(x.get('zeroLagR'))
+            for band, b in (cp.get('bands') or {}).items():
+                bs = _spectral_slug(band)
+                scalars[f'{region}_{bs}_coherence'] = _spectral_num((b or {}).get('coherence'))
+                scalars[f'{region}_{bs}_imag_coherence'] = _spectral_num((b or {}).get('imagCoherence'))
+                scalars[f'{region}_{bs}_wpli'] = _spectral_num((b or {}).get('wpli'))
+                scalars[f'{region}_{bs}_phase_delay_ms'] = _spectral_num((b or {}).get('phaseDelayMs'))
 
     params = slice_data.get('params') or {}
     meta: dict[str, Any] = {
@@ -1604,6 +1618,12 @@ def extract_spectral(slice_data: dict, sidecar: dict) -> CellExtraction:
         'average': params.get('average'),
         'analysis_range_hz': [params.get('fmin'), params.get('fmax')],
         'line_noise_excluded': params.get('exclude_line_noise'),
+        'coupling': ({
+            'partner_channel': params.get('coupling_channel'),
+            'ref_label': params.get('coupling_ref_label'),
+            'partner_label': params.get('coupling_partner_label'),
+            'lag_sign': 'partner minus reference',
+        } if params.get('coupling_enabled') else None),
         'errors': errors,
         'distribution_counts': {},
     }

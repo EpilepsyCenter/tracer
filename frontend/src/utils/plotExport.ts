@@ -311,7 +311,9 @@ export function uplotToTable(u: uPlot): AsterismTable {
     // uPlot names unlabelled series "Value"; treat that as no label.
     const label = s.label && s.label !== 'Value' ? String(s.label) : ''
     let name = label || title || `Series ${i}`
-    if (label && units && !name.includes(units)) name = `${name} (${units})`
+    // Skip only when the name already carries these units in brackets
+    // (a bare substring test misfires on short units like "r").
+    if (label && units && !name.includes(`(${units})`)) name = `${name} (${units})`
     let unique = name, k = 2
     while (used.has(unique)) unique = `${name} ${k++}`
     used.add(unique)

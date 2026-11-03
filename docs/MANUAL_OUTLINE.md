@@ -1176,7 +1176,7 @@ Failures shown with faint red row tint; manual-edited trials marked with `*`. Ri
 - Batch: template's `train_params` propagate to each target sidecar after the analysis runs
 
 ## 22. Spectral Analysis
-- When to use · Window layout · Regions · Spectrum settings · Bands · Line noise · Pre-filter · Spectrogram · Results · Band power over time · Export · Batch and Cohort · Known gaps
+- When to use · Window layout · Regions · Spectrum settings · Bands · Line noise · Pre-filter · Spectrogram · Results · Band power over time · Coupling with a second channel · Export · Batch and Cohort · Known gaps
 
 ---
 

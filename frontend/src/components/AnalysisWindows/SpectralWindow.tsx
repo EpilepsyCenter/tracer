@@ -46,7 +46,7 @@ interface FileInfo {
   groups: any[]
 }
 
-type ResultTab = 'spectrum' | 'bands' | 'line' | 'time'
+type ResultTab = 'spectrum' | 'bands' | 'line' | 'time' | 'coupling'
 
 /** Compact number formatting for powers that span many decades. */
 function fmtNum(v: number | null | undefined, digits = 3): string {
@@ -165,6 +165,7 @@ export function SpectralWindow({
   const [showSpectrogram, setShowSpectrogram] = useState(true)
   const [selectedRegionId, setSelectedRegionId] = useState<string | null>(null)
   const [tab, setTab] = useState<ResultTab>('spectrum')
+  useEffect(() => { if (tab === 'coupling' && !params.coupling_enabled) setTab('spectrum') }, [tab, params.coupling_enabled])
 
   // ---- Splitters (persisted in Electron prefs, like the other windows).
   const [miniHeight, setMiniHeight] = useState(420)
@@ -311,6 +312,7 @@ export function SpectralWindow({
               )}
               onAddFromView={addRegionFromView}
             />
+            <CouplingCard params={params} setParams={setParams} channels={channels} refChannel={channel} />
             <SpectrumCard params={params} setParams={setParams} />
             <BandsCard params={params} setParams={setParams} />
             <LineNoiseCard params={params} setParams={setParams} />
@@ -375,7 +377,8 @@ export function SpectralWindow({
           <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
               <div className="segmented">
-                {([['spectrum', 'Spectrum'], ['bands', 'Band power'], ['line', 'Line noise'], ['time', 'Over time']] as const).map(([k, label]) => (
+                {([['spectrum', 'Spectrum'], ['bands', 'Band power'], ['line', 'Line noise'], ['time', 'Over time'],
+                  ...(params.coupling_enabled ? [['coupling', 'Coupling'] as const] : [])] as const).map(([k, label]) => (
                   <button key={k} className={tab === k ? 'active' : ''} onClick={() => setTab(k)}>{label}</button>
                 ))}
               </div>
@@ -419,6 +422,8 @@ export function SpectralWindow({
                   units={unitsForDisplay}
                   heightSignal={miniHeight}
                 />
+              ) : tab === 'coupling' ? (
+                <CouplingPanel results={entry.results} regions={entry.regions} params={params} heightSignal={miniHeight} />
               ) : tab === 'bands' ? (
                 <BandTable results={entry.results} regions={entry.regions} params={params} units={unitsForDisplay} />
               ) : (
@@ -677,6 +682,63 @@ function RangeRow({
           <span>–</span>
           <NumInput value={to ?? (max ?? 0)} decimals={integer ? 0 : 3}
             onChange={(v) => onChange(from, clean(v))} style={{ width: 64 }} />
+        </>
+      )}
+    </div>
+  )
+}
+
+function CouplingCard({ params, setParams, channels, refChannel }: {
+  params: SpectralParams
+  setParams: (p: Partial<SpectralParams>) => void
+  channels: any[]
+  refChannel: number
+}) {
+  const others = channels.filter((c: any) => c.index !== refChannel)
+  if (channels.length < 2) return null
+  const partnerOk = params.coupling_channel !== refChannel && others.some((c: any) => c.index === params.coupling_channel)
+  return (
+    <div className="section-card">
+      <div className="section-card-title">Second channel</div>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 'var(--font-size-label)' }}
+        title="Coherence, wPLI and cross-correlation between this channel and a partner, on the same regions">
+        <input type="checkbox" checked={params.coupling_enabled}
+          onChange={(e) => setParams({
+            coupling_enabled: e.target.checked,
+            ...(e.target.checked && !partnerOk && others[0] ? { coupling_channel: others[0].index } : {}),
+          })} />
+        Coupling with a second channel
+      </label>
+      {params.coupling_enabled && (
+        <>
+          <Row label="Partner channel">
+            <select value={params.coupling_channel} onChange={(e) => setParams({ coupling_channel: Number(e.target.value) })}>
+              {others.map((c: any) => <option key={c.index} value={c.index}>{c.label} ({c.units})</option>)}
+            </select>
+          </Row>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 'var(--font-size-label)', color: 'var(--text-muted)' }}>
+            <span style={{ flex: 1 }}>Names</span>
+            <input type="text" value={params.coupling_ref_label} onChange={(e) => setParams({ coupling_ref_label: e.target.value })}
+              style={{ width: 52, fontSize: 'var(--font-size-label)' }} />
+            <span>→</span>
+            <input type="text" value={params.coupling_partner_label} onChange={(e) => setParams({ coupling_partner_label: e.target.value })}
+              style={{ width: 52, fontSize: 'var(--font-size-label)' }} />
+          </div>
+          <Row label="Cross-corr. band (Hz)" hint="Band-pass applied to both channels before cross-correlation (0 = edge off)">
+            <NumInput value={params.coupling_xcorr_low} min={0} onChange={(v) => setParams({ coupling_xcorr_low: Math.max(0, v) })} style={{ width: 46 }} />
+            <span>–</span>
+            <NumInput value={params.coupling_xcorr_high} min={0} onChange={(v) => setParams({ coupling_xcorr_high: Math.max(0, v) })} style={{ width: 50 }} />
+          </Row>
+          <Row label="Max lag (± ms)" hint="Cross-correlation search range">
+            <NumInput value={params.coupling_max_lag_ms} min={1} onChange={(v) => v > 0 && setParams({ coupling_max_lag_ms: v })} style={{ width: 58 }} />
+          </Row>
+          <Row label="Delay needs coherence ≥" hint="Phase-slope delays are reported only for bands whose mean coherence reaches this">
+            <NumInput value={params.coupling_min_coherence} min={0} max={1} onChange={(v) => setParams({ coupling_min_coherence: Math.max(0, Math.min(1, v)) })} style={{ width: 52 }} />
+          </Row>
+          <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)', lineHeight: 1.4 }}>
+            Lags are {params.coupling_partner_label || 'partner'} − {params.coupling_ref_label || 'reference'}:
+            positive means {params.coupling_ref_label || 'the reference'} leads. Uses the Welch segment settings below.
+          </div>
         </>
       )}
     </div>
@@ -2105,6 +2167,290 @@ function RegionHeaderCells({ results, regions }: { results: SpectralRegionResult
       })}
     </>
   )
+}
+
+// ------------------------------------------------------------------
+// Coupling tab
+// ------------------------------------------------------------------
+
+type CouplingMeasure = 'coherence' | 'imag' | 'wpli' | 'phase'
+const COUPLING_MEASURES: { key: CouplingMeasure; label: string; axis: string }[] = [
+  { key: 'coherence', label: 'Coherence', axis: 'Coherence' },
+  { key: 'imag', label: 'Imag. coherence', axis: 'Imaginary coherence' },
+  { key: 'wpli', label: 'wPLI', axis: 'wPLI' },
+  { key: 'phase', label: 'Phase', axis: 'Phase (rad)' },
+]
+
+function CouplingPanel({ results, regions, params, heightSignal }: {
+  results: SpectralRegionResult[]
+  regions: SpectralRegion[]
+  params: SpectralParams
+  heightSignal: number
+}) {
+  const [measure, setMeasure] = useState<CouplingMeasure>('coherence')
+  const [xLog, setXLog] = useState(true)
+  const ok = results.filter((r) => !r.error && r.coupling && !r.coupling.error)
+  const failed = results.filter((r) => !r.error && r.coupling?.error)
+  const R = params.coupling_ref_label || 'reference'
+  const P = params.coupling_partner_label || 'partner'
+  if (ok.length === 0) {
+    return (
+      <div style={{ padding: 12, fontSize: 'var(--font-size-label)', color: 'var(--text-muted)' }}>
+        {failed.length > 0
+          ? failed.map((r) => <div key={r.regionId}>{r.label}: {r.coupling?.error}</div>)
+          : <>Press <strong>Run</strong> to compute coupling between the two channels.</>}
+      </div>
+    )
+  }
+  const colorIdx = (r: SpectralRegionResult, i: number) => {
+    const j = regions.findIndex((x) => x.id === r.regionId)
+    return j >= 0 ? j : i
+  }
+  const bandNames: string[] = []
+  for (const r of ok) for (const n of Object.keys(r.coupling!.bands)) if (!bandNames.includes(n)) bandNames.push(n)
+  const f2 = (v: number | null | undefined, d = 2) => (v == null || !isFinite(v) ? '—' : v.toFixed(d))
+  const rows: MeasureRow[] = [
+    {
+      key: 'xr', label: 'Cross-correlation peak r',
+      cells: ok.map((r) => f2(r.coupling!.xcorr?.peakR)),
+      copy: [{ label: 'Cross-correlation peak r', values: ok.map((r) => num(r.coupling!.xcorr?.peakR)) }],
+    },
+    {
+      key: 'xl', label: `Lag at peak, ${P} − ${R} (ms)`,
+      cells: ok.map((r) => {
+        const x = r.coupling!.xcorr
+        return x?.peakAtLimit ? <span style={{ color: 'var(--warning)' }} title="Best match at the edge of the search range — widen it">at limit</span> : f2(x?.peakLagMs)
+      }),
+      copy: [{ label: `Cross-correlation lag (ms)`, values: ok.map((r) => num(r.coupling!.xcorr?.peakLagMs)) }],
+    },
+    {
+      key: 'x0', label: 'r at zero lag',
+      cells: ok.map((r) => f2(r.coupling!.xcorr?.zeroLagR)),
+      copy: [{ label: 'r at zero lag', values: ok.map((r) => num(r.coupling!.xcorr?.zeroLagR)) }],
+    },
+    ...bandNames.map((n): MeasureRow => {
+      const b0 = ok.find((r) => r.coupling!.bands[n])?.coupling!.bands[n]
+      const range = b0 ? `${b0.low}–${b0.high} Hz` : ''
+      const get = (r: SpectralRegionResult) => r.coupling!.bands[n]
+      return {
+        key: `cb-${n}`,
+        label: <>{n} <span style={{ color: 'var(--text-muted)' }}>{range}</span></>,
+        cells: ok.map((r) => {
+          const b = get(r)
+          if (!b || b.coherence == null) return '—'
+          return (
+            <span title={`imaginary coherence ${f2(b.imagCoherence)}`}>
+              {f2(b.coherence)}
+              <span style={{ color: 'var(--text-muted)', marginLeft: 6 }}>wPLI {f2(b.wpli)}</span>
+              <span style={{ color: 'var(--text-muted)', marginLeft: 6 }}>{b.phaseDelayMs != null ? `${b.phaseDelayMs >= 0 ? '+' : ''}${b.phaseDelayMs.toFixed(1)} ms` : '—'}</span>
+            </span>
+          )
+        }),
+        copy: [
+          { label: `${n} ${range} coherence`, values: ok.map((r) => num(get(r)?.coherence)) },
+          { label: `${n} ${range} imaginary coherence`, values: ok.map((r) => num(get(r)?.imagCoherence)) },
+          { label: `${n} ${range} wPLI`, values: ok.map((r) => num(get(r)?.wpli)) },
+          { label: `${n} ${range} phase delay (ms)`, values: ok.map((r) => num(get(r)?.phaseDelayMs)) },
+        ],
+      }
+    }),
+  ]
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: 6, minHeight: '100%' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', fontSize: 'var(--font-size-label)', color: 'var(--text-muted)' }}>
+        <div className="segmented">
+          {COUPLING_MEASURES.map((m) => (
+            <button key={m.key} className={measure === m.key ? 'active' : ''} onClick={() => setMeasure(m.key)}>{m.label}</button>
+          ))}
+        </div>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+          <input type="checkbox" checked={xLog} onChange={(e) => setXLog(e.target.checked)} />
+          Log frequency
+        </label>
+        {ok.map((r, i) => (
+          <span key={r.regionId} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ width: 12, height: 3, borderRadius: 1, background: `var(${regionColorVar(colorIdx(r, i))})` }} />
+            {r.label}
+          </span>
+        ))}
+        {failed.length > 0 && <span style={{ color: 'var(--warning)' }}>{failed.map((r) => `${r.label}: ${r.coupling?.error}`).join(' · ')}</span>}
+      </div>
+      <div style={{ display: 'flex', gap: 6, height: 230, flexShrink: 0 }}>
+        <div style={{ flex: 1.6, minWidth: 0, border: '1px solid var(--border)', borderRadius: 'var(--radius-md)' }}>
+          <CouplingSpectrumPlot results={ok} colorIdx={colorIdx} measure={measure} xLog={xLog} params={params} heightSignal={heightSignal} />
+        </div>
+        <div style={{ flex: 1, minWidth: 0, border: '1px solid var(--border)', borderRadius: 'var(--radius-md)' }}>
+          <CrossCorrelationPlot results={ok} colorIdx={colorIdx} refLabel={R} partnerLabel={P} heightSignal={heightSignal} />
+        </div>
+      </div>
+      <MeasureTable results={ok} regions={regions} rows={rows} />
+      <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+        Each band shows coherence, wPLI and the phase-slope delay ({P} − {R}; positive = {R} leads).
+        Coherence also counts the zero-lag signal two nearby electrodes pick up from the same field;
+        imaginary coherence and wPLI ignore it, so a high coherence with wPLI near 0 points to volume
+        conduction rather than coupling. Delays are shown only where coherence reaches {params.coupling_min_coherence}.
+        A strong narrow rhythm pulls the phase-slope delay of its own band toward zero; the
+        cross-correlation lag is the more robust overall delay. Select rows and right-click to copy.
+      </div>
+    </div>
+  )
+}
+
+function useSimplePlot(build: (el: HTMLDivElement) => uPlot | null, deps: unknown[], heightSignal: number) {
+  const ref = useRef<HTMLDivElement>(null)
+  const plot = useRef<uPlot | null>(null)
+  const themeKey = useThemeKey()
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    plot.current?.destroy()
+    plot.current = build(el)
+    return () => { plot.current?.destroy(); plot.current = null }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [...deps, themeKey])
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const ro = new ResizeObserver(() => {
+      const u = plot.current
+      if (u && el.clientWidth > 0 && el.clientHeight > 0) u.setSize({ width: el.clientWidth, height: el.clientHeight })
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+  useEffect(() => {
+    const u = plot.current, el = ref.current
+    if (u && el && el.clientHeight > 0) u.setSize({ width: el.clientWidth, height: el.clientHeight })
+  }, [heightSignal])
+  return { ref, plot }
+}
+
+function plotAxisStyle() {
+  return {
+    stroke: cssVar('--chart-axis'),
+    grid: { stroke: cssVar('--chart-grid'), width: 1 },
+    ticks: { stroke: cssVar('--chart-tick'), width: 1 },
+    font: `${cssVar('--font-size-label')} ${cssVar('--font-ui')}`,
+    labelFont: `${cssVar('--font-size-label')} ${cssVar('--font-ui')}`,
+  }
+}
+
+function CouplingSpectrumPlot({ results, colorIdx, measure, xLog, params, heightSignal }: {
+  results: SpectralRegionResult[]
+  colorIdx: (r: SpectralRegionResult, i: number) => number
+  measure: CouplingMeasure
+  xLog: boolean
+  params: SpectralParams
+  heightSignal: number
+}) {
+  const def = COUPLING_MEASURES.find((m) => m.key === measure)!
+  const { ref, plot } = useSimplePlot((el) => {
+    const tables: uPlot.AlignedData[] = results.map((r) => {
+      const c = r.coupling!
+      const ys = measure === 'coherence' ? c.coherence : measure === 'imag' ? c.imagCoherence
+        : measure === 'wpli' ? c.wpli : c.phase
+      const xs: number[] = [], vs: (number | null)[] = []
+      for (let i = 0; i < c.freqs.length; i++) {
+        if (xLog && c.freqs[i] <= 0) continue
+        xs.push(c.freqs[i]); vs.push(ys[i] ?? null)
+      }
+      return [xs, vs] as uPlot.AlignedData
+    })
+    const data = tables.length === 1 ? tables[0] : uPlot.join(tables)
+    const xs0 = data[0] as unknown as number[]
+    if (xs0.length === 0) return null
+    const xMin = Math.max(xs0[0], params.fmin > 0 ? params.fmin : xs0[0])
+    const xMax = xs0[xs0.length - 1]
+    const yr: [number, number] = measure === 'phase' ? [-Math.PI, Math.PI] : measure === 'imag' ? [-1, 1] : [0, 1]
+    const axis = plotAxisStyle()
+    const shade = cssVar('--text-muted')
+    const opts: uPlot.Options = {
+      width: el.clientWidth || 400, height: el.clientHeight || 220,
+      legend: { show: false },
+      scales: { x: { time: false, distr: xLog ? 3 : 1, range: () => [xMin, xMax] }, y: { range: () => yr } },
+      axes: [{ ...axis, label: 'Frequency (Hz)' }, { ...axis, size: 55, label: def.axis }],
+      cursor: { drag: { x: true, y: false } },
+      series: [{}, ...results.map((r, i) => ({
+        label: r.label, stroke: cssVar(regionColorVar(colorIdx(r, i))), width: 1.4,
+        points: { show: false }, spanGaps: true,
+      }))],
+      hooks: {
+        drawClear: [(u: uPlot) => {
+          const ctx = u.ctx
+          ctx.save()
+          params.bands.forEach((b, i) => {
+            if (!(b.high > b.low) || b.high < xMin || b.low > xMax) return
+            const p0 = u.valToPos(Math.max(b.low, xMin), 'x', true)
+            const p1 = u.valToPos(Math.min(b.high, xMax), 'x', true)
+            ctx.fillStyle = shade
+            ctx.globalAlpha = i % 2 === 0 ? 0.07 : 0.03
+            ctx.fillRect(p0, u.bbox.top, p1 - p0, u.bbox.height)
+          })
+          ctx.restore()
+        }],
+      },
+    }
+    const attach = attachHoverCoords(opts, { xUnit: 'Hz', xDigits: 2, yDigits: 3 })
+    const u = new uPlot(opts, data, el)
+    attach(el)
+    return u
+  }, [results, measure, xLog, params.bands, params.fmin], heightSignal)
+  const { onContextMenu, menu } = usePlotMenu({
+    getCanvas: () => plot.current?.ctx?.canvas ?? null,
+    getUplot: () => plot.current ?? null,
+    defaultName: `coupling-${measure}`,
+    asterism: 'xy',
+  })
+  return <div ref={ref} onContextMenu={onContextMenu} style={{ width: '100%', height: '100%', position: 'relative' }}>{menu}</div>
+}
+
+function CrossCorrelationPlot({ results, colorIdx, refLabel, partnerLabel, heightSignal }: {
+  results: SpectralRegionResult[]
+  colorIdx: (r: SpectralRegionResult, i: number) => number
+  refLabel: string
+  partnerLabel: string
+  heightSignal: number
+}) {
+  const { ref, plot } = useSimplePlot((el) => {
+    const withX = results.filter((r) => r.coupling!.xcorr)
+    if (withX.length === 0) return null
+    const tables = withX.map((r) => [r.coupling!.xcorr!.lagsMs, r.coupling!.xcorr!.r] as uPlot.AlignedData)
+    const data = tables.length === 1 ? tables[0] : uPlot.join(tables)
+    const axis = plotAxisStyle()
+    const opts: uPlot.Options = {
+      width: el.clientWidth || 300, height: el.clientHeight || 220,
+      legend: { show: false },
+      scales: { x: { time: false }, y: { range: (_u, lo, hi) => [Math.min(-0.1, lo), Math.max(0.1, hi)] } },
+      axes: [{ ...axis, label: `Lag, ${partnerLabel} − ${refLabel} (ms)` }, { ...axis, size: 45, label: 'r' }],
+      cursor: { drag: { x: true, y: false } },
+      series: [{}, ...withX.map((r) => ({
+        label: r.label, stroke: cssVar(regionColorVar(colorIdx(r, results.indexOf(r)))), width: 1.4,
+        points: { show: false }, spanGaps: true,
+      }))],
+      hooks: {
+        draw: [(u: uPlot) => {
+          const x0 = u.valToPos(0, 'x', true)
+          const ctx = u.ctx
+          ctx.save()
+          ctx.strokeStyle = cssVar('--text-muted')
+          ctx.setLineDash([4, 3])
+          ctx.beginPath(); ctx.moveTo(x0, u.bbox.top); ctx.lineTo(x0, u.bbox.top + u.bbox.height); ctx.stroke()
+          ctx.restore()
+        }],
+      },
+    }
+    const attach = attachHoverCoords(opts, { xUnit: 'ms', xDigits: 2, yDigits: 3 })
+    const u = new uPlot(opts, data, el)
+    attach(el)
+    return u
+  }, [results, refLabel, partnerLabel], heightSignal)
+  const { onContextMenu, menu } = usePlotMenu({
+    getCanvas: () => plot.current?.ctx?.canvas ?? null,
+    getUplot: () => plot.current ?? null,
+    defaultName: 'cross-correlation',
+    asterism: 'xy',
+  })
+  return <div ref={ref} onContextMenu={onContextMenu} style={{ width: '100%', height: '100%', position: 'relative' }}>{menu}</div>
 }
 
 /** One displayed row of a measures × regions table. ``copy`` is what

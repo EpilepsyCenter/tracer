@@ -52,6 +52,16 @@ export interface SpectralParams {
   /** Band power over time: bin length and step (s). Step 0 = bin. */
   tc_bin_s: number
   tc_step_s: number
+  /** Two-channel coupling (coherence, wPLI, cross-correlation) with a
+   *  partner channel, on the same regions and segments. */
+  coupling_enabled: boolean
+  coupling_channel: number
+  coupling_ref_label: string
+  coupling_partner_label: string
+  coupling_max_lag_ms: number
+  coupling_xcorr_low: number
+  coupling_xcorr_high: number
+  coupling_min_coherence: number
 }
 
 /** A named stretch of the series. Sweep indices are 0-based; `null`
@@ -82,6 +92,42 @@ export interface SpectralLineHarmonic {
   rms: number
 }
 
+export interface CouplingBandResult {
+  low: number
+  high: number
+  coherence: number | null
+  imagCoherence: number | null
+  wpli: number | null
+  /** Phase-slope delay, partner − reference (ms); null below the
+   *  coherence floor. */
+  phaseDelayMs: number | null
+}
+
+/** Two-channel coupling of one region. Lags: partner − reference
+ *  (positive = reference leads). */
+export interface CouplingResult {
+  error?: string
+  partnerChannel: number
+  partnerUnits?: string
+  freqs: number[]
+  coherence: number[]
+  imagCoherence: number[]
+  wpli: number[]
+  phase: number[]
+  bands: Record<string, CouplingBandResult>
+  xcorr: {
+    lagsMs: number[]
+    r: number[]
+    peakR: number
+    peakLagMs: number | null
+    peakAtLimit: boolean
+    zeroLagR: number
+    maxLagMs: number
+  } | null
+  nSegments: number
+  freqResHz: number
+}
+
 export interface SpectralRegionResult {
   regionId: string
   label: string
@@ -107,6 +153,7 @@ export interface SpectralRegionResult {
   units: string
   samplingRate: number
   sweepsUsed: number[]
+  coupling?: CouplingResult
 }
 
 export interface SpectralData {
@@ -163,6 +210,14 @@ export function defaultSpectralParams(): SpectralParams {
     spec_fmax: 100,
     tc_bin_s: 10,
     tc_step_s: 0,
+    coupling_enabled: false,
+    coupling_channel: 1,
+    coupling_ref_label: 'CA3',
+    coupling_partner_label: 'CA1',
+    coupling_max_lag_ms: 200,
+    coupling_xcorr_low: 1,
+    coupling_xcorr_high: 100,
+    coupling_min_coherence: 0.3,
   }
 }
 
@@ -199,7 +254,9 @@ export function withSpectralDefaults(p: Partial<SpectralParams> | undefined): Sp
 function analysisParams(p: SpectralParams) {
   const {
     spec_window_s: _a, spec_overlap_pct: _b, spec_fmin: _c, spec_fmax: _d,
-    tc_bin_s: _e, tc_step_s: _f, ...rest
+    tc_bin_s: _e, tc_step_s: _f,
+    // Names are display-only.
+    coupling_ref_label: _g, coupling_partner_label: _h, ...rest
   } = p
   return rest
 }
@@ -265,6 +322,34 @@ export function regionResultFromBackend(r: any): SpectralRegionResult {
     units: String(r.units ?? ''),
     samplingRate: Number(r.sampling_rate ?? 0),
     sweepsUsed: r.sweeps_used ?? [],
+    ...(r.coupling ? { coupling: couplingFromBackend(r.coupling) } : {}),
+  }
+}
+
+function couplingFromBackend(c: any): CouplingResult {
+  const bands: Record<string, CouplingBandResult> = {}
+  for (const [name, b] of Object.entries<any>(c.bands ?? {})) {
+    bands[name] = {
+      low: Number(b.low), high: Number(b.high),
+      coherence: b.coherence ?? null, imagCoherence: b.imag_coherence ?? null,
+      wpli: b.wpli ?? null, phaseDelayMs: b.phase_delay_ms ?? null,
+    }
+  }
+  const x = c.xcorr
+  return {
+    ...(c.error ? { error: String(c.error) } : {}),
+    partnerChannel: Number(c.partner_channel ?? 0),
+    partnerUnits: c.partner_units,
+    freqs: c.freqs ?? [], coherence: c.coherence ?? [], imagCoherence: c.imag_coherence ?? [],
+    wpli: c.wpli ?? [], phase: c.phase ?? [],
+    bands,
+    xcorr: x ? {
+      lagsMs: x.lags_ms ?? [], r: x.r ?? [], peakR: Number(x.peak_r ?? 0),
+      peakLagMs: x.peak_lag_ms ?? null, peakAtLimit: !!x.peak_at_limit,
+      zeroLagR: Number(x.zero_lag_r ?? 0), maxLagMs: Number(x.max_lag_ms ?? 0),
+    } : null,
+    nSegments: Number(c.n_segments ?? 0),
+    freqResHz: Number(c.freq_res_hz ?? 0),
   }
 }
 
@@ -311,12 +396,18 @@ export function buildSpectralBandCSV(
       for (const n of Object.keys(r.bands ?? {})) if (!bandNames.includes(n)) bandNames.push(n)
     }
   }
+  const anyCoupling = keys.some((k) => (analyses[k].results ?? []).some((r) => r.coupling && !r.coupling.error))
   const header = [
     'file', 'group', 'series', 'channel', 'region', 'scope', 'units',
     'duration_s', 'sweeps_used', 'n_segments', 'freq_res_hz', 'method', 'average',
     'rms', 'total_power', 'analysis_fmin_hz', 'analysis_fmax_hz', 'dominant_freq_hz',
     ...bandNames.flatMap((n) => [`${n}_power`, `${n}_relative`, `${n}_peak_hz`]),
-    'line_freq_hz', 'line_noise_rms', 'line_1st_prominence_db', 'line_noise_excluded', 'error',
+    'line_freq_hz', 'line_noise_rms', 'line_1st_prominence_db', 'line_noise_excluded',
+    ...(anyCoupling ? [
+      'coupling_partner_channel', 'xcorr_peak_r', 'xcorr_peak_lag_ms', 'xcorr_zero_lag_r',
+      ...bandNames.flatMap((n) => [`${n}_coherence`, `${n}_imag_coherence`, `${n}_wpli`, `${n}_phase_delay_ms`]),
+    ] : []),
+    'error',
   ]
   const rows = [header.join(',')]
   for (const k of keys) {
@@ -334,7 +425,18 @@ export function buildSpectralBandCSV(
           return [b?.power, b?.relative, b?.peakFreqHz]
         }),
         r.lineNoise?.lineFreq, r.lineNoise?.rms, r.lineNoise?.harmonics?.[0]?.prominenceDb,
-        e.params.exclude_line_noise ? 'yes' : 'no', r.error ?? '',
+        e.params.exclude_line_noise ? 'yes' : 'no',
+        ...(anyCoupling ? (() => {
+          const c = r.coupling && !r.coupling.error ? r.coupling : null
+          return [
+            c?.partnerChannel, c?.xcorr?.peakR, c?.xcorr?.peakLagMs, c?.xcorr?.zeroLagR,
+            ...bandNames.flatMap((n) => {
+              const b = c?.bands?.[n]
+              return [b?.coherence, b?.imagCoherence, b?.wpli, b?.phaseDelayMs]
+            }),
+          ]
+        })() : []),
+        r.error ?? r.coupling?.error ?? '',
       ].map(csvCell).join(','))
     }
   }

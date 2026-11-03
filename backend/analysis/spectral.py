@@ -498,17 +498,51 @@ def run_regions(series, trace_idx: int, regions: list[dict], params: dict,
     """Analyse every region. A failing region returns ``{"error": ...}``
     instead of aborting the others."""
     p = merged_params(params)
+    partner = p.get("coupling_channel")
+    coupling_on = bool(p.get("coupling_enabled")) and isinstance(partner, int) and partner != trace_idx
     out = []
     for r in regions:
         base = {"region_id": r.get("id"), "label": r.get("label")}
         try:
             pieces, sr, units, used = region_pieces(series, trace_idx, r, excluded, p, scaled_fn)
             res = analyse_region(pieces, sr, p)
-            out.append({**base, **res, "units": units, "sampling_rate": sr,
-                        "sweeps_used": used})
+            row = {**base, **res, "units": units, "sampling_rate": sr, "sweeps_used": used}
+            if coupling_on:
+                row["coupling"] = _region_coupling(series, partner, r, excluded, p, scaled_fn,
+                                                   pieces, used, sr)
+            out.append(row)
         except Exception as e:  # noqa: BLE001 — surfaced per region in the UI
             out.append({**base, "error": str(e)})
     return out
+
+
+def _region_coupling(series, partner: int, region: dict, excluded, p: dict, scaled_fn,
+                     ref_pieces: list[np.ndarray], ref_used: list[int], sr: float) -> dict:
+    """Coupling of the reference pieces with the partner channel over the
+    same sweeps and times. Errors are returned in the block, not raised, so
+    the region's own spectrum still shows."""
+    from .coupling import analyse_coupling
+    try:
+        p_pieces, p_sr, p_units, p_used = region_pieces(series, partner, region, excluded, p, scaled_fn)
+        if abs(p_sr - sr) > 1e-6:
+            raise ValueError("The two channels have different sampling rates")
+        by_sweep = dict(zip(p_used, p_pieces))
+        xs, ys = [], []
+        for si, x in zip(ref_used, ref_pieces):
+            y = by_sweep.get(si)
+            if y is None:
+                continue
+            n = min(len(x), len(y))
+            xs.append(x[:n])
+            ys.append(y[:n])
+        if not xs:
+            raise ValueError("The partner channel has no data in this region")
+        block = analyse_coupling(xs, ys, sr, p)
+        block["partner_channel"] = partner
+        block["partner_units"] = p_units
+        return block
+    except Exception as e:  # noqa: BLE001
+        return {"error": str(e), "partner_channel": partner}
 
 
 # ---------------------------------------------------------------------------
