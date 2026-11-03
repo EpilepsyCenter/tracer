@@ -250,7 +250,7 @@ export function IVCurveWindow({
       if (!api?.getPreferences || !api?.setPreferences) return
       const prefs = (await api.getPreferences()) ?? {}
       const next = { ...(prefs.ivWindowUI ?? {}), ...patch }
-      await api.setPreferences({ ...prefs, ivWindowUI: next })
+      await api.patchPreferences({ ivWindowUI: next })
     } catch { /* ignore */ }
   }, [])
   const onSplitterMouseDown = (e: React.MouseEvent) => {

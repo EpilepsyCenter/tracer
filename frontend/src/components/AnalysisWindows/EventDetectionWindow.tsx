@@ -384,7 +384,7 @@ export function EventDetectionWindow({
           if (!api?.getPreferences || !api?.setPreferences) return
           const prefs = (await api.getPreferences()) ?? {}
           const ui = { ...(prefs.eventsWindowUI ?? {}), collapsedCards: cleaned }
-          await api.setPreferences({ ...prefs, eventsWindowUI: ui })
+          await api.patchPreferences({ eventsWindowUI: ui })
         } catch { /* ignore */ }
       })()
       return next
@@ -466,7 +466,7 @@ export function EventDetectionWindow({
       if (!api?.getPreferences || !api?.setPreferences) return
       const prefs = (await api.getPreferences()) ?? {}
       const next = { ...(prefs.eventsWindowUI ?? {}), ...patch }
-      await api.setPreferences({ ...prefs, eventsWindowUI: next })
+      await api.patchPreferences({ eventsWindowUI: next })
     } catch { /* ignore */ }
   }, [])
   const setZeroOffsetAndPersist = useCallback((v: boolean) => {
@@ -503,7 +503,7 @@ export function EventDetectionWindow({
       if (!api?.getPreferences || !api?.setPreferences) return
       const prefs = (await api.getPreferences()) ?? {}
       const next = { ...(prefs.eventsWindowSession ?? {}), ...patch }
-      await api.setPreferences({ ...prefs, eventsWindowSession: next })
+      await api.patchPreferences({ eventsWindowSession: next })
       // Notify any open sub-windows.
       try {
         const ch = new BroadcastChannel('tracer-sync')

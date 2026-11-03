@@ -687,6 +687,32 @@ ipcMain.handle('get-preferences', () => {
   }
 })
 
+// Change only the given keys (null / undefined removes a key). The
+// read-merge-write happens here, in one synchronous step, so two windows
+// (or two parts of one window) saving at the same moment can't undo each
+// other's changes — which they could with a renderer-side
+// getPreferences() + setPreferences({ ...prefs, key }) pair.
+ipcMain.handle('patch-preferences', (_event, patch: Record<string, unknown>) => {
+  try {
+    const path = prefsFilePath()
+    let prefs: Record<string, unknown> = {}
+    try {
+      if (existsSync(path)) prefs = JSON.parse(readFileSync(path, 'utf-8'))
+    } catch { /* unreadable: start from empty rather than fail */ }
+    for (const [k, v] of Object.entries(patch ?? {})) {
+      if (v === null || v === undefined) delete prefs[k]
+      else prefs[k] = v
+    }
+    const tmp = path + '.tmp'
+    writeFileSync(tmp, JSON.stringify(prefs, null, 2), 'utf-8')
+    renameSync(tmp, path)
+    return true
+  } catch (err) {
+    console.error('Failed to update preferences:', err)
+    return false
+  }
+})
+
 ipcMain.handle('set-preferences', (_event, prefs: Record<string, unknown>) => {
   try {
     const path = prefsFilePath()

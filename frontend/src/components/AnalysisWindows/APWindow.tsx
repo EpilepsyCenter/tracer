@@ -359,7 +359,7 @@ export function APWindow({
         if (!api?.getPreferences || !api?.setPreferences) return
         const prefs = (await api.getPreferences()) ?? {}
         const next = { ...(prefs.apWindowUI ?? {}), showBounds: v }
-        await api.setPreferences({ ...prefs, apWindowUI: next })
+        await api.patchPreferences({ apWindowUI: next })
       } catch { /* ignore */ }
     })()
   }, [])
@@ -391,7 +391,7 @@ export function APWindow({
           if (!api?.getPreferences || !api?.setPreferences) return
           const prefs = (await api.getPreferences()) ?? {}
           const ui = { ...(prefs.apWindowUI ?? {}), collapsedCards: next }
-          await api.setPreferences({ ...prefs, apWindowUI: ui })
+          await api.patchPreferences({ apWindowUI: ui })
         } catch { /* ignore */ }
       })()
       return next
@@ -572,7 +572,7 @@ export function APWindow({
       if (!api?.getPreferences || !api?.setPreferences) return
       const prefs = (await api.getPreferences()) ?? {}
       const next = { ...(prefs.apWindowUI ?? {}), topHeight: h }
-      await api.setPreferences({ ...prefs, apWindowUI: next })
+      await api.patchPreferences({ apWindowUI: next })
     } catch { /* ignore */ }
   }, [])
   // Left-panel width (vertical splitter between params column and
@@ -603,7 +603,7 @@ export function APWindow({
       if (!api?.getPreferences || !api?.setPreferences) return
       const prefs = (await api.getPreferences()) ?? {}
       const next = { ...(prefs.apWindowUI ?? {}), leftPanelWidth: w }
-      await api.setPreferences({ ...prefs, apWindowUI: next })
+      await api.patchPreferences({ apWindowUI: next })
     } catch { /* ignore */ }
   }, [])
   const onLeftSplitMouseDown = (e: React.MouseEvent) => {

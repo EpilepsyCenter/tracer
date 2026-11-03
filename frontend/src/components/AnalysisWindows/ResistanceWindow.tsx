@@ -185,7 +185,7 @@ export function ResistanceWindow({
       if (!api?.getPreferences || !api?.setPreferences) return
       const prefs = (await api.getPreferences()) ?? {}
       const next = { ...(prefs.resistanceWindowUI ?? {}), ...patch }
-      await api.setPreferences({ ...prefs, resistanceWindowUI: next })
+      await api.patchPreferences({ resistanceWindowUI: next })
     } catch { /* ignore */ }
   }, [])
   const onSplitterMouseDown = (e: React.MouseEvent) => {

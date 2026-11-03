@@ -49,11 +49,7 @@ function persist(state: LayoutState) {
     focusMode: false,
   }
   try { localStorage.setItem(LS_KEY, JSON.stringify(data)) } catch { /* ignore */ }
-  if (window.electronAPI?.setPreferences) {
-    window.electronAPI.getPreferences().then((existing) => {
-      window.electronAPI!.setPreferences({ ...existing, layout: data })
-    }).catch(() => { /* ignore */ })
-  }
+  window.electronAPI?.patchPreferences?.({ layout: data }).catch(() => { /* ignore */ })
 }
 
 const saved = loadSync()

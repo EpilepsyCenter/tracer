@@ -88,16 +88,13 @@ function savePrefs(state: ThemeState) {
   try {
     localStorage.setItem(LS_KEY, JSON.stringify(data))
   } catch { /* ignore */ }
-  // preferences.json also holds window bounds, recent files etc., and
-  // set-preferences replaces the whole file — so read, merge, write.
+  // preferences.json also holds window bounds, recent files etc.:
+  // change only our keys.
   const api = window.electronAPI
-  if (api?.getPreferences && api?.setPreferences) {
-    api.getPreferences().then((prefs) => {
-      const next: Record<string, unknown> = { ...(prefs ?? {}), ...data }
-      // Keys from the old palette / font pickers.
-      delete next.palette; delete next.fontFamily; delete next.monoFont
-      return api.setPreferences(next)
-    }).catch(() => { /* ignore */ })
+  if (api?.patchPreferences) {
+    // null removes the keys from the old palette / font pickers.
+    api.patchPreferences({ ...data, palette: null, fontFamily: null, monoFont: null })
+      .catch(() => { /* ignore */ })
   }
 }
 

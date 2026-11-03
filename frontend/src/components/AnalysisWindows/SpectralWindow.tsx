@@ -195,7 +195,7 @@ export function SpectralWindow({
       const api = window.electronAPI
       if (!api?.getPreferences || !api?.setPreferences) return
       const prefs = (await api.getPreferences()) ?? {}
-      await api.setPreferences({ ...prefs, spectralWindowUI: { ...(prefs.spectralWindowUI ?? {}), ...patch } })
+      await api.patchPreferences({ spectralWindowUI: { ...(prefs.spectralWindowUI ?? {}), ...patch } })
     } catch { /* ignore */ }
   }, [])
   const startDrag = (

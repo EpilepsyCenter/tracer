@@ -35,7 +35,7 @@ export async function checkWhatsNewOnStartup(): Promise<ChangelogEntry[]> {
   const current = currentVersion()
   const { show, record } = decideStartup(prefs, current, CHANGELOG)
   if (record) {
-    try { await api.setPreferences({ ...prefs, [LAST_SEEN_PREF]: current }) } catch { /* ignore */ }
+    try { await api.patchPreferences({ [LAST_SEEN_PREF]: current }) } catch { /* ignore */ }
   }
   return show
 }

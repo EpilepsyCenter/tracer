@@ -324,7 +324,7 @@ export function PairedWindow({
       if (!api?.getPreferences || !api?.setPreferences) return
       const prefs = (await api.getPreferences()) ?? {}
       const next = { ...(prefs.pairedWindowUI ?? {}), ...patch }
-      await api.setPreferences({ ...prefs, pairedWindowUI: next })
+      await api.patchPreferences({ pairedWindowUI: next })
     } catch { /* ignore */ }
   }, [])
   const onTopSplitMouseDown = useCallback((e: React.MouseEvent) => {

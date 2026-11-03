@@ -80,6 +80,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('copy-vector', svg, width, height),
   getPreferences: (): Promise<Record<string, unknown>> => ipcRenderer.invoke('get-preferences'),
   setPreferences: (prefs: Record<string, unknown>): Promise<boolean> => ipcRenderer.invoke('set-preferences', prefs),
+  /** Change only these keys (null removes one). Use this, not
+   *  getPreferences + setPreferences, so concurrent saves can't clash. */
+  patchPreferences: (patch: Record<string, unknown>): Promise<boolean> => ipcRenderer.invoke('patch-preferences', patch),
 
   // Per-recording sidecar files. Each recording at ``<path>`` has an
   // optional ``<path>.tracer`` JSON next to it carrying all

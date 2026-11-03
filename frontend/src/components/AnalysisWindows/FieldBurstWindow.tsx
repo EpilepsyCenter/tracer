@@ -225,7 +225,7 @@ export function FieldBurstWindow({
       if (!api?.getPreferences || !api?.setPreferences) return
       const prefs = (await api.getPreferences()) ?? {}
       const next = { ...(prefs.burstWindowUI ?? {}), ...patch }
-      await api.setPreferences({ ...prefs, burstWindowUI: next })
+      await api.patchPreferences({ burstWindowUI: next })
     } catch { /* ignore */ }
   }, [])
   const onSplitterMouseDown = (e: React.MouseEvent) => {

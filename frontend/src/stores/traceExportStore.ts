@@ -539,10 +539,7 @@ export const useTraceExportStore = create<TraceExportState>((set, get) => ({
     try {
       const prefs = await api.getPreferences()
       const cur = ((prefs as any)?.traceExport ?? {}) as Record<string, unknown>
-      await api.setPreferences({
-        ...prefs,
-        traceExport: { ...cur, templates: next },
-      })
+      await api.patchPreferences({ traceExport: { ...cur, templates: next } })
     } catch { /* ignore */ }
   },
   deleteTemplate: async (name) => {
@@ -553,10 +550,7 @@ export const useTraceExportStore = create<TraceExportState>((set, get) => ({
     try {
       const prefs = await api.getPreferences()
       const cur = ((prefs as any)?.traceExport ?? {}) as Record<string, unknown>
-      await api.setPreferences({
-        ...prefs,
-        traceExport: { ...cur, templates: next },
-      })
+      await api.patchPreferences({ traceExport: { ...cur, templates: next } })
     } catch { /* ignore */ }
   },
   applyTemplate: (name) => {

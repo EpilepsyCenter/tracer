@@ -395,7 +395,7 @@ export function FPspWindow({
       if (!api?.getPreferences || !api?.setPreferences) return
       const prefs = (await api.getPreferences()) ?? {}
       const next = { ...(prefs.fpspWindowUI ?? {}), ...patch }
-      await api.setPreferences({ ...prefs, fpspWindowUI: next })
+      await api.patchPreferences({ fpspWindowUI: next })
     } catch { /* ignore */ }
   }, [])
   const onSplitMouseDown = (e: React.MouseEvent) => {

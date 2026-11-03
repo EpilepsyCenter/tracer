@@ -37,8 +37,7 @@ async function savePaneWidths(widths: { left: number; right: number }) {
   try {
     const api = window.electronAPI
     if (!api) return
-    const prefs = await api.getPreferences()
-    await api.setPreferences({ ...prefs, [PREFS_KEY]: widths })
+    await api.patchPreferences({ [PREFS_KEY]: widths })
   } catch { /* ignore */ }
 }
 

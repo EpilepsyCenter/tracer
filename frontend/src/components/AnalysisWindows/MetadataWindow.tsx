@@ -231,7 +231,7 @@ export function MetadataWindow({ backendUrl, fileInfo }: {
         const fp = prefs.metadataFocusPath
         if (cancelled || typeof fp !== 'string' || !fp) return
         focusFile(fp)
-        await api.setPreferences({ ...prefs, metadataFocusPath: undefined })
+        await api.patchPreferences({ metadataFocusPath: null })
       } catch { /* ignore */ }
     })()
     return () => { cancelled = true }

@@ -692,8 +692,7 @@ export function CohortWindow({ backendUrl }: { backendUrl: string }) {
     const api = window.electronAPI
     if (!api?.getPreferences || !api?.setPreferences) return
     try {
-      const prefs = (await api.getPreferences()) ?? {}
-      await api.setPreferences({ ...prefs, cohortLastFolder: f })
+      await api.patchPreferences({ cohortLastFolder: f })
     } catch { /* ignore */ }
   }, [])
 

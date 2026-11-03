@@ -1775,8 +1775,7 @@ async function openTagsForFile(filePath: string) {
   const api = window.electronAPI
   if (!api) return
   try {
-    const prefs = (await api.getPreferences()) ?? {}
-    await api.setPreferences({ ...prefs, metadataFocusPath: filePath })
+    await api.patchPreferences({ metadataFocusPath: filePath })
   } catch { /* fall through — broadcast still works for open windows */ }
   try {
     const ch = new BroadcastChannel('tracer-sync')

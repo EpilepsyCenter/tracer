@@ -226,12 +226,9 @@ async function _cleanupLegacyPrefs() {
       'savedExcludedSweeps',
       'savedAveragedSweeps',
     ]
-    let touched = false
-    const next: Record<string, unknown> = { ...prefs }
-    for (const k of legacyKeys) {
-      if (k in next) { delete next[k]; touched = true }
-    }
-    if (touched) await api.setPreferences(next)
+    const remove: Record<string, null> = {}
+    for (const k of legacyKeys) if (k in prefs) remove[k] = null
+    if (Object.keys(remove).length > 0) await api.patchPreferences(remove)
   } catch { /* ignore — best-effort */ }
 }
 
@@ -548,13 +545,9 @@ async function _saveEventsTemplates(
   selectedId: string | null,
 ): Promise<void> {
   const api = window.electronAPI
-  if (!api?.getPreferences || !api?.setPreferences) return
+  if (!api?.patchPreferences) return
   try {
-    const prefs = (await api.getPreferences()) ?? {}
-    await api.setPreferences({
-      ...prefs,
-      eventsTemplates: { selectedId, entries },
-    })
+    await api.patchPreferences({ eventsTemplates: { selectedId, entries } })
   } catch { /* ignore */ }
 }
 
@@ -3166,11 +3159,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ recentFiles: [] })
     try {
       const api = (window as any).electronAPI
-      if (api?.getPreferences && api?.setPreferences) {
-        api.getPreferences().then((prefs: any) => {
-          api.setPreferences({ ...(prefs ?? {}), recentFiles: [] }).catch(() => { /* ignore */ })
-        }).catch(() => { /* ignore */ })
-      }
+      api?.patchPreferences?.({ recentFiles: [] }).catch(() => { /* ignore */ })
     } catch { /* ignore */ }
   },
 
@@ -3285,10 +3274,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         set({ recentFiles: next })
         try {
           const api = (window as any).electronAPI
-          if (api?.getPreferences && api?.setPreferences) {
-            const prefs = (await api.getPreferences()) ?? {}
-            await api.setPreferences({ ...prefs, recentFiles: next })
-          }
+          if (api?.patchPreferences) await api.patchPreferences({ recentFiles: next })
         } catch { /* ignore */ }
       }
       // Try the per-recording sidecar first. If a ``<file>.tracer``
@@ -6343,10 +6329,7 @@ useAppStore.subscribe((state) => {
   if (state.cursorWindowUI === _lastPersistedCursorUIRef) return
   _lastPersistedCursorUIRef = state.cursorWindowUI
   const api = window.electronAPI
-  if (!api?.getPreferences || !api?.setPreferences) return
-  api.getPreferences().then((prefs) => {
-    api.setPreferences!({ ...(prefs ?? {}), cursorWindowUI: state.cursorWindowUI }).catch(() => { /* ignore */ })
-  }).catch(() => { /* ignore */ })
+  api?.patchPreferences?.({ cursorWindowUI: state.cursorWindowUI }).catch(() => { /* ignore */ })
 })
 
 // ---------------------------------------------------------------------------
@@ -6457,6 +6440,9 @@ declare global {
       copyVector?: (svg: string, width: number, height: number) => Promise<{ ok: boolean; format?: 'pdf' | 'svg'; error?: string }>
       getPreferences: () => Promise<Record<string, unknown>>
       setPreferences: (prefs: Record<string, unknown>) => Promise<boolean>
+      /** Change only these keys (null removes one), merged in the main
+       *  process so concurrent saves can't overwrite each other. */
+      patchPreferences: (patch: Record<string, unknown>) => Promise<boolean>
       readSidecar: (recordingPath: string) => Promise<Record<string, unknown> | null>
       writeSidecar: (recordingPath: string, payload: Record<string, unknown>) => Promise<boolean>
       readCohortSession: (sessionPath: string) => Promise<Record<string, unknown> | null>
