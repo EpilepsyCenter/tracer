@@ -1005,6 +1005,37 @@ export interface ResistanceResult {
   pulse_end_idx?: number
   /** Tag describing where this result came from */
   source?: string
+  /** The settings this result was measured with. Saved per result, so
+   *  each series keeps how it was measured; Batch repeats the template
+   *  series' latest settings on the matching series of other files. */
+  settings?: ResistanceRunSettings
+}
+
+/** Everything a Resistance run depends on: the window's form, the
+ *  channel, and the cursor windows (baseline / peak / fit). */
+export interface ResistanceRunSettings extends ResistanceFormState {
+  channel: number
+  cursors: CursorPositions
+}
+
+/** One saved Resistance row from a backend measurement. Shared by the
+ *  Resistance window and Batch so both save the same shape (a list of
+ *  these per series). */
+export function resistanceRow(m: any, source: string, settings?: ResistanceRunSettings): ResistanceResult {
+  return {
+    ...(settings ? { settings } : {}),
+    baseline: Number(m?.baseline ?? 0),
+    peak_current: Number(m?.peak_current ?? 0),
+    steady_state_current: Number(m?.steady_state_current ?? 0),
+    rs: m?.rs == null ? null : Number(m.rs),
+    rin: m?.rin == null ? null : Number(m.rin),
+    cm: m?.cm == null ? null : Number(m.cm),
+    tau: m?.tau == null ? null : Number(m.tau),
+    peak_idx: m?.peak_idx,
+    steady_state_start_idx: m?.steady_state_start_idx,
+    pulse_end_idx: m?.pulse_end_idx,
+    source,
+  }
 }
 
 /** Resistance-window form state — the user-facing params that the
@@ -2118,8 +2149,10 @@ interface AppState {
   selectAveragedSweep: (group: number, series: number, id: string) => void
 
   // Resistance analysis actions
-  runResistanceOnSweep: (vStep: number) => Promise<void>
-  runResistanceOnAverage: (vStep: number, sweepIndices: number[] | null) => Promise<void>
+  /** Batch: replay a template's Resistance run on the current series,
+   *  exactly as the Resistance window's Run button does for the same
+   *  form (run mode, sweeps, fit settings). Replaces the series' rows. */
+  runResistanceRecipe: (form: ResistanceFormState) => Promise<void>
   clearResistanceResult: () => void
   setResistanceForm: (patch: Partial<ResistanceFormState>) => void
 
@@ -3347,7 +3380,11 @@ export const useAppStore = create<AppState>((set, get) => ({
             sidecarPopulated.cursor_analyses = true
           }
           if ((a as any).resistance && Object.keys((a as any).resistance).length > 0) {
-            patch.resistanceResults = (a as any).resistance
+            // Results are a list per series. Batch before 1.1.1 saved a
+            // single object; wrap it so the window can open the file.
+            const raw = (a as any).resistance as Record<string, unknown>
+            patch.resistanceResults = Object.fromEntries(Object.entries(raw).map(([k, v]) =>
+              [k, Array.isArray(v) ? v : (v && typeof v === 'object' ? [v] : [])])) as Record<string, ResistanceResult[]>
             sidecarPopulated.resistance = true
           }
           if (sidecar.burst_dual_form && Object.keys(sidecar.burst_dual_form).length > 0) {
@@ -4034,76 +4071,59 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // ---- Resistance analysis ----
 
-  runResistanceOnSweep: async (vStep: number) => {
-    const { backendUrl, currentGroup, currentSeries, currentSweep, currentTrace, cursors } = get()
-    set({ loading: true, error: null })
-    try {
-      const resp = await apiFetch(backendUrl, '/api/analysis/run', {
-        method: 'POST',
-        body: JSON.stringify({
-          analysis_type: 'resistance',
-          group: currentGroup,
-          series: currentSeries,
-          sweep: currentSweep,
-          trace: currentTrace,
-          cursors,
-          params: { v_step: vStep },
-        }),
-      })
-      const m = resp.measurement || {}
-      const result = { ...m, source: `sweep ${currentSweep + 1}` }
-      // Also stash into the per-series map so the tree-navigator's
-      // "R" badge lights up and the cohort extractor can later pick
-      // up resistance values from the sidecar.
-      const seriesKey = `${currentGroup}:${currentSeries}`
-      set((s) => ({
-        resistanceResult: result,
-        resistanceResults: { ...s.resistanceResults, [seriesKey]: result },
-        loading: false,
-      }))
-    } catch (err: any) {
-      set({ error: err.message, loading: false })
+  runResistanceRecipe: async (form) => {
+    const { backendUrl, currentGroup: g, currentSeries: sr, currentTrace, cursors, recording } = get()
+    const total = recording?.groups?.[g]?.series?.[sr]?.sweepCount ?? 0
+    const params = { v_step: form.vStep, n_exp: form.nExp, fit_duration_ms: form.fitDurationMs }
+    const base = { analysis_type: 'resistance', group: g, series: sr, trace: currentTrace, cursors, params }
+    const excluded = get().excludedSweeps[`${g}:${sr}`] ?? []
+    const settings: ResistanceRunSettings = {
+      vStep: form.vStep, nExp: form.nExp, fitDurationMs: form.fitDurationMs,
+      runMode: form.runMode, avgFrom: form.avgFrom, avgTo: form.avgTo, sweepOne: form.sweepOne,
+      channel: currentTrace, cursors: { ...cursors },
     }
-  },
-
-  runResistanceOnAverage: async (vStep: number, sweepIndices: number[] | null) => {
-    const { backendUrl, currentGroup, currentSeries, currentTrace, cursors } = get()
     set({ loading: true, error: null })
     try {
-      const resp = await apiFetch(backendUrl, '/api/analysis/run_averaged', {
-        method: 'POST',
-        body: JSON.stringify({
-          analysis_type: 'resistance',
-          group: currentGroup,
-          series: currentSeries,
-          trace: currentTrace,
-          sweep_indices: sweepIndices,
-          cursors,
-          params: { v_step: vStep },
-        }),
-      })
-      const m = resp.measurement || {}
-      const n = resp.n_sweeps_averaged ?? 0
-      const indices: number[] = resp.sweep_indices ?? []
-      let sourceLabel: string
-      if (indices.length > 0) {
-        const lo = Math.min(...indices) + 1
-        const hi = Math.max(...indices) + 1
-        sourceLabel = indices.length === hi - lo + 1
-          ? `averaged over sweeps ${lo}–${hi}`
-          : `averaged over ${n} sweeps`
+      let rows: ResistanceResult[]
+      if (form.runMode === 'one') {
+        // Sweep numbers in the form are 1-based, as shown in the window.
+        const idx = Math.max(0, Math.min(total - 1, form.sweepOne - 1))
+        const resp = await apiFetch(backendUrl, '/api/analysis/run', {
+          method: 'POST', body: JSON.stringify({ ...base, sweep: idx }),
+        })
+        rows = [resistanceRow(resp.measurement, `sweep ${idx + 1}`, settings)]
+      } else if (form.runMode === 'range') {
+        const from = Math.max(1, Math.min(form.avgFrom, total))
+        const to = Math.max(from, Math.min(form.avgTo, total))
+        const range: number[] = []
+        for (let i = from - 1; i <= to - 1; i++) range.push(i)
+        const indices = get().filterExcludedSweeps(g, sr, range)
+        if (indices.length === 0) throw new Error('No non-excluded sweeps in the chosen range.')
+        const resp = await apiFetch(backendUrl, '/api/analysis/run_averaged', {
+          method: 'POST', body: JSON.stringify({ ...base, sweep_indices: indices }),
+        })
+        rows = [resistanceRow(resp.measurement, `averaged sweeps ${from}–${to}`, settings)]
       } else {
-        sourceLabel = `averaged over ${n} sweeps`
+        // 'all' — and 'selected', whose tree selection belongs to the
+        // template, not the target: every sweep, one row each.
+        const resp = await apiFetch(backendUrl, '/api/analysis/batch', {
+          method: 'POST',
+          body: JSON.stringify({
+            ...base, sweep_start: 0, sweep_end: total,
+            excluded_sweeps: excluded.length > 0 ? excluded : undefined,
+          }),
+        })
+        rows = (resp.results || []).map((r: any) =>
+          resistanceRow(r, `sweep ${(r.sweep_index ?? 0) + 1}`, settings))
       }
-      const result = { ...m, source: sourceLabel }
-      const seriesKey = `${currentGroup}:${currentSeries}`
       set((s) => ({
-        resistanceResult: result,
-        resistanceResults: { ...s.resistanceResults, [seriesKey]: result },
+        resistanceResult: rows[rows.length - 1] ?? null,
+        resistanceResults: { ...s.resistanceResults, [`${g}:${sr}`]: rows },
         loading: false,
       }))
     } catch (err: any) {
       set({ error: err.message, loading: false })
+      throw err
     }
   },
 

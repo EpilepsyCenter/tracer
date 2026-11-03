@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import uPlot from 'uplot'
 import 'uplot/dist/uPlot.min.css'
 import {
-  CursorPositions, StimulusInfo, useAppStore,
+  CursorPositions, ResistanceRunSettings, StimulusInfo, resistanceRow, useAppStore,
 } from '../../stores/appStore'
 import { useThemeStore, useThemeKey } from '../../stores/themeStore'
 import { NumInput } from '../common/NumInput'
@@ -317,6 +317,25 @@ export function ResistanceWindow({
   const resistanceForCurrent = useAppStore(
     (s) => s.resistanceResults[`${currentGroup}:${currentSeries}`]
   )
+  // Restore the settings this series was last measured with, once per
+  // series visit. Declared after the auto-fill effects (V step from the
+  // protocol, sweep range), so saved settings win over them. Not marked
+  // done until settings exist, so results arriving a moment later (from
+  // the main window) still restore.
+  const savedSettings = useMemo(() => {
+    const rows = resistanceForCurrent ?? []
+    for (let i = rows.length - 1; i >= 0; i--) if (rows[i]?.settings) return rows[i].settings
+    return null
+  }, [resistanceForCurrent])
+  const restoredKeyRef = useRef<string | null>(null)
+  useEffect(() => {
+    const key = `${currentGroup}:${currentSeries}`
+    if (restoredKeyRef.current === key || !savedSettings) return
+    restoredKeyRef.current = key
+    const { channel, cursors: _cursors, ...form } = savedSettings
+    setForm(form)
+    if (typeof channel === 'number') setCurrentChannel(channel)
+  }, [currentGroup, currentSeries, savedSettings, setForm])
   useEffect(() => {
     const rows = resistanceForCurrent ?? []
     setMeasurements(rows.map((r, i) => ({
@@ -407,6 +426,12 @@ export function ResistanceWindow({
   const analysisParams = () => ({
     v_step: vStep, n_exp: nExp, fit_duration_ms: fitDurationMs,
   })
+  // Saved with every result of a run, so the series remembers how it
+  // was measured (and Batch can repeat it).
+  const runSettings = (): ResistanceRunSettings => ({
+    vStep, nExp, fitDurationMs, runMode, avgFrom, avgTo, sweepOne,
+    channel: currentChannel, cursors: { ...cursors },
+  })
 
   const seriesLabel = `${currentSeries + 1}: ${currentSeriesInfo?.label || 'Series'}`
 
@@ -442,22 +467,12 @@ export function ResistanceWindow({
   // its own Zustand store instance; the broadcast bridges to the
   // main window so the TreeNavigator's R badge sees it (same
   // pattern as ``_broadcastEvents`` etc. in the appStore).
-  const appendResistanceRows = useCallback((measurements: any[], source: string) => {
+  const appendResistanceRows = useCallback((
+    measurements: any[], source: string, settings: ResistanceRunSettings,
+  ) => {
     if (measurements.length === 0) return
     const key = `${currentGroup}:${currentSeries}`
-    const newRows = measurements.map((m) => ({
-      baseline: Number(m.baseline ?? 0),
-      peak_current: Number(m.peak_current ?? 0),
-      steady_state_current: Number(m.steady_state_current ?? 0),
-      rs: m.rs == null ? null : Number(m.rs),
-      rin: m.rin == null ? null : Number(m.rin),
-      cm: m.cm == null ? null : Number(m.cm),
-      tau: m.tau == null ? null : Number(m.tau),
-      peak_idx: m.peak_idx,
-      steady_state_start_idx: m.steady_state_start_idx,
-      pulse_end_idx: m.pulse_end_idx,
-      source,
-    }))
+    const newRows = measurements.map((m) => resistanceRow(m, source, settings))
     const prev = useAppStore.getState().resistanceResults
     const existing = prev[key] ?? []
     const nextResults = { ...prev, [key]: [...existing, ...newRows] }
@@ -495,6 +510,7 @@ export function ResistanceWindow({
   // ---- API: single sweep ----
   const runSingle = async (sweepIdx: number) => {
     setLoading(true); setError(null)
+    const settings = runSettings()
     try {
       const resp = await fetch(`${backendUrl}/api/analysis/run`, {
         method: 'POST',
@@ -513,7 +529,7 @@ export function ResistanceWindow({
       // for now until that endpoint is retired.
       await storeRows([toRow(data.measurement, `sweep ${sweepIdx + 1}`, sweepIdx + 1)])
       applyFit(data.measurement)
-      appendResistanceRows([data.measurement], `sweep ${sweepIdx + 1}`)
+      appendResistanceRows([data.measurement], `sweep ${sweepIdx + 1}`, settings)
     } catch (err: any) { setError(err.message) }
     setLoading(false)
   }
@@ -521,6 +537,7 @@ export function ResistanceWindow({
   // ---- API: averaged ----
   const runAveraged = async () => {
     setLoading(true); setError(null)
+    const settings = runSettings()
     try {
       const from = Math.max(1, Math.min(avgFrom, totalSweeps))
       const to = Math.max(from, Math.min(avgTo, totalSweeps))
@@ -553,7 +570,7 @@ export function ResistanceWindow({
       const data = await resp.json()
       await storeRows([toRow(data.measurement, `avg ${from}–${to}`, `avg ${from}–${to}`)])
       applyFit(data.measurement)
-      appendResistanceRows([data.measurement], `averaged sweeps ${from}–${to}`)
+      appendResistanceRows([data.measurement], `averaged sweeps ${from}–${to}`, settings)
     } catch (err: any) { setError(err.message) }
     setLoading(false)
   }
@@ -567,6 +584,7 @@ export function ResistanceWindow({
   const runSelected = async () => {
     if (selectedSweepsList.length === 0) return
     setLoading(true); setError(null)
+    const settings = runSettings()
     try {
       const excluded = new Set(useAppStore.getState()
         .excludedSweeps[`${currentGroup}:${currentSeries}`] ?? [])
@@ -592,7 +610,7 @@ export function ResistanceWindow({
       // Append all rows in one shot so the badge + table see the
       // batch atomically (and the broadcast fires once, not N times).
       for (const m of measurements) {
-        appendResistanceRows([m], `sweep ${m._swIdx + 1}`)
+        appendResistanceRows([m], `sweep ${m._swIdx + 1}`, settings)
       }
     } catch (err: any) { setError(err.message) }
     setLoading(false)
@@ -601,6 +619,7 @@ export function ResistanceWindow({
   // ---- API: all sweeps (batch → per-sweep rows in the table) ----
   const runAllSweeps = async () => {
     setLoading(true); setError(null)
+    const settings = runSettings()
     try {
       const excluded = useAppStore.getState()
         .excludedSweeps[`${currentGroup}:${currentSeries}`] ?? []
@@ -633,19 +652,7 @@ export function ResistanceWindow({
       // instead of N round trips.
       const key = `${currentGroup}:${currentSeries}`
       const prev = useAppStore.getState().resistanceResults
-      const newEntries = measurementsWithSource.map(({ m, source }: any) => ({
-        baseline: Number(m.baseline ?? 0),
-        peak_current: Number(m.peak_current ?? 0),
-        steady_state_current: Number(m.steady_state_current ?? 0),
-        rs: m.rs == null ? null : Number(m.rs),
-        rin: m.rin == null ? null : Number(m.rin),
-        cm: m.cm == null ? null : Number(m.cm),
-        tau: m.tau == null ? null : Number(m.tau),
-        peak_idx: m.peak_idx,
-        steady_state_start_idx: m.steady_state_start_idx,
-        pulse_end_idx: m.pulse_end_idx,
-        source,
-      }))
+      const newEntries = measurementsWithSource.map(({ m, source }: any) => resistanceRow(m, source, settings))
       const nextResults = {
         ...prev,
         [key]: [...(prev[key] ?? []), ...newEntries],

@@ -276,14 +276,22 @@ export function extractRecipes(sidecar: SidecarShape): {
         warnings.push(`${type} on ${displayGroupSeries(key)} has no series tags on ${displayGroupSeries(groupSeries)} — skipped (tag the series in the template, then re-pick).`)
         continue
       }
-      // ``raw`` is either the analysis blob (most analyses) or an
-      // array (resistance). For arrays we use the first row to read
-      // channel; params come from sidecar.forms.<type> if present
-      // (resistance keeps form state in the top-level forms slot).
-      const blob: AnyBlob = Array.isArray(raw)
-        ? ((sidecar.forms?.[type] as AnyBlob | undefined) ?? {})
-        : raw
-      const channel = pickChannel(Array.isArray(raw) ? (raw[0] ?? {}) : raw)
+      // ``raw`` is the analysis blob, or for Resistance a list of
+      // results. Each Resistance result carries the settings it was
+      // measured with (run mode, sweeps, fit, channel, cursors); the
+      // series' latest one is what Batch repeats.
+      let blob: AnyBlob
+      if (Array.isArray(raw)) {
+        const latest = [...raw].reverse().find((r: any) => r && typeof r === 'object' && r.settings)
+        if (!latest) {
+          warnings.push(`${type} on ${displayGroupSeries(key)} has no saved settings — run it again in the template's Resistance window so Batch can repeat it.`)
+          continue
+        }
+        blob = (latest as any).settings as AnyBlob
+      } else {
+        blob = raw
+      }
+      const channel = pickChannel(blob)
       const params = pickParams(blob)
 
       // Capture secondary-series tags. FPsp LTP mode references a
@@ -306,12 +314,10 @@ export function extractRecipes(sidecar: SidecarShape): {
         }
       }
 
-      // Resistance is the only analysis that doesn't store its
-      // cursor windows on its own data blob — it leans on the
-      // recording's global cursors slot. Capture that snapshot so
-      // the batch runner can apply the same windows to target files.
-      const cursors = (type === 'resistance' && sidecar.cursors)
-        ? { ...sidecar.cursors }
+      // Resistance uses the recording's global cursor windows; the ones
+      // used for this series' run are saved with its settings.
+      const cursors = (type === 'resistance' && (blob as any).cursors)
+        ? { ...(blob as any).cursors }
         : null
       // Train-grouping params travel alongside the analysis params
       // for the three modules that support it. Map analysis_type →
@@ -669,8 +675,7 @@ export function BatchWindow({ backendUrl }: Props) {
   const appSetSpectralForm = useAppStore((s) => s.setSpectralForm)
   const appRunSpectral = useAppStore((s) => s.runSpectral)
   const appRunFPsp = useAppStore((s) => s.runFPsp)
-  const appRunResistanceOnSweep = useAppStore((s) => s.runResistanceOnSweep)
-  const appRunResistanceOnAverage = useAppStore((s) => s.runResistanceOnAverage)
+  const appRunResistanceRecipe = useAppStore((s) => s.runResistanceRecipe)
   const appRunPaired = useAppStore((s) => s.runPaired)
   const eventsTemplates = useAppStore((s) => s.eventsTemplates)
 
@@ -1010,7 +1015,9 @@ export function BatchWindow({ backendUrl }: Props) {
   ) => {
     const p = item.recipe.params as any
     const channel = item.recipe.channel ?? 0
-    const vStep = Number(p.vStep ?? 0)
+    // The template's whole Resistance form: run mode, sweeps and fit
+    // settings, so each target is measured exactly like the template.
+    const form = { ...useAppStore.getState().resistanceForm, ...p }
     if (item.recipe.cursors) {
       // Patch cursors first; the resistance action reads them at
       // call time. Other cursor consumers (events viewer etc.) are
@@ -1018,30 +1025,15 @@ export function BatchWindow({ backendUrl }: Props) {
       useAppStore.setState({ cursors: { ...item.recipe.cursors } })
     }
     await forEachMatch(item, fileFraction, async (g, s) => {
-      // Resistance reads currentGroup/Series/Trace/Sweep from the
-      // store — set them via setState so the action picks up the
-      // right context without us having to navigate via selectSweep
-      // (which would also fetch + render trace data).
+      // The action reads currentGroup/Series/Trace from the store — set
+      // them directly rather than navigating (which would also fetch
+      // and render trace data).
       useAppStore.setState({
-        currentGroup: g, currentSeries: s, currentTrace: channel,
-        currentSweep: 0,
+        currentGroup: g, currentSeries: s, currentTrace: channel, currentSweep: 0,
       })
-      // Run mode → which action. 'all'/'range' average; 'one' single.
-      if (p.runMode === 'one' && typeof p.sweepOne === 'number') {
-        useAppStore.setState({ currentSweep: p.sweepOne })
-        await appRunResistanceOnSweep(vStep)
-      } else if (p.runMode === 'range'
-          && typeof p.avgFrom === 'number'
-          && typeof p.avgTo === 'number') {
-        const sweeps: number[] = []
-        for (let i = p.avgFrom; i <= p.avgTo; i++) sweeps.push(i)
-        await appRunResistanceOnAverage(vStep, sweeps)
-      } else {
-        // 'all' or anything unknown → average across every sweep.
-        await appRunResistanceOnAverage(vStep, null)
-      }
+      await appRunResistanceRecipe(form)
     })
-  }, [forEachMatch, appRunResistanceOnSweep, appRunResistanceOnAverage])
+  }, [forEachMatch, appRunResistanceRecipe])
 
   /** Cursor measurements: no public store action; the cursor window
    *  POSTs ``/api/cursors/run`` directly and writes the result back
