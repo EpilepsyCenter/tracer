@@ -9,6 +9,8 @@ starts, and from Help ▸ What's New. Newest version first.
 - Short bullets written for users, not developers.
 - Link to the manual with `[Read more](manual:<Chapter heading> > <Section heading>)`,
   using the headings exactly as they appear in docs/MANUAL.md.
+- The same entry becomes the GitHub release text:
+  `python3 scripts/release_notes.py <version> --apply`.
 -->
 
 ## 1.1.0
@@ -27,7 +29,7 @@ starts, and from Help ▸ What's New. Newest version first.
 - **Faster scrolling** through long recordings in every window.
 - **Several channels in the main viewer:** extra channels now scroll with the view, sit at the right time, and can be dragged up and down on their own axis.
 - **Copy as TSV** on the new results tables (propagation pairs, band power, line noise, coupling).
-- **This window.** New versions now tell you what changed. [Read more](manual:1. Getting Started > What's new after an update)
+- **A What's new window** on the first start of each new version, with links into the manual. [Read more](manual:1. Getting Started > What's new after an update)
 
 ### Fixed
 
