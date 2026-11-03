@@ -420,31 +420,37 @@ def run_test(
     if test_override not in TEST_OVERRIDES:
         return {'error': f'Unknown test_override: {test_override!r}'}
 
-    # Clean numeric input. Drops None/NaN per group.
-    cleaned = [_clean(g.get('values', [])) for g in groups]
     tags = [str(g.get('tag', f'group_{i}')) for i, g in enumerate(groups)]
+    paired = design_kind in ('paired_2', 'rm_n')
+    dropped_rows = 0
+    if paired:
+        # Rows are cells: keep only cells with a value in every
+        # condition, so the pairs stay aligned. Cleaning each group on
+        # its own would shift later values onto other cells' rows.
+        raw = [list(g.get('values', []) or []) for g in groups]
+        if len({len(r) for r in raw}) > 1:
+            return {'error': (f'Paired design requires equal-length groups; '
+                              f'got {dict(zip(tags, (len(r) for r in raw)))}')}
+        rows = list(zip(*raw))
+        complete = [row for row in rows if len(_clean(row)) == len(row)]
+        dropped_rows = len(rows) - len(complete)
+        cleaned = [[float(row[i]) for row in complete] for i in range(len(raw))]
+    else:
+        # Clean numeric input. Drops None/NaN per group.
+        cleaned = [_clean(g.get('values', [])) for g in groups]
 
     descriptives = [_descriptives(v) for v in cleaned]
 
-    # Sanity: paired designs need every group at the same length AND
-    # row alignment. Caller is responsible for alignment but we catch
-    # the length mismatch here with a clear error rather than letting
-    # pingouin throw.
-    paired = design_kind in ('paired_2', 'rm_n')
-    if paired:
-        lens = [len(v) for v in cleaned]
-        if min(lens) != max(lens):
-            return {
-                'error': (f'Paired design requires equal-length groups; '
-                          f'got {dict(zip(tags, lens))}'),
-                'descriptives': dict(zip(tags, descriptives)),
-            }
+    dropped_note = (f'{dropped_rows} cell{"s" if dropped_rows != 1 else ""} without a value in '
+                    f'every condition {"were" if dropped_rows != 1 else "was"} left out of the paired test.'
+                    if dropped_rows else None)
 
     # Need ≥ 2 per group for any test to be meaningful.
     too_small = [tags[i] for i, v in enumerate(cleaned) if len(v) < 2]
     if too_small:
         return {
-            'error': f'Groups too small (n < 2): {too_small}',
+            'error': f'Groups too small (n < 2): {too_small}'
+                     + (f' — {dropped_note}' if dropped_note else ''),
             'descriptives': dict(zip(tags, descriptives)),
         }
 
@@ -507,11 +513,13 @@ def run_test(
             'branch': branch,
         }
 
+    note = ' '.join(x for x in (dropped_note, note) if x) or None
     return {
         **test_result,
         'branch': branch,
         'override': test_override,
         **({'note': note} if note else {}),
+        **({'n_dropped_incomplete': dropped_rows} if dropped_rows else {}),
         **({'normality_differences': diff_normality} if diff_normality else {}),
         'normality': dict(zip(tags, normality)),
         'descriptives': dict(zip(tags, descriptives)),

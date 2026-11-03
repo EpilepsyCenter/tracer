@@ -48,6 +48,18 @@ check('identical unpaired: finite statistic', r.get('statistic') is None or np.i
 check('all identical unpaired: error', 'nothing to compare' in (run([5.0] * 4, [5.0] * 4, 'unpaired_2').get('error') or ''))
 check('zero differences paired: error', 'nothing to test' in (run([5.0, 6, 7, 8], [5.0, 6, 7, 8], 'paired_2').get('error') or ''))
 
+# Paired with missing values: complete cells only, rows stay aligned.
+a6 = [10.0, None, 12, 13, 14, 15]; b6 = [11.0, 12.5, 13.5, None, 15.1, 16.2]
+r = run(a6, b6, 'paired_2', 'parametric')
+check('paired missing: runs', r.get('test') == 'Paired t-test', r)
+check('paired missing: 4 complete cells', r['descriptives']['A']['n'] == 4 and r.get('n_dropped_incomplete') == 2, r.get('descriptives'))
+import pingouin as pg  # noqa: E402
+ref = pg.ttest([10.0, 12, 14, 15], [11.0, 13.5, 15.1, 16.2], paired=True)
+check('paired missing: same as complete pairs', abs(r['p'] - float(ref['p_val' if 'p_val' in ref else 'p-val'].iloc[0])) < 1e-12, r['p'])
+check('paired missing: explained', 'left out of the paired test' in (r.get('note') or ''), r.get('note'))
+r = run([10.0, 11, 12, 13], [11.0, None, 13.5, 14], 'paired_2')
+check('paired missing: unequal counts no longer an error', not r.get('error'), r.get('error'))
+
 # Normal data still gets the parametric test; paired judged on differences.
 rng = np.random.default_rng(1)
 a = list(rng.normal(10, 2, 12)); b = list(np.array(a) + rng.normal(1, 0.5, 12))
