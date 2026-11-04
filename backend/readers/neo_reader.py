@@ -62,38 +62,64 @@ class NeoReader(BaseReader):
             format=io_class_name.replace("IO", ""),
         )
 
-        # Neo structure: Block > Segment (≈ sweep/trial) > AnalogSignal
-        # We map: Block → Group, Segments grouped by protocol → Series, Segment → Sweep
-        group = Group(index=0, label=block.name or "Recording")
+        return _block_to_recording(block, recording)
 
-        # For simplicity, put all segments in one series
-        series = Series(index=0, label="Series 1")
 
-        for seg_idx, segment in enumerate(block.segments):
-            sweep = Sweep(index=seg_idx, label=f"Sweep {seg_idx + 1}")
+def _display_units(sig) -> tuple[str, float]:
+    """(TRACER unit, multiplier) for a Neo signal: currents in pA, voltages
+    in mV, anything else as the file states it."""
+    import quantities as pq
 
-            for sig in segment.analogsignals:
-                data = np.array(sig).flatten().astype(np.float64)
-                sr = float(sig.sampling_rate.rescale("Hz").magnitude)
-                units = str(sig.units.dimensionality)
+    dim = sig.units.simplified.dimensionality
+    for unit, target in (("pA", pq.pA), ("mV", pq.mV)):
+        if dim == target.simplified.dimensionality:
+            return unit, float(sig.units.rescale(target).magnitude)
+    return str(sig.units.dimensionality), 1.0
 
-                # Clean up units
-                if "A" in units:
-                    units = "pA"
-                elif "V" in units:
-                    units = "mV"
 
-                trace = Trace(
-                    data=data,
+def _channel_names(sig, n: int) -> list[str]:
+    names = None
+    ann = getattr(sig, "array_annotations", None) or {}
+    for key in ("channel_names", "channel_name"):
+        if key in ann and len(ann[key]) == n:
+            names = [str(x) for x in ann[key]]
+            break
+    base = sig.name or ""
+    if names and all(names):
+        return names
+    if n == 1:
+        return [base] if base else []
+    return [f"{base} {i + 1}" if base else "" for i in range(n)]
+
+
+def _block_to_recording(block, recording: Recording) -> Recording:
+    """Neo Block > Segment (sweep) > AnalogSignal (one or more channels).
+    One group and one series; each segment is a sweep and each channel
+    of each signal is a trace."""
+    group = Group(index=0, label=block.name or "Recording")
+    series = Series(index=0, label="Series 1")
+
+    for seg_idx, segment in enumerate(block.segments):
+        sweep = Sweep(index=seg_idx, label=f"Sweep {seg_idx + 1}")
+        for sig in segment.analogsignals:
+            arr = np.asarray(sig.magnitude, dtype=np.float64)
+            if arr.ndim == 1:
+                arr = arr[:, None]
+            units, mult = _display_units(sig)
+            if mult != 1.0:
+                arr = arr * mult
+            sr = float(sig.sampling_rate.rescale("Hz").magnitude)
+            names = _channel_names(sig, arr.shape[1])
+            for c in range(arr.shape[1]):
+                label = names[c] if c < len(names) and names[c] else f"Signal {len(sweep.traces) + 1}"
+                sweep.traces.append(Trace(
+                    data=np.ascontiguousarray(arr[:, c]),
                     sampling_rate=sr,
                     units=units,
-                    label=sig.name or f"Signal {sig_idx}",
-                )
-                sweep.traces.append(trace)
+                    label=label,
+                ))
+        series.sweeps.append(sweep)
 
-            series.sweeps.append(sweep)
-
-        group.series_list.append(series)
-        recording.groups.append(group)
-
-        return recording
+    group.series_list.append(series)
+    recording.groups.append(group)
+    return recording
