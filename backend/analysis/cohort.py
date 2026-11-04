@@ -330,12 +330,12 @@ def extract_events(slice_data: dict, sidecar: dict) -> CellExtraction:
     total_s = float(slice_data.get('totalLengthS') or 0.0)
 
     n_events = len(events)
-    amps = [e.get('amplitude') for e in events]
+    amps = [_abs_or_none(e.get('amplitude')) for e in events]
     rises = [e.get('riseTimeMs') for e in events]
     decays = [e.get('decayTimeMs') for e in events]
     halfwidths = [e.get('halfWidthMs') for e in events]
     taus = [e.get('decayTauMs') for e in events]
-    aucs = [e.get('auc') for e in events]
+    aucs = [_abs_or_none(e.get('auc')) for e in events]
     iei_ms = _within_sweep_intervals_ms(events)
 
     scalars: dict[str, Optional[float]] = {
@@ -722,7 +722,7 @@ def extract_bursts(slice_data: dict, sidecar: dict) -> CellExtraction:
     n_bursts = len(bursts)
 
     durations_ms = [b.get('durationMs') for b in bursts]
-    peaks = [b.get('peakAmplitude') for b in bursts]
+    peaks = [_abs_or_none(b.get('peakAmplitude')) for b in bursts]
     integrals = [b.get('integral') for b in bursts]
     rise_times = [b.get('riseTime10_90Ms') for b in bursts]
     decay_times = [b.get('decayHalfTimeMs') for b in bursts]
@@ -890,6 +890,14 @@ def _drift_pct(xs) -> Optional[float]:
     if abs(mean) < 1e-12:
         return None
     return (max(cleaned) - min(cleaned)) / abs(mean) * 100.0
+
+
+def _abs_or_none(v) -> Optional[float]:
+    """Amplitudes are reported as magnitudes (the convention): an inward
+    current or a downward field potential is a positive amplitude. The
+    sign only says which way the trace went."""
+    f = _maybe_float(v)
+    return None if f is None else abs(f)
 
 
 def _maybe_float(v) -> Optional[float]:
@@ -1406,7 +1414,7 @@ def extract_paired(slice_data: dict, sidecar: dict) -> CellExtraction:
     n_success = 0
     n_failure = 0
     for t in per_trial:
-        amp = t.get('amplitude')
+        amp = _abs_or_none(t.get('amplitude'))
         if amp is not None:
             try:
                 amps_all.append(float(amp))
