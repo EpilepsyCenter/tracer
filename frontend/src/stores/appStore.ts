@@ -6,6 +6,7 @@ import {
   regionToBackend, regionResultFromBackend, buildSpectralBandCSV,
   buildSpectralPsdCSV, downloadText,
 } from '../utils/spectral'
+import { type SweepScope, scopeOf } from '../utils/sweepSelection'
 import {
   type BurstDualForm, type BurstPartnerData, type PropagationBlock,
   propagationSignature, propagationFromBackend, burstsForBackend,
@@ -1029,6 +1030,10 @@ export interface FieldBurstsData {
   partner?: BurstPartnerData
   /** Dual-site mode: pairing / lag result and the settings it used. */
   propagation?: PropagationBlock
+  /** The latest run's scope: the whole series, or one sweep (1-based)
+   *  merged into the result. Batch repeats it. */
+  runMode?: 'all' | 'one'
+  sweepOne?: number
 }
 
 export interface ResistanceResult {
@@ -1566,6 +1571,9 @@ export interface EventsData {
   /** Populated when `params.showDetectionMeasure` was true on the
    *  last run. Drives the stacked detection-measure subplot. */
   detectionMeasure?: EventsDetectionMeasure
+  /** Template methods: the templates this run used (primary first), so
+   *  Batch repeats the same detection even if the library changes. */
+  templatesUsed?: EventsTemplate[]
 }
 
 export interface CursorAnalysisData {
@@ -1585,6 +1593,9 @@ export interface CursorAnalysisData {
   average: boolean
   measurements: CursorMeasurement[]
   traceUnit: string
+  /** The settings that produced ``measurements`` (the form can change
+   *  after a Run). Batch repeats these. See utils/cursorRun.ts. */
+  runSettings?: import('../utils/cursorRun').CursorRunSettings
 }
 
 // Paired-recording analysis — pre/post synaptic trial extraction.
@@ -1717,6 +1728,12 @@ export interface PairedData {
   preTrace: number
   postTrace: number
   sweeps: number[]
+  /** The window's run scope (1-based), so the form restores it and
+   *  Batch repeats it. */
+  runMode?: 'all' | 'range' | 'one'
+  sweepFrom?: number
+  sweepTo?: number
+  sweepOne?: number
   samplingRate: number
   preMode: PairedFormState['preMode']
   preParams: Record<string, unknown>
@@ -2020,6 +2037,10 @@ interface AppState {
       postSearchStartS?: number | null
       postSearchEndS?: number | null
       manualEdits?: PairedManualEdits | null
+      runMode?: 'all' | 'range' | 'one'
+      sweepFrom?: number
+      sweepTo?: number
+      sweepOne?: number
       sweeps?: number[] | null
     },
   ) => Promise<void>
@@ -2314,6 +2335,12 @@ interface AppState {
       avgN: number
       sweepIndices?: number[] | null
       appendToExisting?: boolean
+      /** The window's run scope (1-based), saved with the result so the
+       *  form restores it and Batch repeats it. */
+      runMode?: 'all' | 'range' | 'one'
+      sweepFrom?: number
+      sweepTo?: number
+      sweepOne?: number
       /** Pre-detection filter applied per sweep before averaging. */
       filterEnabled?: boolean
       filterType?: 'lowpass' | 'highpass' | 'bandpass'
@@ -2370,6 +2397,9 @@ interface AppState {
     measureKinetics: boolean,
     /** Defaults to ``evoked``. */
     mode?: APMode,
+    /** The window's run scope (1-based), saved with the result so the
+     *  form restores it and Batch repeats it. */
+    scope?: SweepScope,
   ) => Promise<void>
   /** Drop AP results for one series (or all if both are null). */
   clearAP: (group?: number, series?: number) => void
@@ -2404,6 +2434,9 @@ interface AppState {
      *  detections can take 30-60s on large recordings and the
      *  user wants to see things moving. */
     onProgress?: (fraction: number) => void,
+    /** Batch: the template run's saved additional templates (instead of
+     *  looking ``params.additionalTemplateIds`` up in the library). */
+    additionalTemplates?: EventsTemplate[] | null,
   ) => Promise<void>
   /** Fit a biexponential to (t_start_s, t_end_s) in the specified sweep.
    *  Returns the fitted coefficients + the data + the fit curve so the
@@ -2512,6 +2545,8 @@ interface AppState {
        *  Im-source widget AND the run-scope dropdown). Optional —
        *  pre-stamp callers can omit and the action falls back to the
        *  existing entry's values when re-running. */
+      /** Steady-state or peak response (Batch repeats the template's). */
+      responseMetric?: IVResponseMetric
       runMode?: 'all' | 'range' | 'one'
       sweepFrom?: number
       sweepTo?: number
@@ -2801,6 +2836,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const data: PairedData = {
       group, series, preTrace, postTrace,
       sweeps: Array.isArray(body.sweeps) ? body.sweeps : [],
+      ...(params.runMode ? scopeOf(params) : {}),
       samplingRate: d.sampling_rate,
       preMode: params.preMode,
       preParams: params.preParams,
@@ -4265,6 +4301,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         const next: FieldBurstsData = {
           channel,
           params,
+          runMode: 'one',
+          sweepOne: sweep + 1,
           baselineValue: Number(m.baseline_value ?? 0),
           thresholdHigh: m.threshold_high != null ? Number(m.threshold_high) : null,
           thresholdLow: m.threshold_low != null ? Number(m.threshold_low) : null,
@@ -4427,6 +4465,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       const next: FieldBurstsData = {
         channel,
         params,
+        runMode: 'all',
         baselineValue,
         thresholdHigh,
         thresholdLow,
@@ -4898,7 +4937,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         channel,
         stimUnit: String(resp.stim_unit ?? existing?.stimUnit ?? ''),
         responseUnit: String(resp.response_unit ?? existing?.responseUnit ?? ''),
-        responseMetric: (existing?.responseMetric ?? 'steady') as IVResponseMetric,
+        responseMetric: (params.responseMetric ?? existing?.responseMetric ?? 'steady') as IVResponseMetric,
         baselineStartS: params.baselineStartS,
         baselineEndS: params.baselineEndS,
         peakStartS: params.peakStartS,
@@ -5054,7 +5093,12 @@ export const useAppStore = create<AppState>((set, get) => ({
           peak_direction: params.peakDirection,
           avg_n: String(Math.max(1, Math.round(params.avgN))),
         })
-        if (params.seriesB != null) qs.set('series_b', String(params.seriesB))
+        if (params.seriesB != null) {
+          qs.set('series_b', String(params.seriesB))
+          // The post-tetanus series' own excluded sweeps stay out too.
+          const exB = get().excludedSweeps[`${group}:${params.seriesB}`] ?? []
+          if (exB.length > 0) qs.set('exclude_b', exB.join(','))
+        }
         if (params.sweepIndices && params.sweepIndices.length > 0) {
           qs.set('sweeps', params.sweepIndices.join(','))
         }
@@ -5169,6 +5213,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       const next: FPspData = {
         mode,
         channel,
+        ...(params.runMode ? scopeOf(params) : {}),
         responseUnit: String(resp.response_unit ?? existing?.responseUnit ?? ''),
         seriesA: series,
         seriesB: params.seriesB ?? null,
@@ -5369,7 +5414,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // ---- Action Potentials ----
 
-  runAP: async (group, series, trace, imSource, sweepIndices, detection, kinetics, rheobaseMode, rampParams, manualEdits, measureKinetics, mode = 'evoked') => {
+  runAP: async (group, series, trace, imSource, sweepIndices, detection, kinetics, rheobaseMode, rampParams, manualEdits, measureKinetics, mode = 'evoked', scope) => {
     const { backendUrl } = get()
     if (!backendUrl) return
     set({ loading: true, error: null })
@@ -5498,6 +5543,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           label: data.im_source.label ?? null,
         } : undefined,
         mode,
+        ...(scope ? scopeOf(scope) : {}),
       }
       const key = `${group}:${series}`
       set((s) => ({ apAnalyses: { ...s.apAnalyses, [key]: next }, loading: false }))
@@ -5759,7 +5805,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // ---- Events ----
 
-  runEvents: async (group, series, channel, sweep, params, template, onProgress) => {
+  runEvents: async (group, series, channel, sweep, params, template, onProgress, additionalTemplates) => {
     const { backendUrl } = get()
     if (!backendUrl) return
     set({ loading: true, error: null })
@@ -5837,6 +5883,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           && params.method.startsWith('template_'),
       }
 
+      let usedTemplates: EventsTemplate[] | undefined
       if (params.method === 'template_correlation' || params.method === 'template_deconvolution') {
         if (!template) throw new Error('Template methods require a selected template')
         // Primary template (preserved for single-template compat).
@@ -5850,9 +5897,10 @@ export const useAppStore = create<AppState>((set, get) => ({
         // Multi-template: resolve additional IDs from the library and
         // send the full list. Backend prefers this when present.
         const { eventsTemplates } = get()
-        const addl = (params.additionalTemplateIds ?? [])
+        const addl = additionalTemplates ?? (params.additionalTemplateIds ?? [])
           .map((id) => eventsTemplates.entries[id])
           .filter((t): t is EventsTemplate => !!t)
+        usedTemplates = [template, ...addl]
         if (addl.length > 0) {
           body.templates = [template, ...addl].map((t) => ({
             b0: t.b0, b1: t.b1,
@@ -5989,6 +6037,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           : [sweep],
         units: String(data.units ?? ''),
         detectionMeasure,
+        ...(usedTemplates ? { templatesUsed: usedTemplates } : {}),
       }
       set((s) => ({ eventsAnalyses: { ...s.eventsAnalyses, [key]: next }, loading: false }))
       _broadcastEvents(get().eventsAnalyses)

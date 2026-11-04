@@ -293,6 +293,18 @@ export function FieldBurstWindow({
     setParams(storedForm)
   }, [storedForm, formKey])
 
+  // A series with a result: show the channel and sweep scope it was
+  // measured with (once per series), not the main viewer's channel.
+  const entryForKey = fieldBursts[formKey]
+  const restoredChannelKeyRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!entryForKey || restoredChannelKeyRef.current === formKey) return
+    restoredChannelKeyRef.current = formKey
+    if (typeof entryForKey.channel === 'number') setChannel(entryForKey.channel)
+    if (entryForKey.runMode) setRunMode(entryForKey.runMode)
+    if (entryForKey.sweepOne) setSweepOne(entryForKey.sweepOne)
+  }, [entryForKey, formKey])
+
   // Wrapped setters: persist every form edit to the store (which the
   // main-window subscribe then writes to disk, and every other open
   // window picks up via broadcast). Changing method / baseline-mode

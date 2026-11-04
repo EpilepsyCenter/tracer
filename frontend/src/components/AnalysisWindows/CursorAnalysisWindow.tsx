@@ -1,3 +1,5 @@
+import { resolveSweeps } from '../../utils/sweepSelection'
+import { cursorRunBody, cursorRunSettings } from '../../utils/cursorRun'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useThemeKey } from '../../stores/themeStore'
 import uPlot from 'uplot'
@@ -419,11 +421,14 @@ export function CursorAnalysisWindow({
   }, [channels.length])
   useEffect(() => {
     if (totalSweeps > 0) {
-      patch({
-        sweepFrom: 1,
-        sweepTo: totalSweeps,
-        sweepOne: Math.min(Math.max(1, localData.sweepOne), totalSweeps),
-      })
+      // A series with a stored analysis keeps its range (clamped); a new
+      // one starts with every sweep.
+      const stored = useAppStore.getState().cursorAnalyses[`${localData.group}:${localData.series}`]
+      const clamp = (v: number) => Math.min(Math.max(1, Math.round(v || 1)), totalSweeps)
+      patch(stored
+        ? { sweepFrom: clamp(localData.sweepFrom), sweepTo: clamp(localData.sweepTo),
+            sweepOne: clamp(localData.sweepOne) }
+        : { sweepFrom: 1, sweepTo: totalSweeps, sweepOne: clamp(localData.sweepOne) })
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [totalSweeps])
@@ -436,48 +441,11 @@ export function CursorAnalysisWindow({
     setRunning(true)
     setError(null)
     try {
-      let sweepIndices: number[] | null = null
-      const store = useAppStore.getState()
-      if (localData.runMode === 'all') {
-        const included = store.includedSweepsFor(localData.group, localData.series, totalSweeps)
-        if (included.length !== totalSweeps) sweepIndices = included
-      } else if (localData.runMode === 'range') {
-        const lo = Math.max(1, Math.min(localData.sweepFrom, totalSweeps))
-        const hi = Math.max(lo, Math.min(localData.sweepTo, totalSweeps))
-        const range: number[] = []
-        for (let i = lo - 1; i <= hi - 1; i++) range.push(i)
-        sweepIndices = store.filterExcludedSweeps(localData.group, localData.series, range)
-      } else if (localData.runMode === 'one') {
-        const sw = Math.max(1, Math.min(localData.sweepOne, totalSweeps))
-        sweepIndices = [sw - 1]
-      }
-      // Only send slots within the visible slotCount; disabled-but-hidden
-      // slots beyond slotCount stay in state but shouldn't contribute.
-      const visibleSlots = localData.slots.slice(0, localData.slotCount)
-      const body = {
-        group: localData.group,
-        series: localData.series,
-        trace: localData.trace,
-        sweeps: sweepIndices,
-        average: localData.average,
-        baseline: localData.baseline,
-        baseline_method: localData.baselineMethod,
-        slots: visibleSlots.map((s) => ({
-          enabled: s.enabled,
-          peak: s.peak,
-          fit: s.fit,
-          fit_function: s.fit && s.fitFunction ? s.fitFunction : null,
-          fit_options: s.fitOptions ? {
-            maxfev: s.fitOptions.maxfev,
-            ftol: s.fitOptions.ftol,
-            xtol: s.fitOptions.xtol,
-            initial_guess: s.fitOptions.initialGuess ?? null,
-          } : null,
-        })),
-        // AP-threshold detection is handled by a dedicated AP analysis
-        // window; always off here.
-        compute_ap: false,
-      }
+      // Shared with Batch: 1-based → 0-based, clamped, excluded out.
+      const sweepIndices = resolveSweeps(localData, totalSweeps,
+        useAppStore.getState().excludedSweeps[`${localData.group}:${localData.series}`] ?? [])
+      const settings = cursorRunSettings(localData)
+      const body = cursorRunBody(localData.group, localData.series, settings, sweepIndices)
       const resp = await fetch(`${backendUrl}/api/cursors/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -491,6 +459,7 @@ export function CursorAnalysisWindow({
       patch({
         measurements: data.measurements ?? [],
         traceUnit: data.trace_unit ?? '',
+        runSettings: settings,
       })
     } catch (err: any) {
       setError(err.message || 'Run failed')
@@ -718,6 +687,11 @@ export function CursorAnalysisWindow({
                       onChange={(v) => setLocalFilter((f) => ({ ...f, order: Math.max(1, Math.min(8, Math.round(v))) }))}
                       style={{ width: 44 }} />
                   </span>
+                </div>
+              )}
+              {localFilter.enabled && (
+                <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-xs)' }}>
+                  Display only: measurements use the unfiltered recording.
                 </div>
               )}
             </div>

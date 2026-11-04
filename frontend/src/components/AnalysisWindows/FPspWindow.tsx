@@ -1,3 +1,4 @@
+import { resolveSweeps } from '../../utils/sweepSelection'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import uPlot from 'uplot'
 import 'uplot/dist/uPlot.min.css'
@@ -551,25 +552,11 @@ export function FPspWindow({
   }
 
   const onRun = async () => {
-    let sweepIndices: number[] | null = null
-    let appendToExisting = false
-    const store = useAppStore.getState()
-    if (runMode === 'all') {
-      // Send an explicit list of non-excluded sweeps when any are
-      // excluded; otherwise null lets the backend default to "all".
-      const included = store.includedSweepsFor(group, series, totalSweeps)
-      if (included.length !== totalSweeps) sweepIndices = included
-    } else if (runMode === 'range') {
-      const lo = Math.max(1, Math.min(sweepFrom, totalSweeps))
-      const hi = Math.max(lo, Math.min(sweepTo, totalSweeps))
-      const range: number[] = []
-      for (let i = lo - 1; i <= hi - 1; i++) range.push(i)
-      sweepIndices = store.filterExcludedSweeps(group, series, range)
-    } else if (runMode === 'one') {
-      const sw = Math.max(1, Math.min(sweepOne, totalSweeps))
-      sweepIndices = [sw - 1]
-      appendToExisting = true
-    }
+    // Shared with Batch: 1-based → 0-based, clamped, excluded sweeps out.
+    // 'One sweep' adds that sweep to the existing curve.
+    const sweepIndices = resolveSweeps({ runMode, sweepFrom, sweepTo, sweepOne }, totalSweeps,
+      useAppStore.getState().excludedSweeps[`${group}:${series}`] ?? [])
+    const appendToExisting = runMode === 'one'
     runFPsp(group, series, channel, {
       mode,
       seriesB: mode === 'ltp' ? seriesB : null,  // B-series is LTP-only
@@ -593,6 +580,7 @@ export function FPspWindow({
       avgN: mode === 'io' ? 1 : avgN,
       sweepIndices,
       appendToExisting,
+      runMode, sweepFrom, sweepTo, sweepOne,
       // I-O-specific metadata (echoed into the entry). Undefined for
       // other modes so the entry doesn't carry stale fields.
       ioInitialIntensity: mode === 'io' ? ioInitialIntensity : undefined,
@@ -613,18 +601,6 @@ export function FPspWindow({
       filterLow,
       filterHigh,
       filterOrder,
-    })
-    // Stamp run-scope form state onto the entry so the sidecar
-    // persists it and the form rehydrates on reopen.
-    useAppStore.setState((s) => {
-      const e = s.fpspCurves[`${group}:${series}`]
-      if (!e) return s
-      return {
-        fpspCurves: {
-          ...s.fpspCurves,
-          [`${group}:${series}`]: { ...e, runMode, sweepFrom, sweepTo, sweepOne },
-        },
-      }
     })
   }
 

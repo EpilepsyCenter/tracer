@@ -29,7 +29,9 @@ starts, and from Help ▸ What's New. Newest version first.
 
 ### Fixed
 
-- **Batch Resistance** results opened with an error in the Resistance window and were missing from Cohort; Batch also ignored the template's run mode and fit settings.
+- **Batch repeats the template exactly, for every analysis.** It used the wrong sweeps (one off, or all instead of the chosen range), ignored excluded sweeps, reused the template cell's RMS threshold and manual edits, could take the LTP post-tetanus series from the wrong group, dropped I-V's peak/steady choice and Field Potential's sweep range, and reported failed runs as done. Batch Resistance results also opened with an error. [Read more](manual:19. Batch > How each recipe is repeated)
+- **Results lost or saved to the wrong place:** Paired results weren't saved; switching series in the Cursor window copied the previous series' measurements; an analysis window left open could save the previous file's results into the next file; turning dual-site off left old propagation numbers in Cohort.
+- **AP and Paired** now leave out excluded sweeps, like the other analyses. **Cohort** I-V fits use baseline-subtracted responses (as the I-V window), and I-O intensities follow each point's sweep.
 - **What's new** appeared at every start instead of once after an update.
 - **Cohort statistics:** identical values were treated as normally distributed and got a t-test with an infinite t; paired comparisons with a missing value could pair the wrong cells; the export's normality column always said "all normal". Paired tests now use the cells with a value in every condition and check normality on the differences.
 - Settings could be lost when two windows saved them at the same moment.

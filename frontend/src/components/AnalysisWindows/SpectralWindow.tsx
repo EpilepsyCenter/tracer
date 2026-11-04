@@ -605,6 +605,9 @@ function RegionsCard({
               onClick={() => onSelect(sel ? null : r.id)}>
               {describeRegion(multiSweep ? r : { ...r, sweepFrom: null, sweepTo: null }).replace(/^all sweeps · /, multiSweep ? 'all sweeps · ' : '')}
               {res?.error && <span style={{ color: 'var(--error)' }}> · {res.error}</span>}
+              {!res?.error && res?.warnings?.map((w, i) => (
+                <span key={i} style={{ color: 'var(--warning)' }}> · {w}</span>
+              ))}
             </div>
             {sel && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4, paddingTop: 2 }}>

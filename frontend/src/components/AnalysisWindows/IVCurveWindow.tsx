@@ -1,3 +1,4 @@
+import { resolveSweeps } from '../../utils/sweepSelection'
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import uPlot from 'uplot'
 import 'uplot/dist/uPlot.min.css'
@@ -293,23 +294,11 @@ export function IVCurveWindow({
   const onRun = async () => {
     // Build the sweep selection based on mode. Backend accepts an optional
     // array of sweep indices; absent = run all.
-    let sweepIndices: number[] | null = null
-    let appendToExisting = false
-    const store = useAppStore.getState()
-    if (runMode === 'all') {
-      const included = store.includedSweepsFor(group, series, totalSweeps)
-      if (included.length !== totalSweeps) sweepIndices = included
-    } else if (runMode === 'range') {
-      const lo = Math.max(1, Math.min(sweepFrom, totalSweeps))
-      const hi = Math.max(lo, Math.min(sweepTo, totalSweeps))
-      const range: number[] = []
-      for (let i = lo - 1; i <= hi - 1; i++) range.push(i)
-      sweepIndices = store.filterExcludedSweeps(group, series, range)
-    } else if (runMode === 'one') {
-      const sw = Math.max(1, Math.min(sweepOne, totalSweeps))
-      sweepIndices = [sw - 1]
-      appendToExisting = true
-    }
+    // Shared with Batch: 1-based → 0-based, clamped, excluded sweeps out.
+    // 'One sweep' adds that sweep to the existing curve.
+    const sweepIndices = resolveSweeps({ runMode, sweepFrom, sweepTo, sweepOne }, totalSweeps,
+      useAppStore.getState().excludedSweeps[`${group}:${series}`] ?? [])
+    const appendToExisting = runMode === 'one'
     // Pull the windows from the main-window cursors (now also
     // draggable inside the mini-viewer below). baseline = baseline
     // cursor, peak/SS = peak cursor.

@@ -132,6 +132,9 @@ export interface SpectralRegionResult {
   regionId: string
   label: string
   error?: string
+  /** The region asked for sweeps / time this recording doesn't have and
+   *  was analysed on what exists (e.g. copied by Batch). */
+  warnings?: string[]
   freqs: number[]
   psd: number[]
   nSegments: number
@@ -299,6 +302,7 @@ export function regionResultFromBackend(r: any): SpectralRegionResult {
     regionId: String(r.region_id ?? ''),
     label: String(r.label ?? ''),
     ...(r.error ? { error: String(r.error) } : {}),
+    ...(Array.isArray(r.warnings) && r.warnings.length ? { warnings: r.warnings.map(String) } : {}),
     freqs: r.freqs ?? [],
     psd: r.psd ?? [],
     nSegments: Number(r.n_segments ?? 0),

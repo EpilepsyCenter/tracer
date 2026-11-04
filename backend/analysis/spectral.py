@@ -418,6 +418,30 @@ def thin_spectrum(freqs: np.ndarray, psd: np.ndarray, max_points: int = MAX_SPEC
 # Regions
 # ---------------------------------------------------------------------------
 
+def region_warnings(series, trace_idx: int, region: dict) -> list[str]:
+    """What a region asks for that this recording doesn't have: a sweep
+    range past its last sweep, or a time window past the sweep's end.
+    The region is then analysed on what exists — so say so (a template's
+    regions copied by Batch onto a shorter recording)."""
+    out: list[str] = []
+    n = series.sweep_count
+    s0, s1 = region.get("sweep_from"), region.get("sweep_to")
+    if s0 is not None and int(s0) > n - 1:
+        out.append(f"starts at sweep {int(s0) + 1}, but this series has {n}")
+    elif s1 is not None and int(s1) > n - 1:
+        out.append(f"asks for sweeps up to {int(s1) + 1}; this series has {n}, so it stops at {n}")
+    t1 = region.get("t_end")
+    if t1 is not None and n > 0:
+        first = int(s0 or 0) if s0 is not None and int(s0) < n else 0
+        sw = series.sweeps[first]
+        if trace_idx < sw.trace_count:
+            tr = sw.traces[trace_idx]
+            dur = tr.data.size / float(tr.sampling_rate) if tr.sampling_rate else 0.0
+            if dur and float(t1) > dur + 1e-9:
+                out.append(f"ends at {float(t1):g} s, but sweeps are {dur:g} s long, so it stops at {dur:g} s")
+    return out
+
+
 def region_sweeps(region: dict, sweep_count: int, excluded: Iterable[int] = ()) -> list[int]:
     """Sweeps covered by a region (1-based in the UI, 0-based here),
     minus the series' excluded sweeps."""
@@ -503,6 +527,9 @@ def run_regions(series, trace_idx: int, regions: list[dict], params: dict,
     out = []
     for r in regions:
         base = {"region_id": r.get("id"), "label": r.get("label")}
+        warns = region_warnings(series, trace_idx, r)
+        if warns:
+            base["warnings"] = warns
         try:
             pieces, sr, units, used = region_pieces(series, trace_idx, r, excluded, p, scaled_fn)
             res = analyse_region(pieces, sr, p)

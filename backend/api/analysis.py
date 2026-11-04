@@ -175,6 +175,14 @@ async def run_batch_analysis(req: BatchAnalysisRequest):
         except Exception as e:
             results.append({"sweep_index": sweep_idx, "error": str(e)})
 
+    # A channel no analysed sweep has is an error, not "nothing found":
+    # an empty result here used to be saved as real data (0 bursts).
+    if not results and iterable and all(
+            0 <= i < ser.sweep_count and req.trace >= ser.sweeps[i].trace_count for i in iterable):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Channel {req.trace + 1} isn't recorded in this series.")
+
     return {
         "analysis_type": req.analysis_type,
         "n_sweeps": len(results),

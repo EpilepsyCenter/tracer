@@ -1152,8 +1152,10 @@ Highpass, or Bandpass — applied live to whatever is shown in the
 mini-viewer. The filter is seeded from the main viewer's filter on
 opening, so the trace you start with looks the way it did in the
 main window, but you can change it here without disturbing the main
-viewer's setting. Measurements always operate on the filtered trace
-when the filter is enabled.
+viewer's setting. The filter is for display only: measurements are
+always made on the unfiltered recording (the usual convention for
+amplitudes, baselines and kinetics), and the window says so while the
+filter is on.
 
 ### The baseline window and method
 
@@ -4053,6 +4055,44 @@ plus the channel choice. For Field Potential LTP, the secondary
 post-tetanus series is matched on the target file by its tag at
 run time.
 
+### How each recipe is repeated
+
+Batch repeats on each target exactly what the template's analysis
+window ran on that series — its own settings, not the window's
+current form (which may have been edited since):
+
+- **Sweeps**: the template's *all / range / one sweep* choice, in the
+  window's 1-based numbers, clamped to the target's sweep count. The
+  target's own **excluded sweeps** are left out, as when you run the
+  window on that file. (Field Potential and I-V "one sweep" runs that
+  sweep on its own rather than adding to the target's earlier points.)
+- **Channels, windows, cursors, fit and detection settings** as saved
+  with the template series' result. Two series of the template
+  measured differently are each repeated their own way.
+- **File-specific things stay with the file**: manual edits (added or
+  removed events, spikes, trials) are the target's own; an Events RMS
+  threshold (n × RMS) is measured on each target, in the template's
+  RMS region, because noise and holding differ between cells.
+- **Events** templates: the ones the template run used are saved with
+  its result and reused, even if the library has changed since.
+- **Field Potential LTP**: the post-tetanus series is the one in the
+  same group with the template's post-tetanus tag; none or several is
+  an error. A template whose post-tetanus series has no tag is skipped
+  (it couldn't be matched).
+- **Spectral**: a template series without results is skipped.
+- Different analyses on the same series (Events and Resistance on
+  sweeps with an in-sweep test pulse, say) run together; two recipes
+  of the *same* analysis on one series are a conflict to resolve.
+- Train-grouping settings follow the template (its defaults when it
+  has none).
+- **Times are copied as they are.** Events skip regions and RMS
+  regions, and Spectral regions with a time window, are times within
+  the recording. They're right when every file follows the same
+  protocol timing (same stimulus times, same quiet stretch, drug at
+  the same point) — the usual case, and always the case for Spectral
+  regions that cover whole series. On a file with a different
+  timeline, check those regions before trusting its numbers.
+
 ### The run loop
 
 Clicking **Run** asks for confirmation, then walks the selected
@@ -4069,7 +4109,10 @@ running finishes, then the loop exits before opening the next
 file.
 
 When the run is finished, the **Run log** shows the per-recipe
-status. *Open in Cohort…* at the right of the run bar opens the
+status. A recipe that fails on a file — a missing channel, no
+post-tetanus series, a missing detection template — says so with the
+reason; nothing is reported as done unless it was. Notes such as a
+Spectral region cut short on a shorter recording appear after the ✓. *Open in Cohort…* at the right of the run bar opens the
 Cohort window pointed at the same folder so you can aggregate
 the freshly-written results without retyping the path.
 

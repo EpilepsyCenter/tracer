@@ -188,6 +188,7 @@ async def run_fpsp(
     peak_direction: str = Query("auto", description="auto | negative | positive"),
     avg_n: int = Query(1, description="Number of consecutive sweeps to average per bin"),
     sweeps: Optional[str] = Query(None, description="Comma-separated 0-based sweep indices restricted to `series`. None = all sweeps in both series."),
+    exclude_b: Optional[str] = Query(None, description="Comma-separated 0-based sweeps of `series_b` to leave out (its excluded sweeps)."),
     filter_enabled: bool = Query(False, description="Apply a pre-detection filter to each sweep before averaging"),
     filter_type: str = Query("lowpass", description="lowpass | highpass | bandpass"),
     filter_low: float = Query(1.0, description="Low cutoff (Hz)"),
@@ -266,8 +267,16 @@ async def run_fpsp(
         stim_b = _stim_for_series(rec, group, series_b)
         stim_onset_s_b = _detect_stim_onset_s(stim_b) if stim_b else 0.0
         sweep_interval_b = float(stim_b.sweep_interval) if stim_b and stim_b.sweep_interval else 0.0
-        # Don't apply the user's sweep filter to series B (it's typed for A).
-        points_b, unit_b, flagged_b = _run_on_series(ser_b, series_b, None, cfg)
+        # The user's sweep range is typed for A; B uses all its sweeps
+        # except the ones excluded on B.
+        filter_b = None
+        if exclude_b:
+            try:
+                ex_b = {int(x) for x in exclude_b.split(",") if x.strip() != ""}
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Invalid `exclude_b` list")
+            filter_b = {i for i in range(ser_b.sweep_count) if i not in ex_b}
+        points_b, unit_b, flagged_b = _run_on_series(ser_b, series_b, filter_b, cfg)
 
     return {
         "points": points_a + points_b,

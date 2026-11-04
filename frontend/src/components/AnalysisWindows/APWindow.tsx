@@ -10,6 +10,7 @@ import {
 } from '../../stores/appStore'
 import { useThemeStore, useThemeKey } from '../../stores/themeStore'
 import { NumInput } from '../common/NumInput'
+import { resolveSweeps } from '../../utils/sweepSelection'
 import { ImSourceCard } from '../common/ImSourceCard'
 import { ChannelsOverlaySelect, STIMULUS_OVERLAY_KEY } from '../common/ChannelsOverlaySelect'
 import { OverlayTraceViewer, OverlayChannel } from '../common/OverlayTraceViewer'
@@ -796,15 +797,10 @@ export function APWindow({
 
   // ---- Run ----
   const onRun = async () => {
-    let sweepIndices: number[] | null = null
-    if (runMode === 'range') {
-      const lo = Math.max(1, Math.min(sweepFrom, totalSweeps))
-      const hi = Math.max(lo, Math.min(sweepTo, totalSweeps))
-      sweepIndices = []
-      for (let i = lo - 1; i <= hi - 1; i++) sweepIndices.push(i)
-    } else if (runMode === 'one') {
-      sweepIndices = [Math.max(0, Math.min(sweepOne - 1, totalSweeps - 1))]
-    }
+    // Shared with Batch: 1-based → 0-based, clamped, excluded sweeps out.
+    const scope = { runMode, sweepFrom, sweepTo, sweepOne }
+    const sweepIndices = resolveSweeps(scope, totalSweeps,
+      useAppStore.getState().excludedSweeps[`${group}:${series}`] ?? [])
     await runAP(
       group, series, trace,
       {
@@ -822,19 +818,8 @@ export function APWindow({
       manualEdits,
       true,
       mode,
+      scope,
     )
-    // Stamp the run-mode + sweep selection onto the entry so the
-    // sidecar persists them and the form rehydrates them on reopen.
-    useAppStore.setState((s) => {
-      const e = s.apAnalyses[`${group}:${series}`]
-      if (!e) return s
-      return {
-        apAnalyses: {
-          ...s.apAnalyses,
-          [`${group}:${series}`]: { ...e, runMode, sweepFrom, sweepTo, sweepOne },
-        },
-      }
-    })
   }
 
   // The Kinetics-tab viewers show the trace the kinetics were measured

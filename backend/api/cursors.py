@@ -86,6 +86,7 @@ async def run_cursor_analysis(req: CursorAnalysisRequest):
 
     # Grab per-sweep data vectors for the requested trace.
     data_vectors: list[np.ndarray] = []
+    measured_idx: list[int] = []       # sweep index of each data vector
     sampling_rate: Optional[float] = None
     unit = ""
     for idx in sweep_indices:
@@ -99,6 +100,7 @@ async def run_cursor_analysis(req: CursorAnalysisRequest):
             sampling_rate = tr.sampling_rate
             unit = tr.units
         data_vectors.append(scaled(tr))
+        measured_idx.append(idx)
 
     if not data_vectors or sampling_rate is None:
         raise HTTPException(status_code=400, detail="No sweeps contain data for this trace")
@@ -110,7 +112,9 @@ async def run_cursor_analysis(req: CursorAnalysisRequest):
         stacked = np.stack([v[:min_n] for v in data_vectors], axis=0)
         traces_to_measure = [(-1, stacked.mean(axis=0).astype(np.float64))]
     else:
-        traces_to_measure = list(zip(sweep_indices, data_vectors))
+        # Pair each vector with ITS sweep: skipped sweeps (no data on
+        # this trace) must not shift the labels of the ones after them.
+        traces_to_measure = list(zip(measured_idx, data_vectors))
 
     # Validate slots once.
     for si, slot in enumerate(req.slots):

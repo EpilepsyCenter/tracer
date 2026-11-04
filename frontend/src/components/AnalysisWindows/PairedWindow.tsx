@@ -1,3 +1,4 @@
+import { resolveSweeps } from '../../utils/sweepSelection'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import uPlot from 'uplot'
 import 'uplot/dist/uPlot.min.css'
@@ -120,12 +121,15 @@ export function PairedWindow({
   // clobber the user's edits when an async state-update arrives later.
   const [form, setLocalForm] = useState<PairedFormState>(() => pairedForm ?? defaultPairedForm())
   const rehydratedKeyRef = useRef<string | null>(null)
+  const defaultedKeyRef = useRef<string | null>(null)
   const formKey = `${group}:${series}`
   useEffect(() => {
-    if (rehydratedKeyRef.current === formKey) return
-    rehydratedKeyRef.current = formKey
     const stored = pairedAnalyses[formKey]
     if (stored) {
+      // Restore once per series — also when the stored result arrives
+      // a moment after the window opened (state-update is async).
+      if (rehydratedKeyRef.current === formKey) return
+      rehydratedKeyRef.current = formKey
       setLocalForm({
         preMode: stored.preMode,
         preParams: stored.preParams,
@@ -133,9 +137,20 @@ export function PairedWindow({
         failureParams: stored.failureParams,
         latencyParams: stored.latencyParams,
       })
-    } else {
-      setLocalForm(pairedForm ?? defaultPairedForm())
+      // The channels and sweeps the result was measured with.
+      setPreTrace(stored.preTrace)
+      setPostTrace(stored.postTrace)
+      if (stored.runMode) {
+        setRunMode(stored.runMode)
+        if (stored.sweepFrom) setSweepFrom(stored.sweepFrom)
+        if (stored.sweepTo) setSweepTo(stored.sweepTo)
+        if (stored.sweepOne) setSweepOne(stored.sweepOne)
+      }
+      return
     }
+    if (defaultedKeyRef.current === formKey) return
+    defaultedKeyRef.current = formKey
+    setLocalForm(pairedForm ?? defaultPairedForm())
   }, [formKey, pairedAnalyses, pairedForm])
 
   const updateForm = useCallback((patch: Partial<PairedFormState>) => {
@@ -358,12 +373,9 @@ export function PairedWindow({
     setRunning(true)
     setRunError(null)
     try {
-      const sweeps =
-        runMode === 'all' ? Array.from({ length: totalSweeps }, (_, i) => i)
-        : runMode === 'range' ? Array.from({
-          length: Math.max(0, sweepTo - sweepFrom + 1),
-        }, (_, i) => sweepFrom - 1 + i)
-        : [sweepOne - 1]
+      // Shared with Batch: 1-based → 0-based, clamped, excluded out.
+      const sweeps = resolveSweeps({ runMode, sweepFrom, sweepTo, sweepOne }, totalSweeps,
+        useAppStore.getState().excludedSweeps[`${group}:${series}`] ?? [])
 
       const body = {
         group, series,
@@ -423,6 +435,7 @@ export function PairedWindow({
         group, series,
         preTrace, postTrace,
         sweeps,
+        runMode, sweepFrom, sweepTo, sweepOne,
         samplingRate: d.sampling_rate,
         preMode: form.preMode,
         preParams: form.preParams,

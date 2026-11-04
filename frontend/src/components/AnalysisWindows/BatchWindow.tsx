@@ -25,6 +25,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { withDualDefaults } from '../../utils/propagation'
 import { useAppStore } from '../../stores/appStore'
+import { defaultTrainParamsFor } from './TrainOptions'
+import { resolveSweeps } from '../../utils/sweepSelection'
+import { cursorRunBody, cursorRunSettings } from '../../utils/cursorRun'
 import { displayGroupSeries } from '../../utils/groupSeriesKey'
 
 // All analysis-data shapes share a similar "blob keyed by group:series"
@@ -176,6 +179,12 @@ export interface BatchRecipe {
   /** Bursts only: the template's dual-site setup (partner channel +
    *  its detection params, names, pairing settings), or null. */
   burstDual?: AnyBlob | null
+  /** Events: the sweep the template ran on ('current sweep' mode, and
+   *  the sweep its RMS was measured on) and the templates it used. */
+  seedSweep?: number | null
+  templatesUsed?: AnyBlob[] | null
+  /** Bursts: whole series, or one sweep (1-based). */
+  burstScope?: { runMode: string; sweepOne: number } | null
   /** For analyses that span multiple series (FPsp LTP needs a baseline
    *  series AND a post-tetanus one), this captures the tags of any
    *  *secondary* series the template references. The runner uses these
@@ -253,6 +262,16 @@ function pickParams(blob: AnyBlob): AnyBlob {
  *  (analysis, group:series) entry that has at least one series tag.
  *  Untagged analyses are skipped — they can't be matched against
  *  target files in the tag-driven flow. */
+/** Run one analysis step and fail loudly. The store actions catch their
+ *  own errors into ``state.error`` (the windows show it), so without this
+ *  a failed run was logged as ✓ and the target kept its old result. */
+export async function runChecked(step: () => Promise<unknown>): Promise<void> {
+  useAppStore.setState({ error: null })
+  await step()
+  const err = useAppStore.getState().error
+  if (err) throw new Error(err)
+}
+
 export function extractRecipes(sidecar: SidecarShape): {
   recipes: BatchRecipe[]
   warnings: string[]
@@ -291,8 +310,28 @@ export function extractRecipes(sidecar: SidecarShape): {
       } else {
         blob = raw
       }
-      const channel = pickChannel(blob)
-      const params = pickParams(blob)
+      let channel = pickChannel(blob)
+      let params = pickParams(blob)
+      let spectralRegions: AnyBlob[] | null = type === 'spectral' && Array.isArray((blob as any).regions)
+        ? ((blob as any).regions as AnyBlob[]) : null
+      if (type === 'spectral') {
+        // Repeat what produced the template's results: the form may have
+        // been edited since (the window then marks the results out of
+        // date). runSignature holds the channel, settings and regions
+        // that were run.
+        if (!(blob as any).results) {
+          warnings.push(`spectral on ${displayGroupSeries(key)} skipped: it has no results — run it in the Spectral window first.`)
+          continue
+        }
+        try {
+          const sig = JSON.parse(String((blob as any).runSignature ?? ''))
+          if (sig && typeof sig === 'object') {
+            if (typeof sig.c === 'number') channel = sig.c
+            if (sig.p && typeof sig.p === 'object') params = { ...params, ...sig.p }
+            if (Array.isArray(sig.r)) spectralRegions = sig.r
+          }
+        } catch { /* older results: the stored form */ }
+      }
 
       // Capture secondary-series tags. FPsp LTP mode references a
       // post-tetanus series via params.seriesB; the runner needs to
@@ -309,7 +348,10 @@ export function extractRecipes(sidecar: SidecarShape): {
           if (bTags.length > 0) {
             secondaryTags['B'] = bTags
           } else {
-            warnings.push(`fpsp_curves [ltp] on ${displayGroupSeries(groupSeries)} references seriesB ${displayGroupSeries(bKey)} but that series has no tags. Tag the post-tetanus series so target files can match it.`)
+            // Without B a target would run single-series LTP: different
+            // numbers from the template. Skip it.
+            warnings.push(`fpsp_curves [ltp] on ${displayGroupSeries(groupSeries)} skipped: its post-tetanus series ${displayGroupSeries(bKey)} has no tags. Tag it so target files can match it.`)
+            continue
           }
         }
       }
@@ -338,8 +380,12 @@ export function extractRecipes(sidecar: SidecarShape): {
           tag, analysisType: type, sourceKey: key,
           subtype, params, channel, secondaryTags, cursors,
           trainParams,
-          regions: type === 'spectral' && Array.isArray((blob as any).regions)
-            ? ((blob as any).regions as AnyBlob[]) : null,
+          seedSweep: type === 'events' && typeof (blob as any).sweep === 'number' ? (blob as any).sweep : null,
+          burstScope: type === 'bursts' && !Array.isArray(raw)
+            ? { runMode: (raw as any).runMode ?? 'all', sweepOne: (raw as any).sweepOne ?? 1 } : null,
+          templatesUsed: type === 'events' && Array.isArray((blob as any).templatesUsed)
+            ? ((blob as any).templatesUsed as AnyBlob[]) : null,
+          regions: spectralRegions,
           // Dual-site only when the template series has it switched on
           // (old partner results can outlive turning it off).
           burstDual: type === 'bursts' && (blob as any).partner
@@ -739,15 +785,20 @@ export function BatchWindow({ backendUrl }: Props) {
       // file. We use the analysis type + subtype + sourceKey as a
       // grouping bucket so two distinct recipes (different tags but
       // same underlying analysis) sharing a series are flagged.
-      const perSeries = new Map<string, BatchRecipe[]>()
+      // Only recipes of the SAME analysis (and FPsp mode) compete for a
+      // series' result; different analyses on one series (e.g. Events
+      // and Resistance on sweeps with an in-sweep test pulse) each save
+      // their own result and are fine together.
+      const perSeries = new Map<string, { seriesKey: string; recipes: BatchRecipe[] }>()
       for (const item of file.items) {
         for (const k of item.match.primary) {
-          const list = perSeries.get(k) ?? []
-          list.push(item.recipe)
-          perSeries.set(k, list)
+          const bucket = `${k}|${item.recipe.analysisType}|${item.recipe.subtype ?? ''}`
+          const e = perSeries.get(bucket) ?? { seriesKey: k, recipes: [] }
+          e.recipes.push(item.recipe)
+          perSeries.set(bucket, e)
         }
       }
-      for (const [seriesKey, recipes] of perSeries) {
+      for (const { seriesKey, recipes } of perSeries.values()) {
         if (recipes.length >= 2) {
           out.push({
             filePath: file.entry.filePath,
@@ -767,6 +818,9 @@ export function BatchWindow({ backendUrl }: Props) {
   /** Helper — iterate the matched primary series for a recipe and
    *  call ``inner`` for each, scaling the progress fraction so the
    *  caller's slice is divided evenly across hits. */
+  // Notes a recipe leaves for the run log (e.g. spectral regions cut
+  // short on a shorter file); drained after each recipe.
+  const runNotesRef = useRef<string[]>([])
   const forEachMatch = useCallback(async (
     item: RunPlanItem,
     fileFraction: (frac: number) => void,
@@ -779,7 +833,7 @@ export function BatchWindow({ backendUrl }: Props) {
         fileFraction((i + frac) / hits.length)
       partFrac(0)
       // eslint-disable-next-line no-await-in-loop
-      await inner(g, s, i)
+      await runChecked(() => inner(g, s, i))
       partFrac(1)
     }
   }, [])
@@ -791,20 +845,6 @@ export function BatchWindow({ backendUrl }: Props) {
     item: RunPlanItem, fileFraction: (frac: number) => void,
   ) => {
     const p = item.recipe.params as any
-    // Sweep-range translation. Template's runMode is 'all' / 'range'
-    // / 'one'; runAP takes either an explicit list of sweep indices
-    // (range/one) or null (all). For batch we trust the template's
-    // selection — slice indices remain valid because the .pgf
-    // protocol typically matches across files of the same kind.
-    let sweepIndices: number[] | null = null
-    if (p.runMode === 'one' && typeof p.sweepOne === 'number') {
-      sweepIndices = [p.sweepOne]
-    } else if (p.runMode === 'range'
-        && typeof p.sweepFrom === 'number'
-        && typeof p.sweepTo === 'number') {
-      sweepIndices = []
-      for (let i = p.sweepFrom; i <= p.sweepTo; i++) sweepIndices.push(i)
-    }
     const imSource = {
       manualEnabled: !!p.manualImEnabled,
       manualStartS: Number(p.manualImStartS ?? 0),
@@ -812,13 +852,16 @@ export function BatchWindow({ backendUrl }: Props) {
       manualStartPA: Number(p.manualImStartPA ?? 0),
       manualStepPA: Number(p.manualImStepPA ?? 0),
     }
-    // Manual edits / kinetics flag — start from a clean slate per
-    // target file (manual events are file-specific) but inherit the
-    // measurement choices.
-    const manualEdits = p.manualEdits ?? { added: [], removed: [] }
-    const measureKinetics = !!(p.kinetics && Object.keys(p.kinetics).length > 0)
     await forEachMatch(item, fileFraction, async (g, s) => {
       const channel = item.recipe.channel ?? 0
+      const st = useAppStore.getState()
+      // The template's run scope on this target (shared with the window:
+      // 1-based → 0-based, clamped, the target's excluded sweeps out).
+      const total = st.recording?.groups?.[g]?.series?.[s]?.sweepCount ?? 0
+      const sweepIndices = resolveSweeps(p, total, st.excludedSweeps[`${g}:${s}`] ?? [])
+      // Manual spike edits are file-specific: keep the target's own (as a
+      // re-run in the window does), never the template's.
+      const manualEdits = st.apAnalyses[`${g}:${s}`]?.manualEdits ?? { added: [], removed: [] }
       await appRunAP(
         g, s, channel,
         imSource, sweepIndices,
@@ -826,15 +869,16 @@ export function BatchWindow({ backendUrl }: Props) {
         p.kinetics,
         p.rheobaseMode,
         p.rampParams ?? null,
-        manualEdits,
-        measureKinetics,
+        manualEdits as any,
+        true,    // as the window's Run
         // Evoked / spontaneous follows the template (older templates
         // have no mode = evoked).
         p.mode === 'spontaneous' ? 'spontaneous' : 'evoked',
+        p,
       )
-      if (item.recipe.trainParams) {
-        useAppStore.getState().setTrainParams('ap', g, s, item.recipe.trainParams as any)
-      }
+      // Train grouping follows the template (its defaults when it has none).
+      useAppStore.getState().setTrainParams('ap', g, s,
+        (item.recipe.trainParams ?? defaultTrainParamsFor('ap')) as any)
     })
   }, [forEachMatch, appRunAP])
 
@@ -849,7 +893,6 @@ export function BatchWindow({ backendUrl }: Props) {
       baselineEndS: Number(p.baselineEndS ?? 0),
       peakStartS: Number(p.peakStartS ?? 0),
       peakEndS: Number(p.peakEndS ?? 0),
-      sweepIndices: null,                 // batch always runs all sweeps
       manualImEnabled: !!p.manualImEnabled,
       manualImStartS: p.manualImStartS,
       manualImEndS: p.manualImEndS,
@@ -858,7 +901,15 @@ export function BatchWindow({ backendUrl }: Props) {
     }
     await forEachMatch(item, fileFraction, async (g, s) => {
       const channel = item.recipe.channel ?? 0
-      await appRunIV(g, s, channel, params)
+      // The template's run scope and response metric on this target.
+      const st = useAppStore.getState()
+      const total = st.recording?.groups?.[g]?.series?.[s]?.sweepCount ?? 0
+      const sweepIndices = resolveSweeps(p, total, st.excludedSweeps[`${g}:${s}`] ?? [])
+      await appRunIV(g, s, channel, {
+        ...params, sweepIndices, appendToExisting: false,
+        responseMetric: p.responseMetric,
+        runMode: p.runMode, sweepFrom: p.sweepFrom, sweepTo: p.sweepTo, sweepOne: p.sweepOne,
+      })
     })
   }, [forEachMatch, appRunIV])
 
@@ -868,12 +919,21 @@ export function BatchWindow({ backendUrl }: Props) {
     item: RunPlanItem, fileFraction: (frac: number) => void,
   ) => {
     const params = item.recipe.params as any
+    const scope = item.recipe.burstScope
     await forEachMatch(item, fileFraction, async (g, s) => {
       const channel = item.recipe.channel ?? 0
-      await appRunBursts(g, s, channel, params)
-      if (item.recipe.trainParams) {
-        useAppStore.getState().setTrainParams('bursts', g, s, item.recipe.trainParams as any)
-      }
+      const st0 = useAppStore.getState()
+      const total = st0.recording?.groups?.[g]?.series?.[s]?.sweepCount ?? 0
+      // Whole series, or the template's single sweep (clamped).
+      const one = scope?.runMode === 'one'
+        ? Math.max(0, Math.min(Number(scope.sweepOne ?? 1) - 1, total - 1)) : null
+      if (one != null) await st0.runFieldBurstsOnSweep(g, s, one, channel, params)
+      else await appRunBursts(g, s, channel, params)
+      // The window shows the settings that were used on this file.
+      useAppStore.getState().setBurstFormParams(g, s, params)
+      // Train grouping follows the template (its defaults when it has none).
+      useAppStore.getState().setTrainParams('bursts', g, s,
+        (item.recipe.trainParams ?? defaultTrainParamsFor('bursts')) as any)
       // Dual-site template: same partner channel, detection settings,
       // names and pairing settings, then detect + pair on this file.
       const dual = item.recipe.burstDual as any
@@ -885,8 +945,11 @@ export function BatchWindow({ backendUrl }: Props) {
           ...(dual.partnerLabel ? { partnerLabel: dual.partnerLabel } : {}),
           ...(dual.propagation ? { propagation: dual.propagation } : {}),
         })
+        if (dual.channel === channel) {
+          throw new Error('Dual-site: the second channel is the same as the reference channel')
+        }
         st.setBurstDualForm(g, s, form)
-        await st.runBurstPartner(g, s, dual.channel, dual.params)
+        await st.runBurstPartner(g, s, dual.channel, dual.params, one)
         await useAppStore.getState().computePropagation(g, s)
       }
     })
@@ -908,6 +971,13 @@ export function BatchWindow({ backendUrl }: Props) {
         ...(regions && regions.length > 0 ? { regions } : {}),
       }, channel)
       await appRunSpectral(g, s)
+      // Regions cut short on this file (fewer sweeps, shorter sweeps):
+      // analysed on what exists — note it in the run log.
+      const res = useAppStore.getState().spectralAnalyses[`${g}:${s}`]?.results ?? []
+      for (const r of res) {
+        for (const w of r.warnings ?? []) runNotesRef.current.push(`${r.label}: ${w}`)
+        if (r.error) runNotesRef.current.push(`${r.label}: ${r.error}`)
+      }
     })
   }, [forEachMatch, appSetSpectralForm, appRunSpectral])
 
@@ -929,7 +999,12 @@ export function BatchWindow({ backendUrl }: Props) {
       ? p.postTrace
       : (preTrace === 0 ? 1 : 0)
     await forEachMatch(item, fileFraction, async (g, s) => {
+      // The template's run scope on this target (older results: all).
+      const st = useAppStore.getState()
+      const total = st.recording?.groups?.[g]?.series?.[s]?.sweepCount ?? 0
+      const sweeps = resolveSweeps(p, total, st.excludedSweeps[`${g}:${s}`] ?? [])
       await appRunPaired(g, s, preTrace, postTrace, {
+        runMode: p.runMode, sweepFrom: p.sweepFrom, sweepTo: p.sweepTo, sweepOne: p.sweepOne,
         preMode: p.preMode,
         preParams: p.preParams ?? {},
         postParams: p.postParams ?? {},
@@ -941,7 +1016,7 @@ export function BatchWindow({ backendUrl }: Props) {
         // is fresh detection — carrying the template's per-trial
         // overrides to a different recording would be nonsense.
         manualEdits: { added: {}, removed: {}, postFailed: {} },
-        sweeps: null,
+        sweeps,
       })
     })
   }, [forEachMatch, appRunPaired])
@@ -958,16 +1033,8 @@ export function BatchWindow({ backendUrl }: Props) {
     // file. ``match.secondary['B']`` contains every g:s key whose
     // tags overlap with the template's seriesB tags. Take the first
     // hit (multiple-match disambiguation can come later).
-    let seriesB: number | null = null
-    if (mode === 'ltp') {
-      const hits = item.match.secondary['B'] ?? []
-      if (hits.length > 0) {
-        seriesB = Number(hits[0].split(':')[1])
-      }
-    }
     const fpspParams = {
       mode,
-      seriesB,
       baselineStartS: Number(p.baselineStartS ?? 0),
       baselineEndS: Number(p.baselineEndS ?? 0),
       volleyStartS: Number(p.volleyStartS ?? 0),
@@ -979,7 +1046,6 @@ export function BatchWindow({ backendUrl }: Props) {
       slopeHighPct: Number(p.slopeHighPct ?? 80),
       peakDirection: p.peakDirection,
       avgN: Number(p.avgN ?? 1),
-      sweepIndices: null,
       // Filter passthrough.
       filterEnabled: !!p.filterEnabled,
       filterType: p.filterType,
@@ -1001,7 +1067,27 @@ export function BatchWindow({ backendUrl }: Props) {
     }
     await forEachMatch(item, fileFraction, async (g, s) => {
       const channel = item.recipe.channel ?? 0
-      await appRunFPsp(g, s, channel, fpspParams)
+      // LTP: the post-tetanus series is the one in THIS group carrying
+      // the template's post-tetanus tag — exactly one, or we stop.
+      let seriesB: number | null = null
+      if (mode === 'ltp' && p.seriesB != null) {
+        const inGroup = (item.match.secondary['B'] ?? []).filter((k) => Number(k.split(':')[0]) === g)
+        if (inGroup.length !== 1) {
+          throw new Error(inGroup.length === 0
+            ? 'LTP: no post-tetanus series with the template\'s tag in this group'
+            : `LTP: ${inGroup.length} series carry the post-tetanus tag in this group — tag only one`)
+        }
+        seriesB = Number(inGroup[0].split(':')[1])
+      }
+      // The template's run scope on this target ('one sweep' runs that
+      // sweep afresh rather than adding to the target's old points).
+      const st = useAppStore.getState()
+      const total = st.recording?.groups?.[g]?.series?.[s]?.sweepCount ?? 0
+      const sweepIndices = resolveSweeps(p, total, st.excludedSweeps[`${g}:${s}`] ?? [])
+      await appRunFPsp(g, s, channel, {
+        ...fpspParams, seriesB, sweepIndices, appendToExisting: false,
+        runMode: p.runMode, sweepFrom: p.sweepFrom, sweepTo: p.sweepTo, sweepOne: p.sweepOne,
+      })
     })
   }, [forEachMatch, appRunFPsp])
 
@@ -1046,42 +1132,15 @@ export function BatchWindow({ backendUrl }: Props) {
   const runCursorRecipe = useCallback(async (
     item: RunPlanItem, fileFraction: (frac: number) => void,
   ) => {
-    const p = item.recipe.params as any
+    const blob = item.recipe.params as any
+    // The settings that produced the template's numbers (older results:
+    // the stored form).
+    const settings = { ...cursorRunSettings(blob), ...(blob.runSettings ?? {}) }
     await forEachMatch(item, fileFraction, async (g, s) => {
-      const channel = item.recipe.channel ?? 0
-      const slotsAll = Array.isArray(p.slots) ? p.slots : []
-      const slotCount = Number(p.slotCount ?? slotsAll.length)
-      const visible = slotsAll.slice(0, slotCount)
-      // Sweep set: 'all' → null, 'one' → [sweepOne], 'range' → [from..to].
-      let sweeps: number[] | null = null
-      if (p.runMode === 'one' && typeof p.sweepOne === 'number') {
-        sweeps = [p.sweepOne]
-      } else if (p.runMode === 'range'
-          && typeof p.sweepFrom === 'number'
-          && typeof p.sweepTo === 'number') {
-        sweeps = []
-        for (let i = p.sweepFrom; i <= p.sweepTo; i++) sweeps.push(i)
-      }
-      const body = {
-        group: g, series: s, trace: channel,
-        sweeps,
-        average: !!p.average,
-        baseline: p.baseline ?? { start: 0, end: 0 },
-        baseline_method: p.baselineMethod ?? 'mean',
-        slots: visible.map((slot: any) => ({
-          enabled: !!slot.enabled,
-          peak: slot.peak ?? null,
-          fit: slot.fit ?? null,
-          fit_function: slot.fit && slot.fitFunction ? slot.fitFunction : null,
-          fit_options: slot.fitOptions ? {
-            maxfev: slot.fitOptions.maxfev,
-            ftol: slot.fitOptions.ftol,
-            xtol: slot.fitOptions.xtol,
-            initial_guess: slot.fitOptions.initialGuess ?? null,
-          } : null,
-        })),
-        compute_ap: !!p.computeAP,
-      }
+      const st = useAppStore.getState()
+      const total = st.recording?.groups?.[g]?.series?.[s]?.sweepCount ?? 0
+      const sweeps = resolveSweeps(settings, total, st.excludedSweeps[`${g}:${s}`] ?? [])
+      const body = cursorRunBody(g, s, settings, sweeps)
       const resp = await fetch(`${backendUrl}/api/cursors/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1092,33 +1151,25 @@ export function BatchWindow({ backendUrl }: Props) {
         throw new Error(err.detail || 'Cursor run failed')
       }
       const data = await resp.json()
-      // Write the new analysis blob into the store. The sidecar
-      // subscriber will persist it on the next state change.
+      // Same blob the window's Run leaves (settings + results + the
+      // settings that produced them), then broadcast like the window.
       const key = `${g}:${s}`
-      useAppStore.setState((state) => {
-        const prev = state.cursorAnalyses[key] ?? p
-        const next = {
-          ...prev,
-          group: g, series: s, trace: channel,
-          slotCount, slots: slotsAll,
-          baseline: body.baseline,
-          baselineMethod: body.baseline_method,
-          measurements: data.measurements ?? [],
-          traceUnit: data.trace_unit ?? '',
-          // Preserve average / runMode flags so re-opens look right.
-          average: !!p.average,
-          runMode: p.runMode ?? 'all',
-          sweepFrom: p.sweepFrom,
-          sweepTo: p.sweepTo,
-          sweepOne: p.sweepOne,
-          // AP stuff defaults off in batch.
-          computeAP: !!p.computeAP,
-          apSlope: p.apSlope ?? 20,
-        }
-        return {
-          cursorAnalyses: { ...state.cursorAnalyses, [key]: next },
-        }
-      })
+      const next = {
+        ...(useAppStore.getState().cursorAnalyses[key] ?? blob),
+        ...settings,
+        group: g, series: s,
+        measurements: data.measurements ?? [],
+        traceUnit: data.trace_unit ?? '',
+        runSettings: settings,
+        computeAP: false,
+      }
+      const map = { ...useAppStore.getState().cursorAnalyses, [key]: next }
+      useAppStore.setState({ cursorAnalyses: map })
+      try {
+        const ch = new BroadcastChannel('tracer-sync')
+        ch.postMessage({ type: 'cursor-analyses-update', cursorAnalyses: map })
+        ch.close()
+      } catch { /* ignore */ }
     })
   }, [forEachMatch, backendUrl])
 
@@ -1126,35 +1177,49 @@ export function BatchWindow({ backendUrl }: Props) {
     item: RunPlanItem, fileFraction: (frac: number) => void,
   ) => {
     const params = item.recipe.params as any  // EventsParams shape
-    // Look up the biexp template from the library by id. Templates
-    // are stored separately from per-file analyses; the library is
-    // shared across files so the same template id is valid here.
+    // Templates: the ones the template run actually used (saved with its
+    // result); older results fall back to the library by id.
+    const saved = item.recipe.templatesUsed as any[] | null | undefined
     const tmplId = params.templateId
-    const template = tmplId
-      ? (eventsTemplates.entries[tmplId] ?? null)
-      : null
+    const template = saved?.[0] ?? (tmplId ? (eventsTemplates.entries[tmplId] ?? null) : null)
+    const additional = saved ? saved.slice(1) : null
     // Run once per matched (group, series) — multiple matches on the
     // same file are normal (e.g. two series both tagged "mEPSC").
     for (let i = 0; i < item.match.primary.length; i++) {
       const key = item.match.primary[i]
       const [g, s] = key.split(':').map(Number)
       const channel = item.recipe.channel ?? 0
-      // Sweep arg: events typically run on a single starting sweep
-      // and use ``params.sweepMode`` ('current' / 'all') to expand.
-      // We pass 0 as the seed; the runner respects sweepMode.
-      const seedSweep = 0
+      // 'current sweep' mode runs the template's sweep (clamped to the
+      // target); 'all' mode expands from it.
+      const total = useAppStore.getState().recording?.groups?.[g]?.series?.[s]?.sweepCount ?? 1
+      const seedSweep = Math.max(0, Math.min(Number(item.recipe.seedSweep ?? 0), total - 1))
       const partFrac = (frac: number) => {
         const before = i / item.match.primary.length
         const within = frac / item.match.primary.length
         fileFraction(before + within)
       }
       // eslint-disable-next-line no-await-in-loop
-      await appRunEvents(g, s, channel, seedSweep, params, template, partFrac)
-      // Propagate the template's train-grouping params (if any) so
-      // the cohort extractor on this target sees the same grouping.
-      if (item.recipe.trainParams) {
-        useAppStore.getState().setTrainParams('events', g, s, item.recipe.trainParams as any)
-      }
+      await runChecked(async () => {
+        // RMS threshold / RMS amplitude floor: measured on THIS cell, in
+        // the template's RMS region, as the window does — not the
+        // template cell's absolute numbers.
+        let runParams = params
+        if ((params.method === 'threshold' && params.thresholdMode === 'rms') || params.useRmsAmpFloor) {
+          const region = params.rmsRegion
+          if (!region || !(region.endS > region.startS)) {
+            throw new Error('RMS threshold: the template has no RMS region — compute RMS in the Events window first.')
+          }
+          const r = await useAppStore.getState().computeEventsRms(
+            g, s, channel, seedSweep, region.startS, region.endS,
+            { enabled: params.filterEnabled, type: params.filterType, low: params.filterLow,
+              high: params.filterHigh, order: params.filterOrder })
+          runParams = { ...params, rmsValue: r.rms, rmsBaselineMean: r.baselineMean }
+        }
+        await appRunEvents(g, s, channel, seedSweep, runParams, template as any, partFrac, additional as any)
+      })
+      // Train grouping follows the template (its defaults when it has none).
+      useAppStore.getState().setTrainParams('events', g, s,
+        (item.recipe.trainParams ?? defaultTrainParamsFor('events')) as any)
     }
   }, [appRunEvents, eventsTemplates])
 
@@ -1242,14 +1307,16 @@ export function BatchWindow({ backendUrl }: Props) {
               })
           }
           if (didRun) {
+            const notes = runNotesRef.current.splice(0)
             log.push({
               filePath: file.entry.filePath,
               fileName: file.entry.fileName,
               level: 'ok',
-              message: `${rec} ✓`,
+              message: notes.length ? `${rec} ✓ — ${notes.join('; ')}` : `${rec} ✓`,
             })
           }
         } catch (err: any) {
+          runNotesRef.current.splice(0)
           log.push({
             filePath: file.entry.filePath,
             fileName: file.entry.fileName,

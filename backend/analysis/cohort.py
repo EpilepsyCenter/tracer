@@ -638,7 +638,9 @@ def extract_iv(slice_data: dict, sidecar: dict) -> CellExtraction:
     metric = slice_data.get('responseMetric', 'steady')
     field_name = 'steadyState' if metric == 'steady' else 'transientPeak'
 
-    pairs = [(p.get('stimLevel'), p.get(field_name))
+    # Response = (steady state or peak) − that sweep's baseline: what the
+    # I-V window plots, fits and exports.
+    pairs = [(p.get('stimLevel'), float(p.get(field_name)) - float(p.get('baseline') or 0.0))
              for p in points
              if p.get('stimLevel') is not None and p.get(field_name) is not None]
 
@@ -1050,24 +1052,22 @@ def extract_fpsp_io(slice_data: dict, sidecar: dict) -> CellExtraction:
     initial = slice_data.get('ioInitialIntensity')
     step = slice_data.get('ioIntensityStep')
     for p in points:
-        y = p.get(field)
+        y = _abs_or_none(p.get(field))
         if y is None:
             continue
-        # Intensity reconstruction: prefer explicit per-point recipe
-        # (initial + step * binIndex). Falls back to binIndex when the
-        # I-O recipe wasn't recorded so the regression is still
-        # meaningful even if the x-axis is just bin numbers.
-        bin_idx = p.get('binIndex')
-        if initial is not None and step is not None and bin_idx is not None:
-            x = float(initial) + float(step) * float(bin_idx)
-        elif bin_idx is not None:
-            x = float(bin_idx)
+        # Intensity of a point: initial + step × its SWEEP number (as the
+        # window plots it). The bin index only counts the analysed
+        # sweeps, so it shifted every point after an excluded sweep.
+        # Without the I-O recipe the sweep number itself is the x.
+        sw = p.get('sweepIndices')
+        idx = sw[0] if isinstance(sw, list) and sw else p.get('binIndex')
+        if idx is None:
+            continue
+        if initial is not None and step is not None:
+            x = float(initial) + float(step) * float(idx)
         else:
-            continue
-        try:
-            pairs.append((x, float(y)))
-        except (TypeError, ValueError):
-            continue
+            x = float(idx)
+        pairs.append((x, y))
 
     scalars: dict[str, Optional[float]] = {
         'io_slope': None,
@@ -1613,6 +1613,10 @@ def extract_spectral(slice_data: dict, sidecar: dict) -> CellExtraction:
         # Two-channel coupling (Spectral window "Second channel"): lags are
         # partner − reference, positive = reference leads.
         cp = r.get('coupling') or {}
+        if cp and cp.get('error'):
+            # Coupling failed (e.g. the second channel is missing): say so
+            # rather than leaving its metrics silently absent.
+            errors[f'{region} (coupling)'] = str(cp.get('error'))
         if cp and not cp.get('error'):
             x = cp.get('xcorr') or {}
             scalars[f'{region}_xcorr_peak_r'] = _spectral_num(x.get('peakR'))
