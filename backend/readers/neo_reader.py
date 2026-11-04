@@ -16,7 +16,6 @@ NEO_FORMAT_MAP = {
     ".axgx": "AxographIO",
     ".smr": "Spike2IO",
     ".h5": "NeoHdf5IO",
-    ".nwb": "NWBIO",
     ".nix": "NixIO",
     ".mcd": "MicromedIO",
     ".plx": "PlexonIO",

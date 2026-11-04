@@ -33,6 +33,9 @@ hidden += collect_submodules('matplotlib')
 hidden += collect_submodules('openpyxl')
 hidden += collect_submodules('pzfx')
 hidden += collect_submodules('scipy')
+# NWB: pynwb / hdmf load their type maps and schema (YAML) at import.
+hidden += collect_submodules('pynwb')
+hidden += collect_submodules('hdmf')
 
 datas = []
 datas += collect_data_files('neo')
@@ -44,6 +47,10 @@ datas += collect_data_files('myokit')
 datas += collect_data_files('matplotlib')
 datas += collect_data_files('pingouin')
 datas += collect_data_files('pzfx')
+# pynwb's nwb-schema and hdmf's common schema are YAML files read at
+# import; without them `import pynwb` fails in the bundled backend.
+datas += collect_data_files('pynwb')
+datas += collect_data_files('hdmf')
 # Bundled JetBrains Mono — used by cohort_graphs to render every
 # matplotlib chart in the app's mono. ``backend/assets/fonts/`` is
 # read by ``backend/utils/fonts.py`` via a path relative to its
