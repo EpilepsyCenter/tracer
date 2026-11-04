@@ -12,20 +12,6 @@ Batch fidelity audit, readable metric names and notes on the trace.
 
 ## Useful, not scheduled
 
-### Command-line runs
-
-Run TRACER's analyses without the GUI on many recordings, e.g.
-overnight or on a cluster:
-
-```bash
-tracer run --folder recordings/ --template cell_a2.dat --out results/
-```
-
-Same Python backend, invoked as `python -m tracer`, reusing Batch's
-"apply a template recording's analyses to a folder" logic. Low cost:
-the analysis layer already runs without Electron; the work is the
-entry point, packaging and documentation.
-
 ### Seizure-like event classification ("perhaps later")
 
 For in-vitro seizure models: separate interictal-like discharges from
@@ -54,6 +40,10 @@ window's detection.
 
 ## Dropped
 
+- **Command-line runs** (`tracer run --folder … --template …`) — no
+  one in the lab would use it, the data isn't heavy enough to need a
+  cluster, and Batch already runs unattended. It would also mean a
+  second copy of Batch's logic in Python.
 - **Macro recorder** — Batch and Cohort already cover it.
 - **Overlay viewer** (traces from two recordings on one axis) and
   **time-synced crosshair across windows** — not needed.
