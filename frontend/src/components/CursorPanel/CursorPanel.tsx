@@ -318,6 +318,9 @@ export function CursorPanel() {
         if (ev.data?.type === 'excluded-update' && ev.data.excludedSweeps) {
           useAppStore.setState({ excludedSweeps: ev.data.excludedSweeps })
         }
+        if (ev.data?.type === 'notes-update' && ev.data.traceNotes) {
+          useAppStore.setState({ traceNotes: ev.data.traceNotes })
+        }
         // User-created averaged sweeps (virtual tree entries).
         if (ev.data?.type === 'averaged-update' && ev.data.averagedSweeps) {
           useAppStore.setState({ averagedSweeps: ev.data.averagedSweeps })

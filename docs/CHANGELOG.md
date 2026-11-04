@@ -21,13 +21,19 @@ starts, and from Help ▸ What's New. Newest version first.
 
 - **Cohort exports straight to ASTERISM.** One click writes an ASTERISM project with a data table, a graph and the matching test for every metric — for events and other many-values-per-cell measures, the per-cell means, a nested table (SuperPlot, nested test), the cumulative distributions and the pooled events. Ready to open, with nothing to import. [Read more](manual:20. Cohort > Export)
 
+- **Notes on the trace.** Right-click the trace to write a note at that moment or on the whole sweep (*"pulled out of cell"*, *"drug reached bath"*). Notes show as flags on the trace, in the tree and in a Notes list, and they appear next to each cell in Cohort, its Excel exports and the Quality tab. [Read more](manual:4. The Trace Viewer > Notes on the trace)
+
 ### Improved
+
+- **Readable metric names in Cohort.** The window, its graphs and the Excel, Prism and ASTERISM exports show *Amplitude, mean (pA)* instead of `amp_mean`, with units everywhere; Spectral metrics use your region and band names. [Read more](manual:20. Cohort > Export)
 
 - **Resistance remembers how each series was measured** (run mode, sweeps, fit, channel, cursors), and Batch repeats exactly that on the other files. [Read more](manual:10. Resistance — Rs / Rin / Cm > Persistence)
 
 - **Cohort reports amplitudes as positive values** (events, paired responses, bursts), whichever way the trace went — the usual convention. [Read more](manual:20. Cohort > What gets aggregated)
 
 ### Fixed
+
+- **Typing F or ? in a text field no longer toggles Focus Mode or opens the shortcuts** (macOS). The single-key shortcuts now work only outside text fields, as intended.
 
 - **Batch repeats the template exactly, for every analysis.** It used the wrong sweeps (one off, or all instead of the chosen range), ignored excluded sweeps, reused the template cell's RMS threshold and manual edits, could take the LTP post-tetanus series from the wrong group, dropped I-V's peak/steady choice and Field Potential's sweep range, and reported failed runs as done. Batch Resistance results also opened with an error. [Read more](manual:19. Batch > How each recipe is repeated)
 - **Results lost or saved to the wrong place:** Paired results weren't saved; switching series in the Cursor window copied the previous series' measurements; an analysis window left open could save the previous file's results into the next file; turning dual-site off left old propagation numbers in Cohort.

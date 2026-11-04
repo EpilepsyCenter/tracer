@@ -56,6 +56,7 @@ export function TreeNavigator() {
     averagedSweeps, deleteAveragedSweep, selectAveragedSweep,
     renameAveragedSweep, currentAveragedSweep,
   } = useAppStore()
+  const traceNotes = useAppStore((s) => s.traceNotes)
   // Per-series tag map (Metadata module). Subscribed separately so
   // tree rows re-render when the user edits tags in the metadata
   // window — broadcasts arrive via the cross-window meta-update sync.
@@ -173,6 +174,7 @@ export function TreeNavigator() {
               const seriesKey = `${group.index}:${series.index}`
               const excludedList = excludedSweeps[seriesKey] ?? []
               const excludedCount = excludedList.length
+              const notesList = traceNotes[seriesKey] ?? []
               const selectedList = selectedSweeps[seriesKey] ?? []
               const averagedList = averagedSweeps[seriesKey] ?? []
 
@@ -325,6 +327,20 @@ export function TreeNavigator() {
                       </span>
                     )}
 
+                    {notesList.length > 0 && (
+                      <span
+                        title={`${notesList.length} note${notesList.length === 1 ? '' : 's'} on this series`}
+                        style={{
+                          fontSize: 11, fontWeight: 600,
+                          color: 'var(--note)',
+                          padding: '0 5px', borderRadius: 4,
+                          background: 'color-mix(in oklab, var(--note) 16%, transparent)',
+                        }}
+                      >
+                        {notesList.length}✎
+                      </span>
+                    )}
+
                     {TYPE_LABELS[recType] && (
                       <span style={{
                         fontSize: 10, fontWeight: 600, color: TYPE_COLORS[recType],
@@ -360,6 +376,7 @@ export function TreeNavigator() {
                       isSelected && currentSweep === sweep.index && !currentAveragedSweep
                     const isMultiSelected = selectedList.includes(sweep.index)
                     const isExcluded = excludedList.includes(sweep.index)
+                    const sweepNotes = notesList.filter((n) => n.sweep === sweep.index)
                     const hoverKey = `${group.index}-${series.index}-${sweep.index}`
                     const isHovered = hoveredSweep === hoverKey
 
@@ -412,6 +429,15 @@ export function TreeNavigator() {
                           style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: isExcluded ? 'line-through' : 'none' }}>
                           {sweep.label || `Sweep ${sweep.index + 1}`}
                         </span>
+                        {sweepNotes.length > 0 && (
+                          <span
+                            title={sweepNotes.map((n) => n.text).join('\n—\n')}
+                            style={{
+                              flexShrink: 0, fontSize: 11,
+                              color: isSweepSelected ? 'var(--on-accent)' : 'var(--note)',
+                            }}
+                          >✎{sweepNotes.length > 1 ? sweepNotes.length : ''}</span>
+                        )}
                         {(isExcluded || isHovered) && (
                           <span
                             onClick={(e) => {

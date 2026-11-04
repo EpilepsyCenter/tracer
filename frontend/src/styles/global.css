@@ -146,6 +146,7 @@
   --marker-manual:   oklch(0.58 0.18 50);
   --marker-bounds:   oklch(0.54 0.10 245);
   --marker-outline:  #ffffff;
+  --note:            oklch(0.52 0.11 200);   /* notes on the trace */
 
   --shadow-popover: 0 0 0 1px rgba(20, 22, 28, 0.08), 0 8px 24px rgba(20, 22, 28, 0.14);
 
@@ -208,6 +209,7 @@
   --marker-manual:   oklch(0.80 0.15 65);
   --marker-bounds:   oklch(0.74 0.10 245);
   --marker-outline:  #0a0d12;
+  --note:            oklch(0.78 0.11 200);
 
   --shadow-popover: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 10px 30px rgba(0, 0, 0, 0.5);
 
@@ -2022,4 +2024,103 @@ body[data-platform="mac"] .toolbar.toolbar-mac-inset {
 .whats-new-footer {
   display: flex; justify-content: flex-end; gap: 8px;
   padding: 10px 14px; border-top: 1px solid var(--border);
+}
+
+/* ---- Notes on the trace (components/TraceViewer/TraceNotes.tsx) ---- */
+.trace-note-flag {
+  position: absolute;
+  z-index: 12;
+  transform: translateX(-1px);
+  max-width: 180px;
+  padding: 1px 6px;
+  border: none;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--note);
+  color: var(--bg-primary);
+  font: inherit;
+  font-size: var(--font-size-xs);
+  line-height: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  opacity: 0.92;
+}
+.trace-note-flag:hover { opacity: 1; }
+.trace-note-chip {
+  border: none;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  line-height: 1.4;
+  max-width: 260px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--note);
+  background: color-mix(in oklab, var(--note) 16%, transparent);
+  cursor: pointer;
+}
+.trace-note-editor {
+  position: absolute;
+  z-index: 30;
+  width: 280px;
+  padding: 8px;
+  border-radius: var(--radius);
+  background: var(--bg-primary);
+  box-shadow: var(--shadow-popover);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: var(--font-size-xs);
+}
+.trace-note-editor-head { color: var(--text-secondary); font-weight: 600; }
+.trace-note-editor textarea {
+  resize: vertical;
+  min-height: 52px;
+  font: inherit;
+  font-size: var(--font-size-sm);
+  padding: 4px 6px;
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-sm);
+  background: var(--bg-field);
+  color: var(--text-primary);
+}
+.trace-note-editor-actions { display: flex; align-items: center; gap: 6px; }
+.trace-notes-menu {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 4px);
+  left: 0;
+  width: 340px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 4px;
+  border-radius: var(--radius);
+  background: var(--bg-primary);
+  box-shadow: var(--shadow-popover);
+}
+.trace-notes-menu-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  width: 100%;
+  padding: 5px 8px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font: inherit;
+  font-size: var(--font-size-xs);
+  text-align: left;
+  cursor: pointer;
+}
+.trace-notes-menu-row:hover span { color: var(--on-accent) !important; }
+.trace-notes-menu-where { color: var(--text-muted); font-size: var(--font-size-xs); }
+.trace-notes-menu-text {
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }

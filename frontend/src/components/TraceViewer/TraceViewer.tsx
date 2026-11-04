@@ -1,7 +1,9 @@
-import React, { useRef, useEffect, useCallback, useState } from 'react'
+import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react'
 import uPlot from 'uplot'
 import 'uplot/dist/uPlot.min.css'
 import { useAppStore, CursorPositions, STIMULUS_TRACE_INDEX, type BurstRecord } from '../../stores/appStore'
+import { NoteFlags, NoteEditor, SweepNoteChips, NotesMenu, NoteDraft, NoteFlagPos } from './TraceNotes'
+import type { TraceNote } from '../../stores/appStore'
 import { useThemeStore } from '../../stores/themeStore'
 import { ViewportBar, ViewportSlider } from './ViewportBar'
 import { usePlotMenu } from '../common/PlotMenu'
@@ -96,6 +98,8 @@ export function TraceViewer() {
   // counting-only (no kinetics) AP markers, so we can look up the
   // y-value at a peak time without relying on react render cycles.
   const traceDataRef = useRef(useAppStore.getState().traceData)
+  // Timed notes on the sweep on screen (drawn as dashed lines + flags).
+  const sweepNotesRef = useRef<TraceNote[]>([])
   /** Recorded channel index → uPlot series index of the current plot. */
   const channelSeriesRef = useRef<Record<number, number>>({})
   const showCoordinatesRef = useRef(useAppStore.getState().showCoordinates)
@@ -169,6 +173,39 @@ export function TraceViewer() {
   showEventMarkersRef.current = showEventMarkers
   traceDataRef.current = traceData
   showCoordinatesRef.current = showCoordinates
+
+  // ---- Notes on the trace ----
+  const notesGroup = useAppStore((s) => s.currentGroup)
+  const notesSeries = useAppStore((s) => s.currentSeries)
+  const notesAveraged = useAppStore((s) => s.currentAveragedSweep)
+  const seriesNotes = useAppStore((s) => s.traceNotes[`${s.currentGroup}:${s.currentSeries}`])
+  const sweepNotes = useMemo(
+    () => (notesAveraged ? [] : (seriesNotes ?? []).filter((n) => n.sweep === currentSweep && n.time != null)),
+    [seriesNotes, currentSweep, notesAveraged],
+  )
+  sweepNotesRef.current = sweepNotes
+  const [noteFlags, setNoteFlags] = useState<NoteFlagPos[]>([])
+  const [noteFlagTop, setNoteFlagTop] = useState(0)
+  const [noteDraft, setNoteDraft] = useState<NoteDraft | null>(null)
+  const noteLayoutKeyRef = useRef('')
+  const layoutNoteFlags = (pos: NoteFlagPos[], top: number) => {
+    const key = JSON.stringify([pos, top])
+    if (key === noteLayoutKeyRef.current) return
+    noteLayoutKeyRef.current = key
+    setNoteFlags(pos)
+    setNoteFlagTop(top)
+  }
+  // Notes list → go to the note's sweep, scrolling a long sweep to it.
+  const goToNote = async (group: number, series: number, note: TraceNote) => {
+    const st = useAppStore.getState()
+    await st.selectSweep(group, series, note.sweep)
+    const vp = useAppStore.getState().viewport
+    if (vp && note.time != null && (note.time < vp.start || note.time > vp.end)) {
+      const w = vp.end - vp.start
+      const start = Math.max(0, note.time - w / 2)
+      useAppStore.getState().setViewport({ start, end: start + w })
+    }
+  }
 
   const [hoverCursor, setHoverCursor] = useState<string>('')
 
@@ -719,6 +756,30 @@ export function TraceViewer() {
         }
       }
     }
+
+    // --- Notes: a dashed line at each timed note; flags are DOM (below) ---
+    const flagPos: NoteFlagPos[] = []
+    const notes = sweepNotesRef.current
+    if (notes.length > 0) {
+      const xmin = u.scales.x.min ?? -Infinity
+      const xmax = u.scales.x.max ?? Infinity
+      ctx.save()
+      ctx.strokeStyle = cssVar('--note')
+      ctx.lineWidth = 1
+      ctx.setLineDash([4, 3])
+      for (const n of notes) {
+        if (n.time == null || n.time < xmin || n.time > xmax) continue
+        const x = u.valToPos(n.time, 'x', true) / dpr
+        if (!isFinite(x)) continue
+        ctx.beginPath()
+        ctx.moveTo(x, by)
+        ctx.lineTo(x, by + bh)
+        ctx.stroke()
+        flagPos.push({ id: n.id, x })
+      }
+      ctx.restore()
+    }
+    layoutNoteFlags(flagPos, by + 2)
   }
 
   // Index of the stimulus series in the data array (when present), so we
@@ -909,11 +970,46 @@ export function TraceViewer() {
   const baseName = fileNameForExport
     ? fileNameForExport.replace(/\.[^.]+$/, '') + `_g${currentGroup + 1}s${currentSeries + 1}`
     : 'trace'
-  const { onContextMenu: onPlotContextMenu, menu: plotMenu } = usePlotMenu({
+  // Where the last right-click landed (plot-container px + trace time),
+  // for "Add note here".
+  const menuAtRef = useRef<{ x: number; y: number; t: number | null } | null>(null)
+  const { onContextMenu: onPlotMenuOpen, menu: plotMenu } = usePlotMenu({
     getCanvas: () => plotRef.current?.ctx?.canvas ?? null,
     getUplot: () => plotRef.current ?? null,
     defaultName: baseName,
+    getExtraItems: () => {
+      const st = useAppStore.getState()
+      if (!st.traceData || st.currentAveragedSweep) return []
+      const at = menuAtRef.current
+      const base = { group: st.currentGroup, series: st.currentSeries, sweep: st.currentSweep, text: '' }
+      const items: { label: string; onClick?: () => void }[] = []
+      if (at?.t != null) {
+        const t = at.t
+        items.push({ label: 'Add note here…', onClick: () => setNoteDraft({ ...base, time: t, x: at.x, y: at.y }) })
+      }
+      items.push({
+        label: 'Note on this sweep…',
+        onClick: () => setNoteDraft({ ...base, time: null, x: at?.x ?? 200, y: at?.y ?? 40 }),
+      })
+      items.push({ label: '' })
+      return items
+    },
   })
+  const onPlotContextMenu = (e: React.MouseEvent) => {
+    const u = plotRef.current
+    const box = containerRef.current?.getBoundingClientRect()
+    if (u && box) {
+      const dpr = devicePixelRatio || 1
+      const x = e.clientX - box.left
+      const y = e.clientY - box.top
+      const t = u.posToVal(x * dpr - u.bbox.left, 'x', true)
+      const inPlot = x * dpr >= u.bbox.left && x * dpr <= u.bbox.left + u.bbox.width
+      menuAtRef.current = { x, y, t: inPlot && isFinite(t) ? Math.max(0, t) : null }
+    } else {
+      menuAtRef.current = null
+    }
+    onPlotMenuOpen(e)
+  }
 
   // Create / recreate uPlot when data or overlays change
   // ================================================================
@@ -1389,7 +1485,7 @@ export function TraceViewer() {
   // ================================================================
   useEffect(() => {
     drawCursors()
-  }, [cursors, showCursors, cursorVisibility, fieldBursts, currentSweep, zeroOffset, showBurstMarkers, apAnalyses, eventsAnalyses, showEventMarkers])
+  }, [cursors, showCursors, cursorVisibility, fieldBursts, currentSweep, zeroOffset, showBurstMarkers, apAnalyses, eventsAnalyses, showEventMarkers, sweepNotes])
 
   // Hide the coordinate tooltip immediately when the toggle flips off.
   useEffect(() => {
@@ -1996,6 +2092,17 @@ export function TraceViewer() {
         {/* "This sweep is excluded" badge. Click to restore. */}
         <ExcludedSweepBadge />
 
+        {/* Notes on the whole sweep, and the list of every note. */}
+        <SweepNoteChips onOpen={(n, anchor) => {
+          const box = containerRef.current?.getBoundingClientRect()
+          const r = anchor.getBoundingClientRect()
+          setNoteDraft({
+            id: n.id, group: notesGroup, series: notesSeries, sweep: n.sweep, time: n.time, text: n.text,
+            x: box ? r.left - box.left + 130 : 200, y: 8,
+          })
+        }} />
+        <NotesMenu onGo={goToNote} />
+
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
           {/* Coordinate-tooltip toggle — shows x/y readout near the cursor
               when hovering over the trace. */}
@@ -2139,6 +2246,17 @@ export function TraceViewer() {
       >
         {plotMenu}
         {!traceData && <Welcome />}
+        {traceData && (
+          <NoteFlags
+            notes={sweepNotes}
+            positions={noteFlags}
+            top={noteFlagTop}
+            onOpen={(n, x, y) => setNoteDraft({
+              id: n.id, group: notesGroup, series: notesSeries, sweep: n.sweep, time: n.time, text: n.text, x, y,
+            })}
+          />
+        )}
+        {noteDraft && <NoteEditor draft={noteDraft} onClose={() => setNoteDraft(null)} />}
         <canvas
           ref={canvasRef}
           style={{

@@ -106,7 +106,7 @@ def build_project(payload: dict) -> dict:
     from analysis import cohort_stats
     from analysis.cohort_export import _compute_ecdf_grid, _ecdf_at_grid
 
-    def add_distribution(metric: str, tags: list[str], groups: list[list[dict]]) -> None:
+    def add_distribution(metric: str, tags: list[str], groups: list[list[dict]], label: str = '') -> None:
         """Many values per cell: per-cell mean, nested table, cumulative
         distribution, pooled events."""
         # 1. One value per cell (its mean), tested like a scalar. Paired
@@ -115,8 +115,9 @@ def build_project(payload: dict) -> dict:
         if not paired:
             means = [[m for m in col if m is not None] for col in means]
         labels = [c['label'] for c in groups[0]] if groups else []
-        add_column_table(f'{metric} — per-cell mean', f'{metric}__cell_mean', tags, means, labels,
-                         f'{metric} (mean per cell)')
+        lab = label or metric
+        add_column_table(f'{lab} — per-cell mean', f'{metric}__cell_mean', tags, means, labels,
+                         f'{lab}, mean per cell')
 
         # 2. Nested: each cell a sub-column of its own values; SuperPlot.
         #    Paired designs keep the same cell in the same sub-column in
@@ -130,7 +131,7 @@ def build_project(payload: dict) -> dict:
                 y.append(list(g[j]['values']) if j < len(g) else [])
             subs.append([g[j]['label'] if j < len(g) else '' for j in range(width)])
         tid = _id()
-        name = f'{metric} — by cell'
+        name = f'{lab} — by cell'
         tables.append({
             'id': tid, 'name': name, 'type': 'nested', 'y_format': 'replicates', 'replicates': width,
             'x_format': 'none', 'has_row_titles': False, 'titles': tags, 'sub_titles': subs,
@@ -143,7 +144,7 @@ def build_project(payload: dict) -> dict:
         dot = dict(_DOT, spread='swarm' if n_points <= SWARM_MAX_POINTS else 'aligned')
         graphs.append({'id': _id(), 'name': name, 'auto_name': False, 'table': tid,
                        'spec': {'title': name, 'default_style': dot, 'nested_layout': 'superplot',
-                                'nested': {'restart': paired}, 'y': {'title': metric}}})
+                                'nested': {'restart': paired}, 'y': {'title': lab}}})
         # Nested t test / one-way ANOVA (cells as the random factor):
         # independent groups only, each with 2+ cells.
         if not paired and len(kept) >= 2 and all(len(g) >= 2 for g in kept):
@@ -164,7 +165,7 @@ def build_project(payload: dict) -> dict:
                 y.append([float(v) for v in _ecdf_at_grid(g[j]['values'], grid)] if j < len(g) else [])
             subs.append([g[j]['label'] if j < len(g) else '' for j in range(width)])
         tid = _id()
-        name = f'{metric} — cumulative distribution'
+        name = f'{lab} — cumulative distribution'
         tables.append({
             'id': tid, 'name': name, 'type': 'xy', 'y_format': 'replicates', 'replicates': width,
             'x_format': 'numbers', 'has_row_titles': False, 'titles': tags, 'sub_titles': subs,
@@ -172,27 +173,27 @@ def build_project(payload: dict) -> dict:
         })
         graphs.append({'id': _id(), 'name': name, 'auto_name': False, 'table': tid,
                        'spec': {'title': name, 'default_style': dict(_XY_LINE), 'palette': True,
-                                'x': {'title': metric}, 'y': {'title': 'Cumulative fraction'}}})
+                                'x': {'title': lab}, 'y': {'title': 'Cumulative fraction'}}})
 
         # 4. Pooled events per group (Cohort's pooled K-S test for two
         #    independent groups).
         cols = [[v for c in g for v in c['values']] for g in groups]
         tid = _id()
-        name = f'{metric} — pooled events'
+        name = f'{lab} — pooled events'
         tables.append({
             'id': tid, 'name': name, 'type': 'column', 'y_format': 'single', 'replicates': 1,
             'x_format': 'none', 'has_row_titles': False, 'titles': tags, 'sub_titles': [[''] for _ in tags],
             'y': cols, 'x': [], 'x_err': [], 'row_titles': [], 'excluded': [],
         })
         graphs.append({'id': _id(), 'name': name, 'auto_name': False, 'table': tid,
-                       'spec': {'title': name, 'default_style': dict(_BOX), 'y': {'title': metric}}})
+                       'spec': {'title': name, 'default_style': dict(_BOX), 'y': {'title': lab}}})
         if design_kind == 'unpaired_2' and len(tags) == 2:
             analyses.append({'id': _id(), 'name': '', 'auto_name': True, 'type': 'ttest', 'table': tid,
                              'columns': [0, 1],
                              'params': {'design': 'unpaired', 'distribution': 'nonparametric', 'test': 'ks'}})
 
     def add_timeseries(metric: str, tags: list[str], groups: list[list[dict]],
-                       bin_width_s: Optional[float]) -> None:
+                       bin_width_s: Optional[float], label: str = '') -> None:
         """A value per time bin per cell: XY, one replicate per cell; the
         graph shows mean ± SEM per bin; two-way ANOVA (time × group).
         Paired designs keep each cell in the same sub-column under every
@@ -209,7 +210,8 @@ def build_project(payload: dict) -> dict:
         x = ([i * bin_width_s / 60.0 for i in range(n_bins)] if bin_width_s
              else [float(i) for i in range(n_bins)])
         tid = _id()
-        name = f'{metric} — time course'
+        lab = label or metric
+        name = f'{lab} — time course'
         tables.append({
             'id': tid, 'name': name, 'type': 'xy', 'y_format': 'replicates', 'replicates': width,
             'x_format': 'numbers', 'has_row_titles': False, 'titles': tags, 'sub_titles': subs,
@@ -218,7 +220,7 @@ def build_project(payload: dict) -> dict:
         graphs.append({'id': _id(), 'name': name, 'auto_name': False, 'table': tid,
                        'spec': {'title': name, 'default_style': dict(_XY_POINTS_LINE), 'palette': True,
                                 'x': {'title': 'Time (min)' if bin_width_s else 'Bin'},
-                                'y': {'title': metric}}})
+                                'y': {'title': lab}}})
         # Two-way ANOVA, time × group. Each cell is a subject measured at
         # every time point (rows); between groups the cells differ by
         # column, within recordings the same cell is in every column. A
@@ -284,10 +286,11 @@ def build_project(payload: dict) -> dict:
                    for c in g] for g in dist.get('cells') or []]
         if not tags or len(groups) != len(tags) or not any(c['values'] for g in groups for c in g):
             continue
+        label = str(dist.get('label') or metric)
         if dist.get('kind') == 'timeseries':
-            add_timeseries(metric, tags, groups, _num(dist.get('bin_width_s')))
+            add_timeseries(metric, tags, groups, _num(dist.get('bin_width_s')), label)
         else:
-            add_distribution(metric, tags, groups)
+            add_distribution(metric, tags, groups, label)
 
     # Info sheet: provenance, so the numbers can be traced back.
     design = payload.get('design') or {}

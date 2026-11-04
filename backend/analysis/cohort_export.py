@@ -293,12 +293,36 @@ def _ecdf_at_grid(values: list[float], x_grid: np.ndarray) -> np.ndarray:
 # Excel writers.
 # ---------------------------------------------------------------------
 
-def _write_summary_sheet(ws, stats: dict, selected_metrics: list[str]) -> None:
+def _metric_labels(aggregate: dict, cells: list[dict]) -> dict:
+    """Readable name + unit per metric key (metric_labels.py): the
+    aggregate carries them; older payloads get them computed here."""
+    from analysis.metric_labels import labels_for_cells
+    given = aggregate.get('metric_labels') or {}
+    return {**labels_for_cells(cells), **given}
+
+
+def _lt(labels: Optional[dict], key: str) -> str:
+    """"Amplitude, mean (pA)" for a key; the key itself when unknown."""
+    from analysis.metric_labels import with_unit
+    e = (labels or {}).get(key)
+    return with_unit(e) if e else key
+
+
+def _write_metrics_sheet(ws, labels: dict, keys: list[str]) -> None:
+    """Readable name ↔ metric key ↔ unit, for scripts that use the keys."""
+    ws.append(['metric', 'metric_key', 'unit'])
+    for k in keys:
+        e = labels.get(k) or {}
+        ws.append([e.get('label', k), k, e.get('unit', '')])
+
+
+def _write_summary_sheet(ws, stats: dict, selected_metrics: list[str],
+                         labels: Optional[dict] = None) -> None:
     headers = [
         'metric', 'n_per_group', 'test',
         'statistic', 'df', 'p', 'stars',
         'effect_size', 'effect_size_label',
-        'normality', 'posthoc',
+        'normality', 'posthoc', 'metric_key',
     ]
     ws.append(headers)
     for metric in selected_metrics:
@@ -346,7 +370,7 @@ def _write_summary_sheet(ws, stats: dict, selected_metrics: list[str]) -> None:
         else:
             df_label = ''
         ws.append([
-            metric,
+            _lt(labels, metric),
             n_per_group,
             r.get('test') or (r.get('error') and f"error: {r['error']}") or '',
             _excel_value(r.get('statistic')),
@@ -357,12 +381,14 @@ def _write_summary_sheet(ws, stats: dict, selected_metrics: list[str]) -> None:
             r.get('effect_size_label') or '',
             normality_label,
             posthoc_label,
+            metric,
         ])
 
 
 def _write_cells_wide_sheet(ws, paired: list[tuple[dict, str]],
                              scalar_metrics: list[str],
-                             meta_fields: list[str]) -> None:
+                             meta_fields: list[str],
+                             labels: Optional[dict] = None) -> None:
     # ``series_key`` is exported in the storage form (0-indexed
     # ``g:s`` or ``g:s:subtype``) — that's the join key the rest of
     # TRACER uses internally and matches the .tracer sidecar.
@@ -372,8 +398,8 @@ def _write_cells_wide_sheet(ws, paired: list[tuple[dict, str]],
     headers = (
         ['group', 'file_name', 'file_path', 'cell_id', 'animal_id',
          'series_key (0-indexed)', 'series_specific_tags', 'group_tags',
-         'qc_status', 'qc_reason']
-        + list(scalar_metrics)
+         'qc_status', 'qc_reason', 'notes']
+        + [_lt(labels, m) for m in scalar_metrics]
         + [f'meta.{k}' for k in meta_fields]
     )
     ws.append(headers)
@@ -392,6 +418,7 @@ def _write_cells_wide_sheet(ws, paired: list[tuple[dict, str]],
                 ', '.join(c.get('group_tags') or []),
                 c.get('qc_status') or '',
                 c.get('qc_reason') or '',
+                (c.get('notes') or '').replace('\n', '; '),
             ]
             + [_excel_value(scalars.get(m)) for m in scalar_metrics]
             + [_excel_value(meta.get(k)) for k in meta_fields]
@@ -399,8 +426,9 @@ def _write_cells_wide_sheet(ws, paired: list[tuple[dict, str]],
 
 
 def _write_cells_long_sheet(ws, paired: list[tuple[dict, str]],
-                             scalar_metrics: list[str]) -> None:
-    headers = ['cell_id', 'animal_id', 'group', 'file_name', 'metric', 'value']
+                             scalar_metrics: list[str],
+                             labels: Optional[dict] = None) -> None:
+    headers = ['cell_id', 'animal_id', 'group', 'file_name', 'metric', 'value', 'metric_key']
     ws.append(headers)
     for c, group in paired:
         scalars = c.get('scalars') or {}
@@ -413,8 +441,9 @@ def _write_cells_long_sheet(ws, paired: list[tuple[dict, str]],
                 c.get('animal_id', '') or '',
                 group,
                 c.get('file_name', ''),
-                m,
+                _lt(labels, m),
                 _excel_value(v),
+                m,
             ])
 
 
@@ -697,15 +726,19 @@ def write_excel_summary(aggregate: dict,
     ws.title = _safe_sheet_name('Cohort', used_names)
     _write_cohort_meta_sheet(ws, aggregate, design, len(paired))
 
+    labels = _metric_labels(aggregate, cells)
     if stats:
         ws = wb.create_sheet(_safe_sheet_name('Stats summary', used_names))
-        _write_summary_sheet(ws, stats, sel)
+        _write_summary_sheet(ws, stats, sel, labels)
 
     ws = wb.create_sheet(_safe_sheet_name('Cells (wide)', used_names))
-    _write_cells_wide_sheet(ws, paired, scalar_metrics, meta_fields)
+    _write_cells_wide_sheet(ws, paired, scalar_metrics, meta_fields, labels)
 
     ws = wb.create_sheet(_safe_sheet_name('Cells (long)', used_names))
-    _write_cells_long_sheet(ws, paired, scalar_metrics)
+    _write_cells_long_sheet(ws, paired, scalar_metrics, labels)
+
+    ws = wb.create_sheet(_safe_sheet_name('Metrics', used_names))
+    _write_metrics_sheet(ws, labels, list(scalar_metrics) + list(distribution_metrics))
 
     qc = aggregate.get('qc') or {}
     if qc.get('active'):
@@ -762,10 +795,12 @@ def write_excel_cells(aggregate: dict,
     scalar_metrics = _scalar_metric_names(cells)
     meta_fields = _meta_fields(cells)
 
+    labels = _metric_labels(aggregate, cells)
     wb = Workbook()
     ws = wb.active
     ws.title = 'Cells'
-    _write_cells_wide_sheet(ws, paired, scalar_metrics, meta_fields)
+    _write_cells_wide_sheet(ws, paired, scalar_metrics, meta_fields, labels)
+    _write_metrics_sheet(wb.create_sheet('Metrics'), labels, list(scalar_metrics))
 
     buf = io.BytesIO()
     wb.save(buf)
@@ -933,11 +968,20 @@ def write_prism_pzfx(aggregate: dict,
 
     tables: dict[str, pd.DataFrame] = {}
     x_col_map: dict[str, str] = {}  # XY-only
+    labels = _metric_labels(aggregate, cells)
+
+    def tname(m: str, what: str = '') -> str:
+        """Prism table name: readable, unique."""
+        base = _lt(labels, m) + (f' — {what}' if what else '')
+        name, k = base, 2
+        while name in tables:
+            name, k = f'{base} ({k})', k + 1
+        return name
 
     for m in scalar_metrics:
         df = _df_columns_per_group(paired, ordered_groups, m, is_distribution=False)
         if not df.empty:
-            tables[m] = df
+            tables[tname(m)] = df
 
     for m in distribution_metrics:
         if _is_timeseries_metric(cells, m):
@@ -946,21 +990,25 @@ def write_prism_pzfx(aggregate: dict,
             # rides along as an additional non-X numeric column —
             # users can swap to it as Prism's X axis after import.
             df_g = _df_timeseries_groups(paired, ordered_groups, m)
-            tables[f'{m}_groups'] = df_g
-            x_col_map[f'{m}_groups'] = 'bin_index'
+            n_g = tname(m, 'group means')
+            tables[n_g] = df_g
+            x_col_map[n_g] = 'bin_index'
             df_c = _df_timeseries_cells(paired, ordered_groups, m)
-            tables[f'{m}_cells'] = df_c
-            x_col_map[f'{m}_cells'] = 'bin_index'
+            n_c = tname(m, 'per cell')
+            tables[n_c] = df_c
+            x_col_map[n_c] = 'bin_index'
         else:
             df_events = _df_columns_per_group(paired, ordered_groups, m, is_distribution=True)
             if not df_events.empty:
-                tables[f'{m}_events'] = df_events
+                tables[tname(m, 'pooled events')] = df_events
             df_eg, x_grid = _df_ecdf_groups(paired, ordered_groups, m)
-            tables[f'{m}_ecdf_groups'] = df_eg
-            x_col_map[f'{m}_ecdf_groups'] = 'value'
+            n_eg = tname(m, 'cumulative, group means')
+            tables[n_eg] = df_eg
+            x_col_map[n_eg] = 'value'
             df_ec = _df_ecdf_cells(paired, x_grid, m)
-            tables[f'{m}_ecdf_cells'] = df_ec
-            x_col_map[f'{m}_ecdf_cells'] = 'value'
+            n_ec = tname(m, 'cumulative, per cell')
+            tables[n_ec] = df_ec
+            x_col_map[n_ec] = 'value'
 
     # ``pzfx.write_pzfx`` accepts a per-table x_col list aligned
     # with iteration order. None means "no X column for this table".

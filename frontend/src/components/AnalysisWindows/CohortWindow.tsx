@@ -63,6 +63,8 @@ interface Cell {
   /** Quality control verdict of this row, when the folder has QC rules. */
   qc_status?: string | null
   qc_reason?: string | null
+  /** Notes on this series' trace, one per line ("sweep 87, 12.30 s: …"). */
+  notes?: string
   scalars: Record<string, number | null>
   distributions: Record<string, number[]>
   meta: Record<string, unknown>
@@ -87,6 +89,21 @@ interface AggregateQc {
   counts: Record<string, number>
   excluded: QcExcludedRow[]
 }
+/** Readable metric names from the aggregate (backend/analysis/
+ *  metric_labels.py): ``amp_mean`` → "Amplitude, mean (pA)". The keys stay
+ *  internal (sessions, stats, exports' data); people see labels. */
+type MetricLabels = Record<string, { label: string; unit: string }>
+const MetricLabelContext = React.createContext<MetricLabels>({})
+function labelText(labels: MetricLabels, key: string): string {
+  const e = labels[key]
+  if (!e) return key
+  return e.unit ? `${e.label} (${e.unit})` : e.label
+}
+function useMetricLabel(): (key: string) => string {
+  const labels = React.useContext(MetricLabelContext)
+  return useCallback((key: string) => labelText(labels, key), [labels])
+}
+
 const QC_INCLUDE_LABEL: Record<QcInclude, string> = {
   all: 'All cells', pass: 'Passing QC', pass_warn: 'Passing QC or warn',
 }
@@ -98,6 +115,7 @@ const QC_INCLUDE_PHRASE: Record<QcInclude, string> = {
 interface AggregateResponse {
   analysis_type: string
   folder: string
+  metric_labels?: MetricLabels
   qc?: AggregateQc
   cells: Cell[]
   errors: AggregateError[]
@@ -1163,14 +1181,15 @@ export function CohortWindow({ backendUrl }: { backendUrl: string }) {
     const tables = scalars.map((m) => {
       const groups = extractValuesForMetric(m)
       return groups && {
-        metric: m, label: m, tags: groups.map((g) => g.tag),
+        metric: m, label: labelText(aggResult.metric_labels ?? {}, m), tags: groups.map((g) => g.tag),
         values: groups.map((g) => g.values), row_titles: rowTitles,
       }
     }).filter(Boolean)
     const distributions = others.map((m) => {
       const groups = extractGraphGroupsForMetric(m.name, m.kind, { keepEmpty: true })
       return groups && {
-        metric: m.name, kind: m.kind, tags: groups.map((g) => g.tag),
+        metric: m.name, label: labelText(aggResult.metric_labels ?? {}, m.name),
+        kind: m.kind, tags: groups.map((g) => g.tag),
         cells: groups.map((g) => g.values_per_cell.map((v, i) => ({
           label: g.labels_per_cell[i], values: v,
         }))),
@@ -1532,11 +1551,12 @@ export function CohortWindow({ backendUrl }: { backendUrl: string }) {
         // later with axis / label / colour overrides. The modal
         // reconstructs the original chart from this seed and only
         // injects the user's tweaks on top.
+        const lab = labelText(aggResult?.metric_labels ?? {}, metric)
         const requestBody = {
           kind, groups,
-          title: metric,
-          ylabel: kind === 'scalar' ? metric : (kind === 'timeseries' ? '× baseline' : ''),
-          xlabel: kind === 'distribution' ? metric : '',
+          title: lab,
+          ylabel: kind === 'scalar' ? lab : (kind === 'timeseries' ? (metric.includes('normalized') ? '× baseline' : lab) : ''),
+          xlabel: kind === 'distribution' ? lab : '',
           theme: themeName === 'light' ? 'light' : 'dark',
           reference_y: kind === 'timeseries' && metric.includes('normalized') ? 1.0 : null,
           output_format: 'svg',
@@ -1617,6 +1637,7 @@ export function CohortWindow({ backendUrl }: { backendUrl: string }) {
       selectedMetrics, runStats])
 
   return (
+    <MetricLabelContext.Provider value={aggResult?.metric_labels ?? {}}>
     <div style={{
       display: 'flex', flexDirection: 'column', height: '100%',
       fontSize: 'var(--font-size-base)',
@@ -1863,6 +1884,7 @@ export function CohortWindow({ backendUrl }: { backendUrl: string }) {
       )}
       </>)}
     </div>
+    </MetricLabelContext.Provider>
   )
 }
 
@@ -2586,6 +2608,7 @@ function MetricMultiSelect({
   defaults: string[]
   disabled: boolean
 }) {
+  const metricLabel = useMetricLabel()
   const selectedSet = new Set(selected)
   const ordered = (() => {
     const front = defaults.filter((m) => options.includes(m))
@@ -2652,7 +2675,7 @@ function MetricMultiSelect({
               <span style={{
                 flex: 1,
                 color: isDefault ? 'var(--text-primary)' : 'var(--text-muted)',
-              }}>{m}</span>
+              }} title={m}>{metricLabel(m)}</span>
               {isDefault && (
                 <span style={{
                   color: 'var(--text-muted)', fontSize: 'var(--font-size-xs)',
@@ -2765,6 +2788,7 @@ function StatsResult({ metric, kind, result, graph, backendUrl, themeName,
   graphPrefs: CohortGraphPrefs
   onUpdateGraphPrefs: (updater: (prev: CohortGraphPrefs) => CohortGraphPrefs) => void
 }) {
+  const metricLabel = useMetricLabel()
   // Empty placeholder for metrics with neither a stats result nor a
   // graph (shouldn't happen in practice — the panel filters them).
   if (!result && !graph) return null
@@ -2869,7 +2893,7 @@ function StatsResult({ metric, kind, result, graph, backendUrl, themeName,
           fontWeight: 600,
           fontSize: 'var(--font-size-sm)',
           color: 'var(--text-primary)',
-        }}>{metric}</span>
+        }} title={metric}>{metricLabel(metric)}</span>
         {kind && (
           <span style={{
             fontSize: 'var(--font-size-xs)',
@@ -3262,6 +3286,7 @@ function GraphModal({
   graphPrefs: CohortGraphPrefs
   onUpdatePrefs: (updater: (prev: CohortGraphPrefs) => CohortGraphPrefs) => void
 }) {
+  const metricLabel = useMetricLabel()
   const groupTags: string[] = useMemo(
     () => (request?.groups || []).map((g: any) => String(g?.tag ?? '')).filter((s: string) => s),
     [request],
@@ -3519,7 +3544,7 @@ function GraphModal({
           <span style={{
             fontWeight: 600,
             fontSize: 'var(--font-size-sm)',
-          }}>{metric}</span>
+          }} title={metric}>{metricLabel(metric)}</span>
           {kind && (
             <span style={{
               fontSize: 'var(--font-size-xs)',
@@ -4101,6 +4126,7 @@ function StatsTable({ metrics, results, metricKindOf }: {
   results: Record<string, any>
   metricKindOf: (name: string) => 'scalar' | 'distribution' | 'timeseries' | null
 }) {
+  const metricLabel = useMetricLabel()
   // Only metrics with a stats result land in the table — distribution
   // and timeseries metrics are graph-only (no Pingouin path).
   // Errors still appear so the user can see which metrics failed and
@@ -4168,11 +4194,11 @@ function StatsTable({ metrics, results, metricKindOf }: {
     const esc = quote
       ? (s: string) => `"${String(s).replace(/"/g, '""')}"`
       : (s: string) => String(s)
-    const header = ['metric', 'n', 'test', 'statistic', 'p', 'stars', 'effect_size', 'normality', 'posthoc']
+    const header = ['metric', 'n', 'test', 'statistic', 'p', 'stars', 'effect_size', 'normality', 'posthoc', 'metric_key']
     const lines = [header.map(esc).join(delim)]
     for (const r of sortedRows) {
       lines.push([
-        esc(r.metric),
+        esc(metricLabel(r.metric)),
         esc(r.n),
         esc(r.test),
         esc(r.stat),
@@ -4181,10 +4207,11 @@ function StatsTable({ metrics, results, metricKindOf }: {
         esc(r.effectStr),
         esc(r.normality),
         esc(r.posthoc),
+        esc(r.metric),
       ].join(delim))
     }
     return lines.join('\n')
-  }, [sortedRows])
+  }, [sortedRows, metricLabel])
 
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle')
   const copyTSV = useCallback(async () => {
@@ -4279,7 +4306,7 @@ function StatsTable({ metrics, results, metricKindOf }: {
                   borderBottom: '1px solid var(--border-subtle)',
                   background: r.isError ? 'color-mix(in oklab, var(--error) 6%, transparent)' : 'transparent',
                 }}>
-                  <StTd><span style={{ fontWeight: 600 }}>{r.metric}</span></StTd>
+                  <StTd><span style={{ fontWeight: 600 }} title={r.metric}>{metricLabel(r.metric)}</span></StTd>
                   <StTd num>{r.n}</StTd>
                   <StTd title={r.test}>{r.test}</StTd>
                   <StTd num>{r.stat}</StTd>
@@ -4660,7 +4687,9 @@ function Pill({ label, color, tooltip }: { label: string; color: string; tooltip
 // the table dense without losing precision; nulls render as em-dash.
 // ---------------------------------------------------------------------
 function CellTable({ cells, columns }: { cells: Cell[]; columns: string[] }) {
+  const metricLabel = useMetricLabel()
   const hasQc = cells.some((c) => c.qc_status != null)
+  const hasNotes = cells.some((c) => !!c.notes)
   if (cells.length === 0) {
     return (
       <div style={{
@@ -4696,7 +4725,8 @@ function CellTable({ cells, columns }: { cells: Cell[]; columns: string[] }) {
             <Th>File tags</Th>
             <Th>Series tags</Th>
             {hasQc && <Th>QC</Th>}
-            {columns.map((c) => <Th key={c}>{c}</Th>)}
+            {hasNotes && <Th>Notes</Th>}
+            {columns.map((c) => <Th key={c}><span title={c}>{metricLabel(c)}</span></Th>)}
           </tr>
         </thead>
         <tbody>
@@ -4726,6 +4756,15 @@ function CellTable({ cells, columns }: { cells: Cell[]; columns: string[] }) {
                   {cell.qc_status === 'warn' && cell.qc_reason ? (
                     <span style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-xs)' }}> — {cell.qc_reason}</span>
                   ) : null}
+                </Td>
+              )}
+              {hasNotes && (
+                <Td title={cell.notes || undefined}>
+                  <span style={{
+                    display: 'inline-block', maxWidth: 260, overflow: 'hidden',
+                    textOverflow: 'ellipsis', whiteSpace: 'nowrap', verticalAlign: 'bottom',
+                    color: 'var(--note)',
+                  }}>{cell.notes ? cell.notes.split('\n').join(' · ') : ''}</span>
                 </Td>
               )}
               {columns.map((col) => {

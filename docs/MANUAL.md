@@ -666,6 +666,29 @@ Markers respect the **Zero-offset** state of the trace, so they
 follow the signal when you toggle the offset on or off rather than
 floating off in the original sample frame.
 
+### Notes on the trace
+
+Write a note where something happened: *"pulled out of cell"*,
+*"drug reached bath"*, *"look at this sweep again"*. Notes are free
+text, separate from detection markers, and saved in the recording's
+`.tracer` sidecar.
+
+- **Add one:** right-click the trace and choose **Add note here…** for
+  a note at that time, or **Note on this sweep…** for the whole sweep.
+  Type, then press Enter to save (Shift+Enter starts a new line, Esc
+  cancels).
+- **On the trace:** a note at a time is a dashed line with a flag along
+  the top of the plot; hover the flag to read it all. A note on the
+  whole sweep shows as a chip in the bar above the plot. Click either
+  to edit or delete it (an empty note is deleted).
+- **Find them again:** **Notes (n)** in the bar above the plot lists
+  every note in the recording; click one to go to its sweep (a long
+  sweep scrolls to the note). In the tree, series with notes show a
+  count (*2✎*) and sweeps with notes a ✎.
+- **In Cohort:** each cell's row shows the notes on its series, the
+  Excel exports add a *notes* column, and the Quality tab lists every
+  note in the recording under its file name, next to the QC verdict.
+
 ### The stimulus trace
 
 When the file contains a reconstructable stimulus — for HEKA
@@ -4269,6 +4292,15 @@ axes, group colours, and labels.
 ### Export
 
 Four buttons sit above the cell table.
+
+Metrics appear under readable names with their units, in the window
+and in every export: *Amplitude, mean (pA)* rather than `amp_mean`,
+*Inter-event interval, median (ms)* rather than `iei_median_ms`.
+Spectral metrics take your region and band names (*Baseline · theta
+power (mV²)*). Hover over a name in the window to see its internal
+name. The Excel workbooks add a **Metrics** sheet that pairs each name
+with that internal name and its unit; use it if a script of yours
+reads the old column names.
 
 - **Excel summary** — a multi-sheet `.xlsx` workbook with a
   Cohort summary sheet, a Stats summary sheet, a wide *cells ×

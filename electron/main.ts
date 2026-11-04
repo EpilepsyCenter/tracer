@@ -122,6 +122,28 @@ let menuHasRecording = false
  *  from the renderer, which owns the list. */
 let menuRecentFiles: string[] = []
 
+// Single-key shortcuts (F, F1, F2, ?) are shown in the menu but handled by
+// the page, which ignores keys typed into text fields. On macOS a key the
+// page doesn't swallow still reaches the menu, so typing "f" in a note
+// would also run View ▸ Focus Mode. These items act only on a real click:
+// skip them when Electron says a key triggered them, or when one of their
+// keys was just pressed in any window (before-input-event sees every key).
+const SINGLE_KEY_SHORTCUTS = new Set(['f', 'F1', 'F2', '?'])
+let lastShortcutKeyAt = 0
+app.on('web-contents-created', (_e, wc) => {
+  wc.on('before-input-event', (_ev, input) => {
+    if (input.type !== 'keyDown' || input.meta || input.control || input.alt) return
+    const k = input.key.length === 1 ? input.key.toLowerCase() : input.key
+    if (SINGLE_KEY_SHORTCUTS.has(k) || (k === '/' && input.shift)) lastShortcutKeyAt = Date.now()
+  })
+})
+function pageKeyShortcut(action: string): (_i: unknown, _w: unknown, ev: { triggeredByAccelerator?: boolean }) => void {
+  return (_i, _w, ev) => {
+    if (ev?.triggeredByAccelerator || Date.now() - lastShortcutKeyAt < 500) return
+    sendMenuAction(action)
+  }
+}
+
 function sendMenuAction(action: string, arg?: string, focusMain = true) {
   if (!mainWindow || mainWindow.isDestroyed()) return
   if (focusMain) {
@@ -202,9 +224,9 @@ function buildAppMenu() {
     submenu: [
       // Single-key shortcuts are handled by the renderer; show them
       // here without registering, so typing in fields still works.
-      { label: 'Recording Navigator', accelerator: 'F1', registerAccelerator: false, click: () => sendMenuAction('toggle-left') },
-      { label: 'Inspector', accelerator: 'F2', registerAccelerator: false, click: () => sendMenuAction('toggle-right') },
-      { label: 'Focus Mode', accelerator: 'F', registerAccelerator: false, click: () => sendMenuAction('toggle-focus') },
+      { label: 'Recording Navigator', accelerator: 'F1', registerAccelerator: false, click: pageKeyShortcut('toggle-left') },
+      { label: 'Inspector', accelerator: 'F2', registerAccelerator: false, click: pageKeyShortcut('toggle-right') },
+      { label: 'Focus Mode', accelerator: 'F', registerAccelerator: false, click: pageKeyShortcut('toggle-focus') },
       { type: 'separator' },
       { label: 'Command Palette…', accelerator: 'CmdOrCtrl+K', registerAccelerator: false, click: () => sendMenuAction('command-palette') },
       { type: 'separator' },
@@ -253,7 +275,7 @@ function buildAppMenu() {
     submenu: [
       { label: 'TRACER Manual', click: () => openAnalysisWindow('manual') },
       { label: 'What\'s New…', click: () => sendMenuAction('whats-new') },
-      { label: 'Keyboard Shortcuts', accelerator: '?', registerAccelerator: false, click: () => sendMenuAction('open-help') },
+      { label: 'Keyboard Shortcuts', accelerator: '?', registerAccelerator: false, click: pageKeyShortcut('open-help') },
       { type: 'separator' },
       { label: 'Report a Bug…', click: () => sendMenuAction('open-bug-report') },
       { label: 'TRACER on GitHub', click: () => { void shell.openExternal('https://github.com/EpilepsyCenter/tracer') } },

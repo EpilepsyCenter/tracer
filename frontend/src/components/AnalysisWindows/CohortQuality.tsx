@@ -65,6 +65,8 @@ interface QcCell {
   auto_verdict: Level | null
   override: QcOverride | null
   reasons: string[]
+  /** Notes on the trace anywhere in the recording ("G1 S3, sweep 87, 12.30 s: …"). */
+  notes?: string[]
 }
 interface QcResult {
   cells: QcCell[]
@@ -540,6 +542,12 @@ export function CohortQuality({ backendUrl, folder }: { backendUrl: string; fold
                           <td rowSpan={n} title={cell.file_path} style={{ verticalAlign: 'top' }}>
                             {cell.file_name}
                             {cell.cell_id ? <div style={{ color: 'var(--text-muted)' }}>{cell.cell_id}</div> : null}
+                            {(cell.notes ?? []).map((t, k) => (
+                              <div key={k} title={t} style={{
+                                color: 'var(--note)', fontSize: 'var(--font-size-xs)',
+                                maxWidth: 220, whiteSpace: 'normal',
+                              }}>✎ {t}</div>
+                            ))}
                           </td>
                           <td rowSpan={n} style={{ verticalAlign: 'top' }}>
                             <VerdictBadge level={cell.verdict} overridden={!!cell.override} />

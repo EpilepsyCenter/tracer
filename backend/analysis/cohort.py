@@ -873,6 +873,7 @@ def extract_resistance(slice_data: list, sidecar: dict) -> CellExtraction:
     }
 
     meta: dict[str, Any] = {
+        'metric_labels': {'baseline': {'label': 'Holding current', 'unit': 'pA'}},
         'n_measurements': len(rows),
         # Time-series-style traces (per-sweep Rs trajectories) so the
         # cohort UI can render a line-vs-sweep plot, the standard QC
@@ -1554,6 +1555,25 @@ def extract_paired(slice_data: dict, sidecar: dict) -> CellExtraction:
 # Spectral extractor (band power per named region)
 # ---------------------------------------------------------------------
 
+def notes_text(sidecar: dict, series_key: str) -> str:
+    """The series' notes on the trace as one line each:
+    ``sweep 87, 12.30 s: pulled out of cell``. Empty when there are none."""
+    notes = ((sidecar or {}).get('notes') or {}).get(str(series_key)) or []
+    lines = []
+    for n in notes:
+        if not isinstance(n, dict) or not str(n.get('text') or '').strip():
+            continue
+        try:
+            where = f"sweep {int(n.get('sweep', 0)) + 1}"
+        except (TypeError, ValueError):
+            where = 'sweep ?'
+        t = n.get('time')
+        if isinstance(t, (int, float)) and math.isfinite(t):
+            where += f', {t:.2f} s'
+        lines.append(f"{where}: {' '.join(str(n['text']).split())}")
+    return '\n'.join(lines)
+
+
 def _spectral_slug(text: Any) -> str:
     """Metric-name-safe slug: lowercase, runs of other characters → '_'."""
     import re
@@ -1583,6 +1603,11 @@ def extract_spectral(slice_data: dict, sidecar: dict) -> CellExtraction:
     scalars: dict[str, Optional[float]] = {}
     regions_seen: list[str] = []
     errors: dict[str, str] = {}
+    labels: dict[str, dict] = {}     # readable names (metric_labels.py)
+
+    def put(key: str, value, label: str, unit: str = '') -> None:
+        scalars[key] = value
+        labels[key] = {'label': label, 'unit': unit}
     for r in results:
         region = _spectral_slug(r.get('label'))
         # Two regions with the same name would overwrite each other —
@@ -1596,20 +1621,25 @@ def extract_spectral(slice_data: dict, sidecar: dict) -> CellExtraction:
             errors[region] = str(r.get('error'))
             continue
         u = _spectral_unit_tag(r.get('units', ''))
-        scalars[f'{region}_rms_{u}'] = _spectral_num(r.get('rms'))
-        scalars[f'{region}_total_power_{u}2'] = _spectral_num(r.get('totalPower'))
-        scalars[f'{region}_dominant_hz'] = _spectral_num(r.get('dominantFreqHz'))
+        ru = str(r.get('units') or '')
+        rl = str(r.get('label') or region)
+        put(f'{region}_rms_{u}', _spectral_num(r.get('rms')), f'{rl} · RMS', ru)
+        put(f'{region}_total_power_{u}2', _spectral_num(r.get('totalPower')), f'{rl} · total power',
+            f'{ru}²' if ru else '')
+        put(f'{region}_dominant_hz', _spectral_num(r.get('dominantFreqHz')), f'{rl} · dominant frequency', 'Hz')
         for band, b in (r.get('bands') or {}).items():
             bs = _spectral_slug(band)
-            scalars[f'{region}_{bs}_power_{u}2'] = _spectral_num((b or {}).get('power'))
-            scalars[f'{region}_{bs}_rel'] = _spectral_num((b or {}).get('relative'))
-            scalars[f'{region}_{bs}_peak_hz'] = _spectral_num((b or {}).get('peakFreqHz'))
+            put(f'{region}_{bs}_power_{u}2', _spectral_num((b or {}).get('power')), f'{rl} · {band} power',
+                f'{ru}²' if ru else '')
+            put(f'{region}_{bs}_rel', _spectral_num((b or {}).get('relative')), f'{rl} · {band} power (fraction of total)')
+            put(f'{region}_{bs}_peak_hz', _spectral_num((b or {}).get('peakFreqHz')), f'{rl} · {band} peak frequency', 'Hz')
         ln = r.get('lineNoise') or {}
-        scalars[f'{region}_line_noise_rms_{u}'] = _spectral_num(ln.get('rms'))
+        put(f'{region}_line_noise_rms_{u}', _spectral_num(ln.get('rms')), f'{rl} · line-noise RMS', ru)
         harmonics = ln.get('harmonics') or []
         if harmonics:
-            scalars[f'{region}_line_noise_1st_db'] = _spectral_num(harmonics[0].get('prominenceDb'))
-        scalars[f'{region}_duration_s'] = _spectral_num(r.get('durationS'))
+            put(f'{region}_line_noise_1st_db', _spectral_num(harmonics[0].get('prominenceDb')),
+                f'{rl} · line noise above its surroundings', 'dB')
+        put(f'{region}_duration_s', _spectral_num(r.get('durationS')), f'{rl} · duration analysed', 's')
         # Two-channel coupling (Spectral window "Second channel"): lags are
         # partner − reference, positive = reference leads.
         cp = r.get('coupling') or {}
@@ -1619,18 +1649,21 @@ def extract_spectral(slice_data: dict, sidecar: dict) -> CellExtraction:
             errors[f'{region} (coupling)'] = str(cp.get('error'))
         if cp and not cp.get('error'):
             x = cp.get('xcorr') or {}
-            scalars[f'{region}_xcorr_peak_r'] = _spectral_num(x.get('peakR'))
-            scalars[f'{region}_xcorr_lag_ms'] = _spectral_num(x.get('peakLagMs'))
-            scalars[f'{region}_xcorr_zero_lag_r'] = _spectral_num(x.get('zeroLagR'))
+            put(f'{region}_xcorr_peak_r', _spectral_num(x.get('peakR')), f'{rl} · cross-correlation peak r')
+            put(f'{region}_xcorr_lag_ms', _spectral_num(x.get('peakLagMs')), f'{rl} · cross-correlation lag', 'ms')
+            put(f'{region}_xcorr_zero_lag_r', _spectral_num(x.get('zeroLagR')), f'{rl} · correlation at zero lag')
             for band, b in (cp.get('bands') or {}).items():
                 bs = _spectral_slug(band)
-                scalars[f'{region}_{bs}_coherence'] = _spectral_num((b or {}).get('coherence'))
-                scalars[f'{region}_{bs}_imag_coherence'] = _spectral_num((b or {}).get('imagCoherence'))
-                scalars[f'{region}_{bs}_wpli'] = _spectral_num((b or {}).get('wpli'))
-                scalars[f'{region}_{bs}_phase_delay_ms'] = _spectral_num((b or {}).get('phaseDelayMs'))
+                put(f'{region}_{bs}_coherence', _spectral_num((b or {}).get('coherence')), f'{rl} · {band} coherence')
+                put(f'{region}_{bs}_imag_coherence', _spectral_num((b or {}).get('imagCoherence')),
+                    f'{rl} · {band} imaginary coherence')
+                put(f'{region}_{bs}_wpli', _spectral_num((b or {}).get('wpli')), f'{rl} · {band} wPLI')
+                put(f'{region}_{bs}_phase_delay_ms', _spectral_num((b or {}).get('phaseDelayMs')),
+                    f'{rl} · {band} phase delay', 'ms')
 
     params = slice_data.get('params') or {}
     meta: dict[str, Any] = {
+        'metric_labels': labels,
         'regions': regions_seen,
         'channel': slice_data.get('channel'),
         'method': params.get('method'),
@@ -2101,15 +2134,20 @@ def aggregate_folder(
                 'series_tags': dict(series_tags),
                 'series_key': series_key,
                 'series_specific_tags': specific_tags,
+                # Notes the user wrote on this series' trace.
+                'notes': notes_text(sidecar, series_key),
                 'scalars': extraction.scalars,
                 'distributions': extraction.distributions,
                 'meta': extraction.meta,
             })
 
+    from analysis.metric_labels import labels_for_cells
     return {
         'analysis_type': analysis_type,
         'folder': str(folder_path),
         'cells': cells,
+        # Readable name + unit for every metric key (metric_labels.py).
+        'metric_labels': labels_for_cells(cells),
         'errors': errors,
         'skipped_no_meta': skipped_no_meta,
         'skipped_no_analysis': skipped_no_analysis,

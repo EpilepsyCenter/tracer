@@ -296,7 +296,7 @@ export function fileCloseResetSlices(): Record<string, unknown> {
     spectralAnalyses: {},
     apAnalyses: {}, eventsAnalyses: {},
     pairedAnalyses: {}, pairedForm: defaultPairedForm(),
-    excludedSweeps: {}, selectedSweeps: {}, averagedSweeps: {},
+    excludedSweeps: {}, selectedSweeps: {}, averagedSweeps: {}, traceNotes: {},
     currentAveragedSweep: null,
     resistanceResult: null, resistanceResults: {},
     recordingMeta: null, recordingMetaReady: false,
@@ -378,6 +378,18 @@ export function getMetaStatus(meta: SidecarMeta | null | undefined): MetaStatus 
   return anySeriesTagged ? 'green' : 'yellow'
 }
 
+/** A note the user wrote on the trace (right-click ▸ Add note). Lives in
+ *  the sidecar per series (``traceNotes["group:series"]``). ``time`` is
+ *  seconds from the sweep's start; ``null`` = a note on the whole sweep. */
+export interface TraceNote {
+  id: string
+  sweep: number
+  time: number | null
+  text: string
+  created: string
+  edited?: string
+}
+
 type SidecarPayload = {
   format: 'tracer-sidecar'
   version: number
@@ -421,6 +433,8 @@ type SidecarPayload = {
   train_params?: TrainParamsBundle
   excluded_sweeps?: Record<string, number[]>
   averaged_sweeps?: Record<string, AveragedSweep[]>
+  /** Notes on the trace, per series (see ``TraceNote``). */
+  notes?: Record<string, TraceNote[]>
   cursors?: CursorPositions
   /** Per-channel numeric scaling overrides applied at file-open and
    *  on every edit. Empty / absent → recording uses file-reported
@@ -477,6 +491,7 @@ function _sidecarPayloadFromState(state: AppState): SidecarPayload {
     train_params: state.trainParams,
     excluded_sweeps: state.excludedSweeps,
     averaged_sweeps: state.averagedSweeps,
+    notes: Object.keys(state.traceNotes).length > 0 ? state.traceNotes : undefined,
     cursors: state.cursors,
     scale_overrides: Object.keys(state.scaleOverrides).length > 0
       ? state.scaleOverrides : undefined,
@@ -556,6 +571,7 @@ export function stateSnapshotMessage(state: AppState) {
     eventsTemplates: state.eventsTemplates,
     excludedSweeps: state.excludedSweeps,
     averagedSweeps: state.averagedSweeps,
+    traceNotes: state.traceNotes,
     resistanceResults: state.resistanceResults,
     recordingMeta: state.recordingMeta,
     scaleOverrides: state.scaleOverrides,
@@ -672,6 +688,14 @@ export function defaultEventsParams(): EventsParams {
     sweepMode: 'current',
     skipRegions: [],
   }
+}
+
+function _broadcastTraceNotes(traceNotes: Record<string, TraceNote[]>) {
+  try {
+    const ch = new BroadcastChannel('tracer-sync')
+    ch.postMessage({ type: 'notes-update', traceNotes })
+    ch.close()
+  } catch { /* ignore */ }
 }
 
 function _broadcastExcludedSweeps(excludedSweeps: Record<string, number[]>) {
@@ -2068,6 +2092,12 @@ interface AppState {
    *  filtered out of any batch processing. */
   excludedSweeps: Record<string, number[]>
 
+  /** Notes on the trace, keyed "group:series" (see ``TraceNote``). */
+  traceNotes: Record<string, TraceNote[]>
+  addTraceNote: (group: number, series: number, sweep: number, time: number | null, text: string) => void
+  updateTraceNote: (group: number, series: number, id: string, text: string) => void
+  removeTraceNote: (group: number, series: number, id: string) => void
+
   /** Per-series session-only multi-selection in the tree. Drives the
    *  "Average → Selected" mode and any future multi-sweep actions.
    *  NOT persisted. Cleared when switching series. */
@@ -2724,6 +2754,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     return defaults
   })(),
   excludedSweeps: {},
+  traceNotes: {},
   selectedSweeps: {},
   averagedSweeps: {},
   currentAveragedSweep: null,
@@ -3339,6 +3370,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       excludedSweeps: {},
       selectedSweeps: {},
       averagedSweeps: {},
+      traceNotes: {},
       currentAveragedSweep: null,
       showOverlay: false,
       showAverage: false,
@@ -3487,6 +3519,10 @@ export const useAppStore = create<AppState>((set, get) => ({
             patch.excludedSweeps = sidecar.excluded_sweeps
             post({ type: 'excluded-update', excludedSweeps: sidecar.excluded_sweeps })
             sidecarPopulated.excluded = true
+          }
+          if (sidecar.notes && typeof sidecar.notes === 'object' && Object.keys(sidecar.notes).length > 0) {
+            patch.traceNotes = sidecar.notes
+            post({ type: 'notes-update', traceNotes: sidecar.notes })
           }
           if (sidecar.averaged_sweeps && Object.keys(sidecar.averaged_sweeps).length > 0) {
             patch.averagedSweeps = sidecar.averaged_sweeps
@@ -3976,6 +4012,44 @@ export const useAppStore = create<AppState>((set, get) => ({
       return { excludedSweeps: nextMap }
     })
     _broadcastExcludedSweeps(get().excludedSweeps)
+  },
+
+  addTraceNote: (group, series, sweep, time, text) => {
+    const key = `${group}:${series}`
+    const note: TraceNote = {
+      id: `n${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+      sweep, time, text: text.trim(), created: new Date().toISOString(),
+    }
+    if (!note.text) return
+    set((s) => {
+      const list = [...(s.traceNotes[key] ?? []), note]
+        .sort((a, b) => a.sweep - b.sweep || (a.time ?? -1) - (b.time ?? -1))
+      return { traceNotes: { ...s.traceNotes, [key]: list } }
+    })
+    _broadcastTraceNotes(get().traceNotes)
+  },
+
+  updateTraceNote: (group, series, id, text) => {
+    const key = `${group}:${series}`
+    if (!text.trim()) { get().removeTraceNote(group, series, id); return }
+    set((s) => {
+      const list = s.traceNotes[key]
+      if (!list) return s
+      return { traceNotes: { ...s.traceNotes, [key]: list.map((n) => n.id === id
+        ? { ...n, text: text.trim(), edited: new Date().toISOString() } : n) } }
+    })
+    _broadcastTraceNotes(get().traceNotes)
+  },
+
+  removeTraceNote: (group, series, id) => {
+    const key = `${group}:${series}`
+    set((s) => {
+      const list = (s.traceNotes[key] ?? []).filter((n) => n.id !== id)
+      const next = { ...s.traceNotes, [key]: list }
+      if (list.length === 0) delete next[key]
+      return { traceNotes: next }
+    })
+    _broadcastTraceNotes(get().traceNotes)
   },
 
   isSweepExcluded: (group, series, sweep) => {
@@ -6478,6 +6552,7 @@ let _sidecarRefs = {
   trainParams: null as any,
   excluded: null as any,
   averaged: null as any,
+  notes: null as any,
   cursors: null as any,
   resistanceForm: null as any,
   recordingMeta: null as any,
@@ -6507,6 +6582,7 @@ useAppStore.subscribe((state) => {
     trainParams: state.trainParams,
     excluded: state.excludedSweeps,
     averaged: state.averagedSweeps,
+    notes: state.traceNotes,
     cursors: state.cursors,
     resistanceForm: state.resistanceForm,
     recordingMeta: state.recordingMeta,

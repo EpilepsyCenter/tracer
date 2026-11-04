@@ -377,9 +377,20 @@ def evaluate_cell(sidecar: dict, config: dict, file_name: str = '') -> dict:
     if cell_override and cell_override.get('verdict') in _RANK and matched:
         reasons.insert(0, f"Cell set to {cell_verdict} by hand — {cell_override.get('reason', '')}")
 
+    from analysis.cohort import notes_text
+    notes: list[str] = []
+    for key in sorted(((sidecar or {}).get('notes') or {}).keys(),
+                      key=lambda k: [int(x) if x.isdigit() else x for x in str(k).split(':')]):
+        try:
+            g, s = (int(x) for x in str(key).split(':')[:2])
+            where = f'G{g + 1} S{s + 1}, '
+        except ValueError:
+            where = ''
+        notes += [where + line for line in notes_text(sidecar, key).split('\n') if line]
     return {
         'file_name': file_name,
         'matched': matched,
+        'notes': notes,
         'conditions': cond_out,
         'verdict': cell_verdict,
         'auto_verdict': auto_cell,
