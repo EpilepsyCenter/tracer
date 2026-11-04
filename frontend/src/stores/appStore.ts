@@ -78,6 +78,21 @@ export interface ChannelInfo {
  *  ``visibleTraces`` list. Recorded channel indices are >= 0. */
 export const STIMULUS_TRACE_INDEX = -1
 
+/** Whether the main viewer stacks this series' channels in lanes: the
+ *  user's choice for the series, otherwise on when 3 or more recorded
+ *  channels are visible. Never with fewer than 2 lanes. */
+export function stackedFor(
+  st: { visibleTraces: Record<string, number[]>; stackChannels: Record<string, boolean> },
+  group: number, series: number,
+): boolean {
+  const key = `${group}:${series}`
+  const vis = st.visibleTraces[key] ?? []
+  const recorded = vis.filter((i) => i >= 0).length
+  const laneCount = recorded + (vis.includes(STIMULUS_TRACE_INDEX) ? 1 : 0)
+  if (laneCount < 2) return false
+  return st.stackChannels[key] ?? recorded >= 3
+}
+
 export interface SeriesInfo {
   index: number
   label: string
@@ -289,7 +304,7 @@ export function fileCloseResetSlices(): Record<string, unknown> {
     overlayEntries: [],
     averageTrace: null,
     additionalTraces: {},
-    visibleTraces: {},
+    visibleTraces: {}, stackChannels: {},
     fieldBursts: {}, burstFormParams: {}, burstDualForm: {},
     trainParams: defaultTrainParamsBundle(),
     ivCurves: {}, fpspCurves: {}, cursorAnalyses: {},
@@ -1886,6 +1901,10 @@ interface AppState {
   // Per-series set of visible trace indices. The sentinel STIMULUS_TRACE_INDEX
   // (-1) represents the reconstructed stimulus. Keyed by `${group}:${series}`.
   visibleTraces: Record<string, number[]>
+  /** Per-series "Stack channels" choice (``${group}:${series}``); absent
+   *  = automatic (see ``stackedFor``). */
+  stackChannels: Record<string, boolean>
+  setStackChannels: (group: number, series: number, on: boolean) => void
 
   // Per-sweep stimulus segments (fetched on sweep change for overlay)
   sweepStimulusSegments: StimulusSegment[] | null
@@ -1943,6 +1962,8 @@ interface AppState {
      *  pA primary). Pans/zooms independently of ``y``. */
     y_alt?: { min: number; max: number }
     stim?: { min: number; max: number }
+    /** Stacked-lane ranges, keyed by lane id (``c<channel>``, ``stim``). */
+    lanes?: Record<string, { min: number; max: number }>
   }>
 
   // Measurements
@@ -2162,12 +2183,14 @@ interface AppState {
     y?: { min: number; max: number }
     y_alt?: { min: number; max: number }
     stim?: { min: number; max: number }
+    lanes?: Record<string, { min: number; max: number }>
   }) => void
   getSeriesAxisRange: (group: number, series: number) => {
     x?: { min: number; max: number }
     y?: { min: number; max: number }
     y_alt?: { min: number; max: number }
     stim?: { min: number; max: number }
+    lanes?: Record<string, { min: number; max: number }>
   } | null
   // Trace visibility controls — per-series.
   getVisibleTraces: (group: number, series: number) => number[]
@@ -2668,6 +2691,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   showAverage: false,
   additionalTraces: {},
   visibleTraces: {},
+  stackChannels: {},
 
   cursors: {
     baselineStart: 0,
@@ -3196,6 +3220,10 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
+  setStackChannels: (group, series, on) => {
+    set((s) => ({ stackChannels: { ...s.stackChannels, [`${group}:${series}`]: on } }))
+  },
+
   toggleTraceVisible: (group, series, index) => {
     const current = get().getVisibleTraces(group, series)
     const next = current.includes(index)
@@ -3355,6 +3383,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       averageTrace: null,
       additionalTraces: {},
       visibleTraces: {},
+      stackChannels: {},
       fieldBursts: {},
       spectralAnalyses: {},
       burstFormParams: {},

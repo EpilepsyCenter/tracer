@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { useAppStore, STIMULUS_TRACE_INDEX, ChannelInfo } from '../../stores/appStore'
+import { channelColorVar } from '../../utils/channelColors'
 
 /** Row for one selectable channel in the dropdown. */
 interface Row {
@@ -14,11 +15,7 @@ interface Row {
 // Palette-style colour assignment — primary series colour for channel 0,
 // secondary colours for channels 1+. Stimulus uses its own CSS variable.
 function colorForChannel(idx: number): string {
-  // Reuse the trace/overlay palette roughly. These vars are already defined
-  // in the CSS theme for TraceViewer.
-  const vars = ['--trace-color-1', '--trace-color-2', '--trace-color-3', '--trace-color-4', '--trace-color-5']
-  const name = vars[idx % vars.length]
-  return `var(${name})`
+  return `var(${channelColorVar(idx)})`
 }
 
 export function TracesDropdown() {

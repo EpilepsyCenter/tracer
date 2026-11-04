@@ -131,6 +131,11 @@
   --trace-color-3: oklch(0.55 0.17 50);
   --trace-color-4: oklch(0.50 0.20 25);
   --trace-color-5: oklch(0.45 0.18 290);
+  /* Channels 6–9 (not user-adjustable) */
+  --trace-color-6: oklch(0.52 0.17 345);
+  --trace-color-7: oklch(0.50 0.12 105);
+  --trace-color-8: oklch(0.50 0.09 185);
+  --trace-color-9: oklch(0.45 0.07 55);
   --trace-average:  oklch(0.52 0.22 25);
   --stimulus-color: oklch(0.50 0.20 25);
 
@@ -195,6 +200,10 @@
   --trace-color-3: oklch(0.78 0.15 65);
   --trace-color-4: oklch(0.72 0.18 25);
   --trace-color-5: oklch(0.70 0.16 290);
+  --trace-color-6: oklch(0.74 0.15 345);
+  --trace-color-7: oklch(0.80 0.12 105);
+  --trace-color-8: oklch(0.78 0.09 185);
+  --trace-color-9: oklch(0.72 0.06 55);
   --trace-average:  oklch(0.74 0.20 25);
   --stimulus-color: oklch(0.72 0.18 25);
 
