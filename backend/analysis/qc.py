@@ -44,6 +44,12 @@ _RANK = {'pass': 0, 'warn': 1, 'fail': 2}
 # their absolute size (|ΔRs| etc.).
 METRICS: dict[str, dict[str, str]] = {
     'rs_mohm':           {'label': 'Rs', 'unit': 'MΩ', 'source': 'resistance', 'kind': 'value'},
+    # Within one condition: (max − min) / mean of its Rs measurements,
+    # e.g. a test pulse in every sweep of a stimulation protocol. Only
+    # for series with 2+ measurements; an averaged run has no drift.
+    # ``of``: it is an Rs check, so the Rs plot colours lines by it too.
+    'rs_drift_pct':      {'label': 'Rs drift', 'unit': '%', 'source': 'resistance', 'kind': 'value',
+                          'of': 'rs_mohm'},
     'rin_mohm':          {'label': 'Rin', 'unit': 'MΩ', 'source': 'resistance', 'kind': 'value'},
     'cm_pf':             {'label': 'Cm', 'unit': 'pF', 'source': 'resistance', 'kind': 'value'},
     'holding_pa':        {'label': 'Holding', 'unit': 'pA', 'source': 'resistance', 'kind': 'value'},
@@ -76,6 +82,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
         {'metric': 'rs_mohm', 'enabled': True, 'required': True,
          'warn': None, 'fail': {'op': '>', 'value': 25}},
         {'metric': 'rs_change_pct', 'enabled': True, 'required': True,
+         'warn': None, 'fail': {'op': '>', 'value': 20}},
+        {'metric': 'rs_drift_pct', 'enabled': True, 'required': False,
          'warn': None, 'fail': {'op': '>', 'value': 20}},
         {'metric': 'holding_pa', 'enabled': True, 'required': False,
          'warn': None, 'fail': {'op': '<', 'value': -200}},
@@ -112,6 +120,16 @@ def _num(v: Any) -> Optional[float]:
 def _mean(xs) -> Optional[float]:
     vals = [x for x in (_num(v) for v in xs) if x is not None]
     return sum(vals) / len(vals) if vals else None
+
+
+def _drift_pct(xs) -> Optional[float]:
+    """(max − min) / |mean| × 100 — Cohort's ``rs_drift_pct``. None with
+    fewer than two values."""
+    vals = [x for x in (_num(v) for v in xs) if x is not None]
+    if len(vals) < 2:
+        return None
+    m = sum(vals) / len(vals)
+    return None if abs(m) < 1e-12 else (max(vals) - min(vals)) / abs(m) * 100.0
 
 
 def _worst(levels) -> Optional[str]:
@@ -175,6 +193,7 @@ def series_measurements(sidecar: dict) -> dict[str, dict[str, Any]]:
         rec['rin_mohm'] = _mean(r.get('rin') for r in rows if isinstance(r, dict))
         rec['cm_pf'] = _mean(r.get('cm') for r in rows if isinstance(r, dict))
         rec['holding_pa'] = _mean(r.get('baseline') for r in rows if isinstance(r, dict))
+        rec['rs_drift_pct'] = _drift_pct(r.get('rs') for r in rows if isinstance(r, dict))
         rec['n_resistance'] = len(rows)
 
     for key, entry in (analyses.get('cursor_analyses') or {}).items():
@@ -210,6 +229,9 @@ def _condition_values(tagged_keys: list[str], measured: dict[str, dict]) -> dict
     vals: dict[str, Any] = {}
     for metric in ('rs_mohm', 'rin_mohm', 'cm_pf', 'holding_pa', 'vm_mv'):
         vals[metric] = _mean(measured.get(k, {}).get(metric) for k in tagged_keys)
+    # Drift: the worst of the condition's series.
+    drifts = [d for d in (_num(measured.get(k, {}).get('rs_drift_pct')) for k in tagged_keys) if d is not None]
+    vals['rs_drift_pct'] = max(drifts) if drifts else None
     vals['has_resistance'] = any('n_resistance' in measured.get(k, {}) for k in tagged_keys)
     vals['has_cursor'] = any('n_cursor' in measured.get(k, {}) for k in tagged_keys)
     return vals
@@ -251,7 +273,7 @@ def evaluate_cell(sidecar: dict, config: dict, file_name: str = '') -> dict:
             'applies_to': [t for t in (c.get('applies_to') or []) if _norm_tag(t)] or ctags,
             'series': keys,
             'recorded': bool(keys),
-            'values': {k: values.get(k) for k in ('rs_mohm', 'rin_mohm', 'cm_pf', 'holding_pa', 'vm_mv')},
+            'values': {k: values.get(k) for k in ('rs_mohm', 'rs_drift_pct', 'rin_mohm', 'cm_pf', 'holding_pa', 'vm_mv')},
             'has_resistance': bool(values.get('has_resistance')),
             'has_cursor': bool(values.get('has_cursor')),
             'changes': {},
@@ -290,6 +312,8 @@ def evaluate_cell(sidecar: dict, config: dict, file_name: str = '') -> dict:
             else:
                 value = c['changes'].get(rule['metric'])
             check = {'metric': rule['metric'], 'value': value, 'level': None, 'text': ''}
+            if value is None and rule['metric'] == 'rs_drift_pct' and c['has_resistance']:
+                continue   # one averaged result: no drift to judge, not "missing"
             if value is None:
                 # Missing only matters when the cell has this kind of
                 # measurement somewhere (or the rule is required);

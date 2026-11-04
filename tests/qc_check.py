@@ -197,6 +197,20 @@ check('case-insensitive tags', cell['matched'])
 check('warn level', cond(cell, 'Drug 1')['verdict'] == 'fail'  # +47 % change fails
       and any(ch['metric'] == 'rs_mohm' and ch['level'] == 'warn' for ch in cond(cell, 'Drug 1')['checks']))
 
+# 13b. Rs drift within a condition (test pulse in every sweep).
+drifting = [{'rs': 12.0 + i, 'rin': 300.0, 'cm': 20.0, 'baseline': -50.0, 'source': f'sweep {i + 1}'} for i in range(5)]
+sc = sidecar({'0:1': ['baseline'], '0:2': ['drug1']},
+             resistance={'0:1': rs_rows(13.0), '0:2': drifting})        # 12 → 16 MΩ: 4 / 14 = 28.6 %
+cell = qc.evaluate_cell(sc, config(BASE_DRUG), 'drift.dat')
+d = cond(cell, 'Drug 1')
+check('drift: value', abs(d['values']['rs_drift_pct'] - 400 / 14) < 1e-6, d['values'])
+check('drift: fails > 20 %', any(ch['metric'] == 'rs_drift_pct' and ch['level'] == 'fail' for ch in d['checks']), d['checks'])
+check('drift: mean Rs change itself passes', abs(d['changes']['rs_change_pct'] - 100 * (14 - 13) / 13) < 1e-6)
+sc = sidecar({'0:1': ['baseline'], '0:2': ['drug1']},
+             resistance={'0:1': rs_rows(15.0, n=1), '0:2': rs_rows(15.5, n=1)})   # averaged runs
+cell = qc.evaluate_cell(sc, config(BASE_DRUG), 'avg.dat')
+check('drift: one averaged result is not missing', cell['verdict'] == 'pass', cell['reasons'])
+
 # 14. Inclusion switch.
 check('include all', qc.included('fail', 'all'))
 check('include pass', not qc.included('warn', 'pass') and qc.included('pass', 'pass'))

@@ -74,10 +74,10 @@ interface QcResult {
 }
 
 /** Table / rules order, and decimals shown per measure. */
-const METRIC_ORDER = ['rs_mohm', 'rs_change_pct', 'rin_mohm', 'cm_pf',
+const METRIC_ORDER = ['rs_mohm', 'rs_change_pct', 'rs_drift_pct', 'rin_mohm', 'cm_pf',
   'holding_pa', 'holding_change_pa', 'vm_mv', 'vm_change_mv']
 const DECIMALS: Record<string, number> = {
-  rs_mohm: 1, rs_change_pct: 0, rin_mohm: 0, cm_pf: 1,
+  rs_mohm: 1, rs_change_pct: 0, rs_drift_pct: 0, rin_mohm: 0, cm_pf: 1,
   holding_pa: 0, holding_change_pa: 0, vm_mv: 1, vm_change_mv: 1,
 }
 
