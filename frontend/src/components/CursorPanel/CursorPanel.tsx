@@ -1,5 +1,5 @@
 import React, { useMemo, useEffect, useRef, useState, useCallback } from 'react'
-import { useAppStore, CursorPositions, fileCloseResetSlices, FilterState, RecordingInfo } from '../../stores/appStore'
+import { useAppStore, CursorPositions, fileCloseResetSlices, FilterState, RecordingInfo, stateSnapshotMessage } from '../../stores/appStore'
 import { NumInput } from '../common/NumInput'
 
 // ---- Stable, module-level sub-components ----
@@ -233,40 +233,7 @@ export function CursorPanel() {
           useAppStore.setState(fileCloseResetSlices() as any)
         }
         if (ev.data?.type === 'state-request' || ev.data?.type === 'cursor-request') {
-          const state = useAppStore.getState()
-          ch.postMessage({
-            type: 'state-update',
-            cursors: state.cursors,
-            sweep: state.currentSweep,
-            group: state.currentGroup,
-            series: state.currentSeries,
-            trace: state.currentTrace,
-            fieldBursts: state.fieldBursts,
-            spectralAnalyses: state.spectralAnalyses,
-            burstFormParams: state.burstFormParams,
-            burstDualForm: state.burstDualForm,
-            trainParams: state.trainParams,
-            ivCurves: state.ivCurves,
-            fpspCurves: state.fpspCurves,
-            cursorAnalyses: state.cursorAnalyses,
-            apAnalyses: state.apAnalyses,
-            eventsAnalyses: state.eventsAnalyses,
-            pairedAnalyses: state.pairedAnalyses,
-            pairedForm: state.pairedForm,
-            eventsTemplates: state.eventsTemplates,
-            excludedSweeps: state.excludedSweeps,
-            averagedSweeps: state.averagedSweeps,
-            resistanceResults: state.resistanceResults,
-            recordingMeta: state.recordingMeta,
-            scaleOverrides: state.scaleOverrides,
-            recording: state.recording ? {
-              filePath: state.recording.filePath,
-              fileName: state.recording.fileName,
-              format: state.recording.format,
-              groupCount: state.recording.groupCount,
-              groups: state.recording.groups,
-            } : null,
-          })
+          ch.postMessage(stateSnapshotMessage(useAppStore.getState()))
         }
         // Bursts pushed from an analysis window → adopt them here so the
         // main TraceViewer's burst-marker overlay has data to draw.

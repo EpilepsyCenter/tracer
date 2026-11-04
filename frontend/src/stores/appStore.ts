@@ -529,6 +529,45 @@ function _broadcastEvents(eventsAnalyses: Record<string, EventsData>) {
   } catch { /* ignore */ }
 }
 
+/** The ``state-update`` message: the recording's complete per-file
+ *  state for analysis windows (sent on a window's ``state-request`` and
+ *  after a file opens). */
+export function stateSnapshotMessage(state: AppState) {
+  return {
+    type: 'state-update',
+    cursors: state.cursors,
+    sweep: state.currentSweep,
+    group: state.currentGroup,
+    series: state.currentSeries,
+    trace: state.currentTrace,
+    fieldBursts: state.fieldBursts,
+    spectralAnalyses: state.spectralAnalyses,
+    burstFormParams: state.burstFormParams,
+    burstDualForm: state.burstDualForm,
+    trainParams: state.trainParams,
+    ivCurves: state.ivCurves,
+    fpspCurves: state.fpspCurves,
+    cursorAnalyses: state.cursorAnalyses,
+    apAnalyses: state.apAnalyses,
+    eventsAnalyses: state.eventsAnalyses,
+    pairedAnalyses: state.pairedAnalyses,
+    pairedForm: state.pairedForm,
+    eventsTemplates: state.eventsTemplates,
+    excludedSweeps: state.excludedSweeps,
+    averagedSweeps: state.averagedSweeps,
+    resistanceResults: state.resistanceResults,
+    recordingMeta: state.recordingMeta,
+    scaleOverrides: state.scaleOverrides,
+    recording: state.recording ? {
+      filePath: state.recording.filePath,
+      fileName: state.recording.fileName,
+      format: state.recording.format,
+      groupCount: state.recording.groupCount,
+      groups: state.recording.groups,
+    } : null,
+  }
+}
+
 function _broadcastPaired(
   pairedAnalyses: Record<string, PairedData>,
   pairedForm: PairedFormState,
@@ -3522,6 +3561,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       // diagnostics still tell the user which slices were filled.
       void sidecarPopulated
       await get().selectSweep(0, 0, 0, 0)
+      // Tell every open analysis window the new file's complete state,
+      // so none keeps the previous file's results for a slice this
+      // file doesn't have (and later saves them into this file).
+      try {
+        const ch = new BroadcastChannel('tracer-sync')
+        ch.postMessage(stateSnapshotMessage(get()))
+        ch.close()
+      } catch { /* ignore */ }
     } catch (err: any) {
       set({ error: err.message, loading: false })
     }
@@ -4224,9 +4271,10 @@ export const useAppStore = create<AppState>((set, get) => ({
           bursts: merged,
           selectedIdx: null,
           diag: diagFromResponse(m),
-          // Dual-site data belongs to the other channel; keep it.
-          ...(prev?.partner ? { partner: prev.partner } : {}),
-          ...(prev?.propagation ? { propagation: prev.propagation } : {}),
+          // Dual-site data belongs to the other channel: keep it while
+          // dual-site is on; once it's off, the old results go.
+          ...(prev?.partner && get().burstDualForm[key]?.enabled ? { partner: prev.partner } : {}),
+          ...(prev?.propagation && get().burstDualForm[key]?.enabled ? { propagation: prev.propagation } : {}),
         }
         return { fieldBursts: { ...s.fieldBursts, [key]: next }, loading: false }
       })
@@ -4391,9 +4439,12 @@ export const useAppStore = create<AppState>((set, get) => ({
           ...s.fieldBursts,
           [key]: {
             ...next,
-            // Dual-site data belongs to the other channel; keep it.
-            ...(s.fieldBursts[key]?.partner ? { partner: s.fieldBursts[key].partner } : {}),
-            ...(s.fieldBursts[key]?.propagation ? { propagation: s.fieldBursts[key].propagation } : {}),
+            // Dual-site data belongs to the other channel: keep it while
+            // dual-site is on; once it's off, the old results go.
+            ...(s.fieldBursts[key]?.partner && s.burstDualForm[key]?.enabled
+              ? { partner: s.fieldBursts[key].partner } : {}),
+            ...(s.fieldBursts[key]?.propagation && s.burstDualForm[key]?.enabled
+              ? { propagation: s.fieldBursts[key].propagation } : {}),
           },
         },
         loading: false,
@@ -6371,6 +6422,8 @@ let _sidecarRefs = {
   fpsp: null as any,
   cursorAnalyses: null as any,
   resistanceResults: null as any,
+  paired: null as any,
+  pairedForm: null as any,
   burstFormParams: null as any,
   burstDualForm: null as any,
   trainParams: null as any,
@@ -6398,6 +6451,8 @@ useAppStore.subscribe((state) => {
     fpsp: state.fpspCurves,
     cursorAnalyses: state.cursorAnalyses,
     resistanceResults: state.resistanceResults,
+    paired: state.pairedAnalyses,
+    pairedForm: state.pairedForm,
     burstFormParams: state.burstFormParams,
     burstDualForm: state.burstDualForm,
     trainParams: state.trainParams,

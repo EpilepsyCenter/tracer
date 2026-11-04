@@ -676,7 +676,8 @@ def extract_iv(slice_data: dict, sidecar: dict) -> CellExtraction:
 # Bursts extractor (field bursts, ISI bursts, threshold bursts)
 # ---------------------------------------------------------------------
 
-def _add_propagation(slice_data: dict, scalars: dict, distributions: dict, meta: dict) -> None:
+def _add_propagation(slice_data: dict, scalars: dict, distributions: dict, meta: dict,
+                     sidecar: Optional[dict] = None) -> None:
     """Dual-site burst propagation metrics (Burst window with a second
     channel). Lags are partner − reference, so positive = the reference
     channel (e.g. CA3) leads. Names are channel-neutral (``prop_*``); the
@@ -685,6 +686,12 @@ def _add_propagation(slice_data: dict, scalars: dict, distributions: dict, meta:
     res = block.get('result') or {}
     s = res.get('summary') or {}
     if not slice_data.get('partner') or not s:
+        return
+    # Dual-site switched off for this series: its old propagation
+    # results don't describe the current detection.
+    dual = ((sidecar or {}).get('burst_dual_form') or {}).get(
+        f"{slice_data.get('group')}:{slice_data.get('series')}")
+    if isinstance(dual, dict) and dual.get('enabled') is False:
         return
     lag = s.get('lagMs') or {}
     for m in ('xcorr', 'onset', 'peak'):
@@ -813,7 +820,7 @@ def extract_bursts(slice_data: dict, sidecar: dict) -> CellExtraction:
             'min_inter_train_ms': cfg['min_inter_train_ms'],
         }
 
-    _add_propagation(slice_data, scalars, distributions, meta)
+    _add_propagation(slice_data, scalars, distributions, meta, sidecar)
     return CellExtraction(scalars=scalars, distributions=distributions, meta=meta)
 
 

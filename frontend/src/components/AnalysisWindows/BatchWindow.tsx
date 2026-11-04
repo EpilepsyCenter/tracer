@@ -340,7 +340,10 @@ export function extractRecipes(sidecar: SidecarShape): {
           trainParams,
           regions: type === 'spectral' && Array.isArray((blob as any).regions)
             ? ((blob as any).regions as AnyBlob[]) : null,
+          // Dual-site only when the template series has it switched on
+          // (old partner results can outlive turning it off).
           burstDual: type === 'bursts' && (blob as any).partner
+              && (sidecar as any).burst_dual_form?.[groupSeries]?.enabled
             ? {
               channel: (blob as any).partner.channel,
               params: (blob as any).partner.params,

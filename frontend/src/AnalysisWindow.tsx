@@ -263,6 +263,11 @@ export function AnalysisWindow({ view }: { view: string }) {
             useAppStore.setState({ recordingMeta: ev.data.recordingMeta })
           }
         }
+        // Bursts from another window (or a newly opened file): without
+        // this an open Burst window kept the previous file's bursts.
+        if (ev.data?.type === 'bursts-update' && ev.data.fieldBursts) {
+          useAppStore.setState({ fieldBursts: ev.data.fieldBursts })
+        }
         if (ev.data?.type === 'spectral-update' && ev.data.spectralAnalyses) {
           useAppStore.setState({ spectralAnalyses: ev.data.spectralAnalyses })
         }

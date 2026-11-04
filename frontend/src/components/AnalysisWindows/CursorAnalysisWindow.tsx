@@ -274,6 +274,9 @@ export function CursorAnalysisWindow({
       firstMirrorRef.current = false
       return
     }
+    // No measurements yet (a new selection, nothing run): nothing to
+    // save — and never overwrite a stored result with an empty one.
+    if (!localData.measurements || localData.measurements.length === 0) return
     const next = { ...useAppStore.getState().cursorAnalyses, [storeKey]: localData }
     useAppStore.setState({ cursorAnalyses: next })
     try {
@@ -392,7 +395,15 @@ export function CursorAnalysisWindow({
     [fileInfo, localData.group, localData.series],
   )
 
-  const patch = (p: Partial<CursorAnalysisData>) => setLocalData((d) => ({ ...d, ...p }))
+  // Changing group, series or channel: the measurements belong to the
+  // old selection, so they go (the stored result of the new series, if
+  // any, is swapped in by the effect above).
+  const patch = (p: Partial<CursorAnalysisData>) => setLocalData((d) => {
+    const moved = (p.group !== undefined && p.group !== d.group)
+      || (p.series !== undefined && p.series !== d.series)
+      || (p.trace !== undefined && p.trace !== d.trace)
+    return moved ? { ...d, ...p, measurements: [], traceUnit: '' } : { ...d, ...p }
+  })
 
   // Reset bounds on file change.
   useEffect(() => {
