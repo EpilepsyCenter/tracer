@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react'
 import uPlot from 'uplot'
 import 'uplot/dist/uPlot.min.css'
-import { useAppStore, CursorPositions, STIMULUS_TRACE_INDEX, type BurstRecord } from '../../stores/appStore'
+import { useAppStore, CursorPositions, STIMULUS_TRACE_INDEX, stackedFor, type BurstRecord } from '../../stores/appStore'
 import { NoteFlags, NoteEditor, SweepNoteChips, NotesMenu, NoteDraft, NoteFlagPos } from './TraceNotes'
 import type { TraceNote } from '../../stores/appStore'
 import { useThemeStore } from '../../stores/themeStore'
@@ -9,16 +9,12 @@ import { ViewportBar, ViewportSlider } from './ViewportBar'
 import { usePlotMenu } from '../common/PlotMenu'
 import { Welcome } from '../Welcome/Welcome'
 import { sampleTraceYAt } from '../../utils/sampleTraceY'
+import { channelColorVar } from '../../utils/channelColors'
+import * as lanes from './lanes'
 
-// Palette for non-primary recorded channels. Must match TracesDropdown.
-const ADDITIONAL_CHANNEL_COLOR_VARS = [
-  '--trace-color-2', '--trace-color-3', '--trace-color-4', '--trace-color-5',
-]
+// Channel colours — shared with the Traces dropdown.
 function colorForChannel(idx: number): string {
-  const name = idx === 0
-    ? '--trace-color-1'
-    : ADDITIONAL_CHANNEL_COLOR_VARS[(idx - 1) % ADDITIONAL_CHANNEL_COLOR_VARS.length]
-  return cssVar(name)
+  return cssVar(channelColorVar(idx))
 }
 
 type DragEdge =
@@ -30,7 +26,7 @@ type DragEdge =
 type DragTarget =
   | { kind: 'edge'; key: DragEdge }
   | { kind: 'region'; startKey: DragEdge; endKey: DragEdge; anchorVal: number; origStart: number; origEnd: number }
-  | { kind: 'pan'; lastClientX: number; lastClientY: number; yScaleKey?: 'y' | 'y_alt' | 'stim' }
+  | { kind: 'pan'; lastClientX: number; lastClientY: number; yScaleKey?: string }
   | null
 
 /** Reads a CSS custom property from :root computed style */
@@ -789,6 +785,14 @@ export function TraceViewer() {
   // optional auto-zoom button next to the primary Y controls.
   const [altScaleUnits, setAltScaleUnits] = useState<string | null>(null)
 
+  // Stacked lanes ("Stack channels"): each visible channel in its own
+  // lane with its own y scale. ``lanesRef`` holds the lanes of the
+  // current plot (empty when not stacked) and how to compute a lane's
+  // default range; the handlers below read it.
+  const stacked = useAppStore((s) => stackedFor(s, s.currentGroup, s.currentSeries))
+  const lanesRef = useRef<{ list: lanes.Lane[]; auto: (lane: lanes.Lane) => [number, number] }>(
+    { list: [], auto: () => [-1, 1] })
+
   // ================================================================
   // Build uPlot data arrays from current state
   // ================================================================
@@ -844,7 +848,7 @@ export function TraceViewer() {
         width: 1.25,
         // Same-unit-only case: own (right) axis, starting on the
         // primary's range (see the y / y_alt range hooks).
-        scale: allExtraSameUnits || !sameUnits ? 'y_alt' : 'y',
+        scale: stacked ? `ch${chIdx}` : allExtraSameUnits || !sameUnits ? 'y_alt' : 'y',
       } as uPlot.Series)
     }
 
@@ -953,7 +957,7 @@ export function TraceViewer() {
     }
 
     return { data: columns as unknown as uPlot.AlignedData, seriesOpts, stimIdx }
-  }, [traceData, overlayEntries, showOverlay, averageTrace, showAverage, theme, showStimulusOverlay, stimulus, sweepStimulusSegments, zeroOffset, visibleTracesForSeries, additionalTraces, currentTrace])
+  }, [traceData, overlayEntries, showOverlay, averageTrace, showAverage, theme, showStimulusOverlay, stimulus, sweepStimulusSegments, zeroOffset, visibleTracesForSeries, additionalTraces, currentTrace, stacked])
 
   // ================================================================
   // Track which series we last built the plot for, so we can save/restore ranges
@@ -1270,6 +1274,104 @@ export function TraceViewer() {
       })
     }
 
+    // ---- Stacked lanes: one band per visible channel ----
+    lanesRef.current = { list: [], auto: () => [-1, 1] }
+    if (stacked) {
+      const colsOf = (key: string) => seriesOpts
+        .map((so, i) => (i > 0 && (so as any).scale === key ? i : -1)).filter((i) => i > 0)
+      const list: lanes.Lane[] = []
+      const recorded = visibleTracesForSeries.filter((i) => i >= 0).sort((a, b) => a - b)
+      for (const ch of recorded) {
+        if (ch === currentTrace) {
+          list.push({ id: `c${ch}`, scale: 'y', label: traceData.label || `Ch ${ch + 1}`,
+            units: traceData.units || '', color: colorForChannel(ch), cols: colsOf('y') })
+        } else if (additionalTraces[ch]) {
+          const td = additionalTraces[ch]
+          list.push({ id: `c${ch}`, scale: `ch${ch}`, label: td.label || `Ch ${ch + 1}`,
+            units: td.units || '', color: colorForChannel(ch), cols: colsOf(`ch${ch}`) })
+        }
+      }
+      if (stimIdx !== null) {
+        list.push({ id: 'stim', scale: 'stim', label: 'Stimulus', units: stimulus?.unit ?? '',
+          color: cssVar('--stimulus-color'), cols: [stimIdx] })
+      }
+      if (list.length >= 2) {
+        const N = list.length
+        const dpr = devicePixelRatio || 1
+        const auto = (lane: lanes.Lane): [number, number] => {
+          const [lo, hi] = colExtent(lane.cols)
+          return lanes.paddedExtent(lo, hi) ?? [-1, 1]
+        }
+        // A lane shows its saved range (once dragged or zoomed), else its data.
+        const laneRange = (lane: lanes.Lane): [number, number] => {
+          const saved = useAppStore.getState()
+            .getSeriesAxisRange(currentGroup, currentSeries)?.lanes?.[lane.id]
+          if (saved && saved.max > saved.min) {
+            const [lo, hi] = colExtent(lane.cols)
+            if (!(isFinite(lo) && (hi < saved.min || lo > saved.max))) return [saved.min, saved.max]
+          }
+          return auto(lane)
+        }
+        lanesRef.current = { list, auto }
+        const laneOfScale = new Map(list.map((l, i) => [l.scale, i]))
+        list.forEach((lane, i) => {
+          scales[lane.scale] = {
+            range: (u) => lanes.toScale(...laneRange(lane), lanes.laneBand(i, N, u.bbox.height / dpr)),
+          }
+        })
+        // Each line stays inside its lane; series with no lane (the
+        // active channel's overlays when that channel is hidden) are off.
+        const linear = uPlot.paths.linear!()
+        seriesOpts.forEach((so, si) => {
+          if (si === 0) return
+          const li = laneOfScale.get((so as any).scale ?? 'y')
+          if (li == null) { so.show = false; return }
+          so.paths = (u, sidx, i0, i1) => {
+            const p = linear(u, sidx, i0, i1)
+            if (p) {
+              const band = lanes.laneBand(li, N, u.bbox.height / dpr)
+              const clip = new Path2D()
+              clip.rect(u.bbox.left, u.bbox.top + band.top * u.bbox.height,
+                u.bbox.width, (band.bottom - band.top) * u.bbox.height)
+              p.clip = clip
+            }
+            return p
+          }
+        })
+        // One left axis carries every lane's ticks (labels and grid
+        // lines per lane); lane names are drawn inside each lane.
+        let tickLabels: string[] = []
+        const laneAxis: uPlot.Axis = {
+          ...axes[1],
+          label: undefined,
+          labelSize: 0,
+          scale: list[0].scale,
+          splits: (u, _ai, sMin, sMax) => {
+            const hCss = u.bbox.height / dpr
+            const pairs: [number, string][] = []
+            list.forEach((lane, i) => {
+              const sc = u.scales[lane.scale]
+              if (sc?.min == null || sc?.max == null) return
+              const band = lanes.laneBand(i, N, hCss)
+              const [lo, hi] = lanes.fromScale(sc.min, sc.max, band)
+              const target = Math.max(2, Math.floor(((band.bottom - band.top) * hCss) / 26))
+              const ticks = lanes.niceTicks(lo, hi, target)
+              const dec = lanes.tickDecimals(ticks)
+              for (const t of ticks) {
+                const f = lanes.fracOf(t, lo, hi, band)
+                pairs.push([sMax - f * (sMax - sMin), t.toFixed(dec)])
+              }
+            })
+            pairs.sort((a, b) => a[0] - b[0])
+            tickLabels = pairs.map((p) => p[1])
+            return pairs.map((p) => p[0])
+          },
+          values: () => tickLabels,
+        }
+        axes.splice(1, axes.length - 1, laneAxis)
+      }
+    }
+
     const opts: uPlot.Options = {
       width: container.clientWidth,
       height: container.clientHeight,
@@ -1298,7 +1400,7 @@ export function TraceViewer() {
       axes,
       series: seriesOpts,
       hooks: {
-        draw: [() => drawCursors()],
+        draw: [(u: uPlot) => drawLaneChrome(u), () => drawCursors()],
         // Coordinate tooltip that follows the cursor. Position + content
         // come from uPlot's cursor state; visibility is gated by the
         // "Show/hide coordinates" toolbar toggle (read via ref so this
@@ -1322,7 +1424,17 @@ export function TraceViewer() {
               return
             }
             const xs = (u.data[0] as unknown as number[])?.[idx as number]
-            const ys = (u.data[1] as unknown as (number | null)[])?.[idx as number]
+            // Stacked: the value of the channel whose lane is under the cursor.
+            let col = 1
+            let tipUnits = traceData?.units ?? ''
+            const laneList = lanesRef.current.list
+            if (laneList.length >= 2) {
+              const hCss = u.bbox.height / (devicePixelRatio || 1)
+              const lane = laneList[lanes.laneAt(top / hCss, laneList.length, hCss)]
+              col = lane.cols[0] ?? 1
+              tipUnits = lane.units
+            }
+            const ys = (u.data[col] as unknown as (number | null)[])?.[idx as number]
             if (xs == null || ys == null || !isFinite(xs) || !isFinite(ys as number)) {
               tip.style.display = 'none'
               return
@@ -1346,7 +1458,7 @@ export function TraceViewer() {
             tip.style.top = nearTop
               ? `${top + offsetY + 10}px`          // below cursor
               : `${top - offsetY - approxTipH}px`  // above cursor (default)
-            tip.textContent = `${(xs as number).toFixed(3)} s  ·  ${(ys as number).toFixed(3)}${traceData?.units ? ' ' + traceData.units : ''}`
+            tip.textContent = `${(xs as number).toFixed(3)} s  ·  ${(ys as number).toFixed(3)}${tipUnits ? ' ' + tipUnits : ''}`
           },
         ],
         // Drag-zoom rectangle completed: apply it ourselves.
@@ -1377,7 +1489,8 @@ export function TraceViewer() {
             }
 
             // Y: set the scale now AND save to store so rebuilds preserve it.
-            if (isFinite(yMin) && isFinite(yMax) && yMax > yMin) {
+            // (Stacked lanes: the box zooms time only.)
+            if (lanesRef.current.list.length < 2 && isFinite(yMin) && isFinite(yMax) && yMax > yMin) {
               u.setScale('y', { min: yMin, max: yMax })
               const cur = st.getSeriesAxisRange(currentGroup, currentSeries)
               st.saveSeriesAxisRange(currentGroup, currentSeries, {
@@ -1430,6 +1543,8 @@ export function TraceViewer() {
               return
             }
 
+            // Stacked lanes save their own ranges (setLaneRange).
+            if (lanesRef.current.list.length >= 2) return
             if (key === 'y' || key === 'y_alt' || key === 'stim') {
               const ys = u.scales[key]
               if (ys?.min == null || ys?.max == null) return
@@ -1477,7 +1592,7 @@ export function TraceViewer() {
       plotRef.current?.destroy()
       plotRef.current = null
     }
-  }, [traceData, buildSeriesData, theme, fontSize, zoomMode, showStimulusOverlay, stimulus, traceColorsKey]) // deliberately NOT including cursors
+  }, [traceData, buildSeriesData, theme, fontSize, zoomMode, showStimulusOverlay, stimulus, traceColorsKey, stacked]) // deliberately NOT including cursors
 
   // ================================================================
   // Repaint cursor canvas when cursor positions or visibility change
@@ -1520,7 +1635,10 @@ export function TraceViewer() {
               u.setScale('x', { min: ev.data.x.min, max: ev.data.x.max })
             }
           }
-          if (ev.data.y) {
+          if (ev.data.y && lanesRef.current.list.length >= 2) {
+            const lane = lanesRef.current.list.find((l) => l.scale === 'y')
+            if (lane) setLaneRange(lane, ev.data.y.min, ev.data.y.max)
+          } else if (ev.data.y) {
             const cur = st.getSeriesAxisRange(g, s) ?? {}
             st.saveSeriesAxisRange(g, s, {
               ...cur, y: { min: ev.data.y.min, max: ev.data.y.max },
@@ -1804,7 +1922,9 @@ export function TraceViewer() {
           // if the user pans across another one.
           const yKey = drag.yScaleKey ?? 'y'
           const yScale = u.scales[yKey]
-          if (yScale && yScale.min != null && yScale.max != null) {
+          if (lanesRef.current.list.length >= 2) {
+            panLane(yKey, dyPx)
+          } else if (yScale && yScale.min != null && yScale.max != null) {
             const plotH = u.bbox.height
             const yRange = yScale.max - yScale.min
             const dyVal = (dyPx / plotH) * yRange  // positive dy = move up = decrease values shown
@@ -1884,14 +2004,122 @@ export function TraceViewer() {
     u.setScale(key, { min, max })
   }
 
-  const zoomScale = (key: 'x' | 'y' | 'y_alt' | 'stim', factor: number) => {
+  // ---- Stacked lanes: read / set / pan a lane's visible range ----
+
+  /** The range lane ``lane`` currently shows, from its scale. */
+  const laneShown = (lane: lanes.Lane): [number, number] | null => {
+    const u = plotRef.current
+    const list = lanesRef.current.list
+    const i = list.indexOf(lane)
+    const sc = u?.scales[lane.scale]
+    if (!u || i < 0 || sc?.min == null || sc?.max == null) return null
+    const band = lanes.laneBand(i, list.length, u.bbox.height / (devicePixelRatio || 1))
+    return lanes.fromScale(sc.min, sc.max, band)
+  }
+
+  /** Show [lo, hi] in a lane and remember it for the series. */
+  const setLaneRange = (lane: lanes.Lane, lo: number, hi: number) => {
+    const u = plotRef.current
+    const list = lanesRef.current.list
+    const i = list.indexOf(lane)
+    if (!u || i < 0 || !isFinite(lo) || !isFinite(hi) || hi <= lo) return
+    const st = useAppStore.getState()
+    const g = st.currentGroup
+    const s = st.currentSeries
+    const cur = st.getSeriesAxisRange(g, s) ?? {}
+    st.saveSeriesAxisRange(g, s, { ...cur, lanes: { ...cur.lanes, [lane.id]: { min: lo, max: hi } } })
+    const band = lanes.laneBand(i, list.length, u.bbox.height / (devicePixelRatio || 1))
+    const [min, max] = lanes.toScale(lo, hi, band)
+    u.setScale(lane.scale, { min, max })
+  }
+
+  /** Drag a lane's trace up / down by ``dyPx`` canvas pixels. */
+  const panLane = (key: string, dyPx: number) => {
+    const u = plotRef.current
+    const list = lanesRef.current.list
+    const i = list.findIndex((l) => l.scale === key)
+    if (!u || i < 0) return
+    const r = laneShown(list[i])
+    if (!r) return
+    const band = lanes.laneBand(i, list.length, u.bbox.height / (devicePixelRatio || 1))
+    const bandPx = (band.bottom - band.top) * u.bbox.height
+    if (!(bandPx > 0)) return
+    const d = (dyPx / bandPx) * (r[1] - r[0])
+    setLaneRange(list[i], r[0] + d, r[1] + d)
+  }
+
+  /** Toolbar Y buttons with stacked lanes: act on every lane. */
+  const zoomAllLanes = (factor: number) => {
+    for (const lane of [...lanesRef.current.list]) zoomScale(lane.scale, factor)
+  }
+  const autoAllLanes = () => {
+    for (const lane of [...lanesRef.current.list]) autoScale(lane.scale)
+  }
+
+  /** Lane separators and names, drawn on the plot canvas. */
+  const drawLaneChrome = (u: uPlot) => {
+    const list = lanesRef.current.list
+    const N = list.length
+    if (N < 2) return
+    const ctx = u.ctx
+    const dpr = devicePixelRatio || 1
+    const { left, top, width, height } = u.bbox
+    const hCss = height / dpr
+    ctx.save()
+    ctx.strokeStyle = cssVar('--chart-axis')
+    ctx.globalAlpha = 0.45
+    ctx.lineWidth = dpr
+    for (let i = 1; i < N; i++) {
+      const a = lanes.laneBand(i - 1, N, hCss)
+      const b = lanes.laneBand(i, N, hCss)
+      const y = Math.round(top + ((a.bottom + b.top) / 2) * height) + 0.5
+      ctx.beginPath()
+      ctx.moveTo(left, y)
+      ctx.lineTo(left + width, y)
+      ctx.stroke()
+    }
+    ctx.globalAlpha = 1
+    const fontPx = (parseFloat(cssVar('--font-size-label')) || 11) * dpr
+    ctx.textBaseline = 'top'
+    ctx.textAlign = 'left'      // uPlot's axis drawing leaves it right-aligned
+    // Names sit top-right in each lane, clear of the cursor labels and
+    // note flags along the top-left.
+    list.forEach((lane, i) => {
+      const band = lanes.laneBand(i, N, hCss)
+      const text = lane.units && !lane.label.endsWith(`(${lane.units})`)
+        ? `${lane.label} (${lane.units})` : lane.label
+      ctx.font = `${lane.scale === 'y' ? 700 : 600} ${fontPx}px ${cssVar('--font-ui')}`
+      const w = ctx.measureText(text).width
+      const x = left + width - w - 8 * dpr
+      const y = top + band.top * height + 3 * dpr
+      ctx.globalAlpha = 0.85
+      ctx.fillStyle = cssVar('--bg-primary')
+      ctx.fillRect(x - 3 * dpr, y - 2 * dpr, w + 6 * dpr, fontPx + 4 * dpr)
+      ctx.globalAlpha = 1
+      ctx.fillStyle = lane.color
+      ctx.fillText(text, x, y)
+    })
+    ctx.restore()
+  }
+
+  const zoomScale = (key: string, factor: number) => {
     const u = plotRef.current
     if (!u) return
+    if (key !== 'x' && lanesRef.current.list.length >= 2) {
+      const lane = lanesRef.current.list.find((l) => l.scale === key)
+      const r = lane ? laneShown(lane) : null
+      if (lane && r) {
+        const mid = (r[0] + r[1]) / 2
+        const half = ((r[1] - r[0]) / 2) * factor
+        setLaneRange(lane, mid - half, mid + half)
+      }
+      return
+    }
     const s = u.scales[key]
     if (!s || s.min == null || s.max == null) return
     const mid = (s.min + s.max) / 2
     const half = ((s.max - s.min) / 2) * factor
-    applyScale(key, mid - half, mid + half)
+    applyScale(key as 'x' | 'y' | 'y_alt' | 'stim', mid - half, mid + half)
   }
 
   /** Zoom an axis centered on a specific value (for wheel zoom). */
@@ -1912,9 +2140,16 @@ export function TraceViewer() {
    *  return the scale whose canvas Y is closest to the cursor's
    *  clientY. Falls back to ``'y'`` when ``y_alt`` doesn't exist
    *  or the projection isn't possible. */
-  const pickYScale = (clientX: number, clientY: number): 'y' | 'y_alt' | 'stim' => {
+  const pickYScale = (clientX: number, clientY: number): string => {
     const u = plotRef.current
     if (!u || !containerRef.current) return 'y'
+    // Stacked: the lane under the cursor.
+    const laneList = lanesRef.current.list
+    if (laneList.length >= 2) {
+      const over = u.over.getBoundingClientRect()
+      if (over.height <= 0) return laneList[0].scale
+      return laneList[lanes.laneAt((clientY - over.top) / over.height, laneList.length, over.height)].scale
+    }
     const hasAlt = !!u.scales.y_alt
     const hasStim = !!u.scales.stim
     if (!hasAlt && !hasStim) return 'y'
@@ -1958,9 +2193,14 @@ export function TraceViewer() {
   }
 
   /** Auto-range an axis to fit its data. */
-  const autoScale = (key: 'x' | 'y' | 'y_alt' | 'stim') => {
+  const autoScale = (key: string) => {
     const u = plotRef.current
     if (!u) return
+    if (key !== 'x' && lanesRef.current.list.length >= 2) {
+      const lane = lanesRef.current.list.find((l) => l.scale === key)
+      if (lane) setLaneRange(lane, ...lanesRef.current.auto(lane))
+      return
+    }
 
     if (key === 'x') {
       const st = useAppStore.getState()
@@ -2146,25 +2386,25 @@ export function TraceViewer() {
           {/* Data Y-axis zoom */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <span style={{ color: 'var(--text-muted)', marginRight: 4 }}>
-              {traceData?.units || 'Y'}:
+              {stacked ? 'Lanes' : traceData?.units || 'Y'}:
             </span>
             <button
               className="zoom-btn"
-              onClick={() => zoomScale('y', 0.8)}
+              onClick={() => (lanesRef.current.list.length >= 2 ? zoomAllLanes(0.8) : zoomScale('y', 0.8))}
               disabled={!traceData}
-              title="Zoom in Y"
+              title={stacked ? 'Zoom in every lane (Option+scroll over a lane zooms just that one)' : 'Zoom in Y'}
             >+</button>
             <button
               className="zoom-btn"
-              onClick={() => zoomScale('y', 1.25)}
+              onClick={() => (lanesRef.current.list.length >= 2 ? zoomAllLanes(1.25) : zoomScale('y', 1.25))}
               disabled={!traceData}
-              title="Zoom out Y"
+              title={stacked ? 'Zoom out every lane' : 'Zoom out Y'}
             >−</button>
             <button
               className="zoom-btn"
-              onClick={() => autoScale('y')}
+              onClick={() => (lanesRef.current.list.length >= 2 ? autoAllLanes() : autoScale('y'))}
               disabled={!traceData}
-              title="Auto-range Y"
+              title={stacked ? 'Fit every lane to its data' : 'Auto-range Y'}
             >Auto</button>
           </div>
 

@@ -534,6 +534,33 @@ additional trace you have made visible. Both axes carry units —
 *mV*, *pA*, or whatever the file declares — and rescale
 automatically when you switch sweeps or channels.
 
+### Stacked channels
+
+With several channels visible, drawing them on top of each other
+gets crowded, and they share one or two axes. The **Stack channels**
+button next to **Traces** in the toolbar (three stacked bars) gives
+each visible channel its own lane instead, one above the other, with
+the stimulus in the bottom lane when it is shown. It is on by default
+once 3 or more recorded channels are visible, and you can switch it
+on or off for any series; the choice is kept for that series until
+you open another file.
+
+In stacked view:
+
+- Each lane has its own scale. **Drag** inside a lane to move just
+  that channel up or down; **Option / Alt + wheel** over a lane zooms
+  just that lane. Each lane remembers its range for the series.
+- The toolbar's **+ / − / Auto** next to **Lanes** act on every lane
+  at once; **Auto** fits each lane to its own data.
+- Time is shared: zooming or scrolling in time, cursors, notes and
+  analysis markers span all lanes. The lane of the active channel
+  (the one analyses run on, chosen in **Channel**) has its name in
+  bold; markers from analyses are drawn in that lane.
+- A zoom rectangle (Zoom on) zooms time only.
+
+Switching stacking off returns to the overlaid view with its own
+ranges.
+
 ### Mouse interactions
 
 The mouse wheel zooms one axis at a time, with modifier keys
@@ -542,7 +569,7 @@ selecting which:
 | Wheel | Action |
 |---|---|
 | (no modifier) | Zoom the **X axis** in or out, anchored at the cursor position |
-| **Option / Alt** + wheel | Zoom the **Y axis** nearest the cursor — useful for multi-channel files where each channel can be zoomed independently by hovering it before scrolling |
+| **Option / Alt** + wheel | Zoom the **Y axis** nearest the cursor; with stacked channels, the lane under the cursor |
 | **Shift** + wheel | Zoom the **stimulus axis**, when the stimulus trace is visible |
 
 Anchoring at the cursor means the time (or value) under the pointer
@@ -880,7 +907,8 @@ TRACER gives every channel its own colour slot so that, once
 you have settled on (say) blue for the patched cell and red for the
 field electrode, that mapping persists across files. Six slots are
 provided: five for recorded channels (1 through 5) and one for the
-stimulus trace.
+stimulus trace. Channels 6 to 9 get four further fixed colours, so
+up to nine channels are told apart before the colours repeat.
 
 Each slot has a colour picker and a small **×** button that clears
 your override and falls back to the default colour for that slot.

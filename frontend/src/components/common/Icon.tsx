@@ -28,6 +28,7 @@ export type IconName =
   | 'bug'
   | 'external'
   | 'zoom-in'
+  | 'rows'
 
 const PATHS: Record<IconName, React.ReactNode> = {
   folder: (
@@ -50,6 +51,7 @@ const PATHS: Record<IconName, React.ReactNode> = {
     </>
   ),
   sigma: <path d="M12 3H4l4 5-4 5h8" />,
+  rows: <path d="M2.5 3h11v2.5h-11zM2.5 6.75h11v2.5h-11zM2.5 10.5h11V13h-11z" />,
   tag: (
     <>
       <path d="M2 7V3h4l8 8-4 4-8-8z" />

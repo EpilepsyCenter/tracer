@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react'
-import { useAppStore } from '../../stores/appStore'
+import { useAppStore, stackedFor, STIMULUS_TRACE_INDEX } from '../../stores/appStore'
 import { useThemeStore, FONT_SIZES, TRACE_COLOR_SLOT_COUNT, ThemePref } from '../../stores/themeStore'
 import { RecordingTitle } from '../RecordingHeader/RecordingHeader'
 import { SidebarIcon } from '../../App'
@@ -141,6 +141,14 @@ export function Toolbar({ leftHidden, rightHidden, onToggleLeft, onToggleRight }
     recentFiles, clearRecentFiles,
   } = useAppStore()
   void toggleOverlay  // currently unused; reference retained to keep the prop picked
+
+  // "Stack channels" toggle: offered once 2+ lanes would be visible.
+  const stacked = useAppStore((s) => stackedFor(s, s.currentGroup, s.currentSeries))
+  const laneCount = useAppStore((s) => {
+    const vis = s.visibleTraces[`${s.currentGroup}:${s.currentSeries}`] ?? []
+    return vis.filter((i) => i >= 0).length + (vis.includes(STIMULUS_TRACE_INDEX) ? 1 : 0)
+  })
+  const setStackChannels = useAppStore((s) => s.setStackChannels)
 
   const {
     themePref, setThemePref,
@@ -460,6 +468,20 @@ export function Toolbar({ leftHidden, rightHidden, onToggleLeft, onToggleRight }
             stimulus-overlay and multi-channel visibility controls
             without hunting. */}
         <TracesDropdown />
+
+        {laneCount >= 2 && (
+          <button
+            className="icon-btn"
+            aria-pressed={stacked}
+            onClick={() => setStackChannels(currentGroup, currentSeries, !stacked)}
+            title={stacked
+              ? 'Stack channels: on — each channel in its own lane (click to overlay them)'
+              : 'Stack channels: off — channels overlaid (click to give each its own lane)'}
+            aria-label="Stack channels"
+          >
+            <Icon name="rows" size={16} />
+          </button>
+        )}
 
         <button className="icon-btn" aria-pressed={showOverlay} onClick={handleOverlayAll} disabled={!recording || loading} title="Overlay all sweeps (O)" aria-label="Overlay all sweeps">
           <Icon name="layers" size={16} />
