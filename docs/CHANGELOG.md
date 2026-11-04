@@ -19,11 +19,13 @@ starts, and from Help ▸ What's New. Newest version first.
 
 - **Quality control in Cohort.** Check Rs, Rin, Cm, holding current and resting Vm between the conditions of your experiment (baseline, drug, washout…) with rules you set, override with a reason, and let every Cohort analysis include only the cells that pass — with a report of what was left out and why. [Read more](manual:20. Cohort > Quality control)
 
-- **Cohort exports straight to ASTERISM.** One click writes an ASTERISM project with a data table, a graph and the matching test for each metric — ready to open, with nothing to import. [Read more](manual:20. Cohort > Export)
+- **Cohort exports straight to ASTERISM.** One click writes an ASTERISM project with a data table, a graph and the matching test for every metric — for events and other many-values-per-cell measures, the per-cell means, a nested table (SuperPlot, nested test), the cumulative distributions and the pooled events. Ready to open, with nothing to import. [Read more](manual:20. Cohort > Export)
 
 ### Improved
 
 - **Resistance remembers how each series was measured** (run mode, sweeps, fit, channel, cursors), and Batch repeats exactly that on the other files. [Read more](manual:10. Resistance — Rs / Rin / Cm > Persistence)
+
+- **Cohort reports amplitudes as positive values** (events, paired responses, bursts), whichever way the trace went — the usual convention. [Read more](manual:20. Cohort > What gets aggregated)
 
 ### Fixed
 

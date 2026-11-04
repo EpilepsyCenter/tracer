@@ -1025,43 +1025,6 @@ export function CohortWindow({ backendUrl }: { backendUrl: string }) {
     }))
   }, [aggResult, design, comparisonShape, seriesRole])
 
-  /** ASTERISM project export: one table per selected scalar metric with
-   *  exactly the values the statistics use (paired rows aligned by cell),
-   *  the test branch Cohort chose, and provenance for the info sheet. */
-  const buildAsterismPayload = useCallback(() => {
-    if (!aggResult || !design || !design.ready || !designKind) return null
-    const scalars = selectedMetrics.filter((m) => metricKindOf(m) === 'scalar')
-    const skipped = selectedMetrics.filter((m) => metricKindOf(m) !== 'scalar')
-    const rowTitles = comparisonShape === 'within'
-      ? design.groups[0].cells.map((c) => c.cell_id || c.file_name)
-      : null
-    const tables = scalars.map((m) => {
-      const groups = extractValuesForMetric(m)
-      return groups && {
-        metric: m, label: m, tags: groups.map((g) => g.tag),
-        values: groups.map((g) => g.values), row_titles: rowTitles,
-      }
-    }).filter(Boolean)
-    // Without a stats run the backend picks the test as Cohort would.
-    const branches: Record<string, string> = {}
-    for (const m of scalars) {
-      const b = statsResults?.[m]?.branch
-      if (b) branches[m] = b
-    }
-    return {
-      design_kind: designKind, tables, branches, test_override: testOverride,
-      stats: statsResults ?? null,
-      design: {
-        comparison_shape: comparisonShape, selected_tags: selectedTags, filter_tags: filterTags,
-        series_role: seriesRole, n_unit: nUnit,
-      },
-      folder, analysis_type: analysisType, qc: aggResult.qc ?? null,
-      skipped_metrics: skipped,
-      app_version: typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : '',
-    }
-  }, [aggResult, design, designKind, selectedMetrics, comparisonShape, extractValuesForMetric,
-      statsResults, testOverride, selectedTags, filterTags, seriesRole, nUnit, folder, analysisType])
-
   // Per-cell array extraction for graphs. Same per-mode rules as
   // the stats extractor (within = paired by file, between = role-
   // gated), but each cell contributes an ARRAY of values:
@@ -1070,7 +1033,12 @@ export function CohortWindow({ backendUrl }: { backendUrl: string }) {
   //     array stored under cell.distributions[metric]
   // For LTP timeseries we also pull bin_width_s + bins_consistent
   // from the cell's meta so the backend's time-axis check has data.
-  const extractGraphGroupsForMetric = useCallback((metric: string, kind: MetricKind) => {
+  const extractGraphGroupsForMetric = useCallback((
+    metric: string, kind: MetricKind,
+    // keepEmpty: keep cells without values (as []) so rows stay aligned
+    // — the ASTERISM export's nested / paired tables need that.
+    opts?: { keepEmpty?: boolean },
+  ) => {
     if (!aggResult || !design || !design.ready) return null
     const cellsByFile = new Map<string, Cell[]>()
     for (const c of aggResult.cells) {
@@ -1136,38 +1104,100 @@ export function CohortWindow({ backendUrl }: { backendUrl: string }) {
       return { bin_width_s: null, bins_consistent: null, induction_bin_idx: null }
     }
 
+    const keep = (arr: number[]) => !!opts?.keepEmpty || arr.length > 0
+    const labelOf = (c: Cell) => c.cell_id || c.file_name
     if (comparisonShape === 'within') {
       const fileOrder = design.groups[0].cells.map((c) => c.file_path)
-      return design.groups.map((g) => ({
-        tag: g.tag,
-        values_per_cell: fileOrder.map((fp) => {
+      const labelByFile = new Map(design.groups[0].cells.map((c) => [c.file_path, labelOf(c)]))
+      return design.groups.map((g) => {
+        const per = fileOrder.map((fp) => {
           const fileRows = cellsByFile.get(fp) ?? []
           const matches = fileRows.filter((r) =>
             r.series_specific_tags.map((t) => t.toLowerCase())
               .includes(g.tag.toLowerCase()))
-          return valuesFromRows(matches, `${fp}|${g.tag}`)
-        }).filter((arr) => arr.length > 0),
+          return { label: labelByFile.get(fp) ?? fp, values: valuesFromRows(matches, `${fp}|${g.tag}`) }
+        }).filter((x) => keep(x.values))
+        return {
+        tag: g.tag,
+        values_per_cell: per.map((x) => x.values),
+        labels_per_cell: per.map((x) => x.label),
         ...(kind === 'timeseries'
           ? binWidthFromRows((cellsByFile.get(fileOrder[0]) ?? []))
           : {}),
-      }))
+        }
+      })
     }
-    return design.groups.map((g) => ({
-      tag: g.tag,
-      values_per_cell: g.cells.map((c) => {
+    return design.groups.map((g) => {
+      const per = g.cells.map((c) => {
         const fileRows = cellsByFile.get(c.file_path) ?? []
         const sourceRows = seriesRole
           ? fileRows.filter((r) =>
               r.series_specific_tags.map((t) => t.toLowerCase())
                 .includes(seriesRole.toLowerCase()))
           : fileRows
-        return valuesFromRows(sourceRows, `${c.file_path}|${g.tag}`)
-      }).filter((arr) => arr.length > 0),
+        return { label: labelOf(c), values: valuesFromRows(sourceRows, `${c.file_path}|${g.tag}`) }
+      }).filter((x) => keep(x.values))
+      return {
+      tag: g.tag,
+      values_per_cell: per.map((x) => x.values),
+      labels_per_cell: per.map((x) => x.label),
       ...(kind === 'timeseries' && g.cells.length > 0
         ? binWidthFromRows((cellsByFile.get(g.cells[0].file_path) ?? []))
         : {}),
-    }))
+      }
+    })
   }, [aggResult, design, comparisonShape, seriesRole, subsampleMode, subsampleN])
+
+  /** ASTERISM project export, covering every metric like the Prism export.
+   *  Scalars: the values the statistics use (paired rows aligned by cell)
+   *  and the test branch Cohort chose. Distributions and time courses:
+   *  each cell's values with its label (empty cells kept, so paired rows
+   *  stay aligned), subsampled exactly as the graphs. */
+  const buildAsterismPayload = useCallback(() => {
+    if (!aggResult || !design || !design.ready || !designKind) return null
+    const scalars = metricOptions.filter((m) => m.kind === 'scalar').map((m) => m.name)
+    const others = metricOptions.filter((m) => m.kind === 'distribution' || m.kind === 'timeseries')
+    const rowTitles = comparisonShape === 'within'
+      ? design.groups[0].cells.map((c) => c.cell_id || c.file_name)
+      : null
+    const tables = scalars.map((m) => {
+      const groups = extractValuesForMetric(m)
+      return groups && {
+        metric: m, label: m, tags: groups.map((g) => g.tag),
+        values: groups.map((g) => g.values), row_titles: rowTitles,
+      }
+    }).filter(Boolean)
+    const distributions = others.map((m) => {
+      const groups = extractGraphGroupsForMetric(m.name, m.kind, { keepEmpty: true })
+      return groups && {
+        metric: m.name, kind: m.kind, tags: groups.map((g) => g.tag),
+        cells: groups.map((g) => g.values_per_cell.map((v, i) => ({
+          label: g.labels_per_cell[i], values: v,
+        }))),
+        bin_width_s: (groups[0] as any)?.bin_width_s ?? null,
+      }
+    }).filter(Boolean)
+    // Without a stats run the backend picks the test as Cohort would.
+    const branches: Record<string, string> = {}
+    for (const m of scalars) {
+      const b = statsResults?.[m]?.branch
+      if (b) branches[m] = b
+    }
+    return {
+      design_kind: designKind, tables, distributions, branches, test_override: testOverride,
+      selected_metrics: selectedMetrics,
+      stats: statsResults ?? null,
+      design: {
+        comparison_shape: comparisonShape, selected_tags: selectedTags, filter_tags: filterTags,
+        series_role: seriesRole, n_unit: nUnit,
+        subsample: { mode: subsampleMode, n: subsampleN },
+      },
+      folder, analysis_type: analysisType, qc: aggResult.qc ?? null,
+      app_version: typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : '',
+    }
+  }, [aggResult, design, designKind, metricOptions, comparisonShape, extractValuesForMetric,
+      extractGraphGroupsForMetric, statsResults, testOverride, selectedMetrics, selectedTags,
+      filterTags, seriesRole, nUnit, subsampleMode, subsampleN, folder, analysisType])
 
   const themeName = useThemeStore((s) => s.theme)
 

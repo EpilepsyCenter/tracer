@@ -4169,6 +4169,14 @@ fEPSP-vs-time trace). The metric tree on the metric-selection
 panel groups these and pre-checks a curated default set so a
 sensible comparison is one click away.
 
+Amplitudes are reported as magnitudes, the usual convention: an
+inward current or a downward field potential has a positive
+amplitude. This applies to Events (amplitude and charge), Paired
+recordings (response amplitude) and Bursts (peak amplitude). Cursor
+measurements stay signed, because their direction can be the result
+(an outward vs inward current, a depolarisation vs a
+hyperpolarisation).
+
 ### Statistics
 
 Stats are run via Pingouin under the hood. The design taxonomy
@@ -4232,24 +4240,46 @@ Four buttons sit above the cell table.
   by cell); timeseries metrics produce two (group mean / SEM
   per bin, plus per-cell traces).
 - **ASTERISM (.asterism)** — an ASTERISM project that opens
-  directly, with nothing to import. For each selected scalar metric
-  it holds:
-  - a data table with exactly the values Cohort's statistics use,
-    one column per group or condition. Within-recording designs have
-    one row per cell (titled with its cell ID), so the pairs are kept;
-  - a graph in ASTERISM's own style: *Scatter, mean ± SEM* between
-    groups, *Before-after* within recordings;
-  - the matching test (Welch's t, Mann-Whitney, paired t, Wilcoxon,
-    one-way or repeated-measures ANOVA, Kruskal-Wallis, Friedman),
-    parametric or not as Cohort chose. ASTERISM recomputes it when the
-    file opens, and gets the same p-value as Cohort;
-  - an info sheet, *TRACER cohort*, recording the folder, the
-    design, the quality-control setting and the rows it left out, and
-    Cohort's own results for comparison.
+  directly, with nothing to import. It covers every metric, like the
+  Prism export, and adds a graph and the matching test to each table.
+  ASTERISM recomputes the tests when the file opens and gets the same
+  p-values as Cohort.
+  - **One value per cell** (Rs, mean amplitude, rheobase …): a table
+    with exactly the values Cohort's statistics use, one column per
+    group or condition (within-recording designs: one row per cell,
+    titled with its cell ID); a *Scatter, mean ± SEM* graph, or
+    *Before-after* within recordings; and the test Cohort ran (Welch's
+    t, Mann-Whitney, paired t, Wilcoxon, one-way or repeated-measures
+    ANOVA, Kruskal-Wallis, Friedman). Without a stats run, the test is
+    the one Cohort would choose.
+  - **Many values per cell** (every event's amplitude, every interval
+    …): four tables.
+    - *per-cell mean*: one value per cell, tested as above. This is
+      the usual comparison, with the cell as the unit.
+    - *by cell*: a nested table, each cell a sub-column of its own
+      values, drawn as a SuperPlot. For independent groups it carries
+      a nested t-test / one-way ANOVA, which keeps every event but
+      treats the cell as the unit.
+    - *cumulative distribution*: one curve per cell on a shared grid;
+      the graph shows each group's mean curve (switch the graph to
+      *Each replicate* to see every cell).
+    - *pooled events*: all events of each group, with the
+      Kolmogorov-Smirnov test for two independent groups (Cohort's
+      pooled K-S).
 
-  Set up the comparison first (tags to compare); run the statistics
-  if you want Cohort's results in the info sheet. Distribution
-  metrics aren't included — use the Excel or Prism export for those.
+    The events are subsampled as Cohort's *Events per cell* setting
+    says.
+  - **Time courses** (fEPSP per bin, Rs per sweep): an XY table with
+    one replicate per cell, drawn as mean ± SEM per bin, in minutes
+    when the bin width is known, with a two-way repeated-measures
+    ANOVA (time × group, each cell measured at every time point; within
+    recordings, the same cell in every condition). When a cell misses
+    some bins, ASTERISM uses a mixed-effects model instead.
+  - **Info sheet**, *TRACER cohort*: the folder, the design, the
+    quality-control setting and the rows it left out, and Cohort's own
+    results for comparison.
+
+  Set up the comparison first (tags to compare).
 
 ### Sessions
 
@@ -4314,9 +4344,18 @@ only the tags you choose count.
 
 Each measure can be switched on, with a **warn** level, a **fail**
 level, or both (leave one empty to skip it). The defaults are Rs
-above 25 MΩ, a change in Rs of more than 20 % (either way), holding
-current below −200 pA, and resting Vm above −55 mV. Changes are
-judged on their size, in either direction.
+above 25 MΩ, a change in Rs of more than 20 % (either way), Rs drift
+above 20 %, holding current below −200 pA, and resting Vm above
+−55 mV. Changes are judged on their size, in either direction.
+
+**Rs drift** is the drift *within* one condition: (largest − smallest
+Rs) ÷ mean Rs, across that condition's Resistance measurements — for
+example a test pulse in every sweep of a stimulation protocol, run
+with *All sweeps*. It catches access running away during a recording,
+which the change between conditions can miss. It needs at least two
+measurements: a condition measured once (an averaged range, a single
+sweep) has no drift and isn't flagged as missing. With several series
+in one condition, the largest drift counts.
 
 - **Measurement missing** — what a condition counts as when its
   tagged series has no Resistance (or Cursor) result: *warn*
@@ -4339,6 +4378,8 @@ stored: they are worked out each time from the results and the
 current rules, so changing a threshold updates everything at once.
 
 #### The table and the plot
+
+![Cohort ▸ Quality — conditions and rules on the left; the plot across conditions and the per-cell table on the right](screenshots/cohort-quality.png)
 
 The table has one block per cell and one row per condition: the
 cell's verdict (Pass / Warn / Fail), then each measure whose rule is
@@ -4373,7 +4414,10 @@ series fails (or, with *exclude the whole cell*, when any condition
 does). Rows from series no condition judges are kept.
 
 Below the cell table, **Quality control left out N rows** lists each
-left-out row with its reason. Exports carry the same information:
+left-out row with its reason.
+
+![Cohort analyses with Quality control — the Include setting in the top bar, the QC column, and the rows left out with their reasons](screenshots/cohort-quality-include.png)
+ Exports carry the same information:
 the *Cells (wide)* sheet has `qc_status` and `qc_reason` columns, the
 *Cohort* sheet states which cells were included, and a *QC excluded*
 sheet lists the rows left out.

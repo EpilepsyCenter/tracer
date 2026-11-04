@@ -37,7 +37,17 @@ _SCATTER_SEM = {'appearance': 'scatter', 'line_at': 'mean_sem', 'show_points': T
 _BEFORE_AFTER = {'appearance': 'scatter', 'line_at': 'none', 'show_points': True,
                  'bars': False, 'errors': False, 'spread': 'aligned'}
 
+# Nested SuperPlot (asterism/app/dialogs/graph_type.py NESTED_PRESETS),
+# box without points (thousands of pooled events), XY lines / points.
+_DOT = dict(_SCATTER_SEM)
+_BOX = {'appearance': 'box', 'whiskers': 'minmax', 'show_points': False, 'errors': True, 'bars': False}
+_XY_LINE = {'appearance': 'scatter', 'xy_show': 'mean', 'connect': True, 'show_points': False,
+            'errors': False, 'fill': False}
+_XY_POINTS_LINE = {'appearance': 'scatter', 'xy_show': 'mean', 'connect': True, 'show_points': True,
+                   'line_at': 'mean_sem', 'errors': True, 'fill': False}
+
 PAIRED_KINDS = {'paired_2', 'rm_n'}
+SWARM_MAX_POINTS = 400   # per group, for nested SuperPlots
 
 
 def _id() -> str:
@@ -93,41 +103,191 @@ def build_project(payload: dict) -> dict:
     override = payload.get('test_override') or 'auto'
     tables, graphs, analyses = [], [], []
 
+    from analysis import cohort_stats
+    from analysis.cohort_export import _compute_ecdf_grid, _ecdf_at_grid
+
+    def add_distribution(metric: str, tags: list[str], groups: list[list[dict]]) -> None:
+        """Many values per cell: per-cell mean, nested table, cumulative
+        distribution, pooled events."""
+        # 1. One value per cell (its mean), tested like a scalar. Paired
+        #    designs keep every row (cells aligned across conditions).
+        means = [[(sum(c['values']) / len(c['values'])) if c['values'] else None for c in g] for g in groups]
+        if not paired:
+            means = [[m for m in col if m is not None] for col in means]
+        labels = [c['label'] for c in groups[0]] if groups else []
+        add_column_table(f'{metric} — per-cell mean', f'{metric}__cell_mean', tags, means, labels,
+                         f'{metric} (mean per cell)')
+
+        # 2. Nested: each cell a sub-column of its own values; SuperPlot.
+        #    Paired designs keep the same cell in the same sub-column in
+        #    every condition (and its colour).
+        kept = groups if paired else [[c for c in g if c['values']] for g in groups]
+        width = max(1, max(len(g) for g in kept))
+        y: list[list] = []
+        subs: list[list[str]] = []
+        for g in kept:
+            for j in range(width):
+                y.append(list(g[j]['values']) if j < len(g) else [])
+            subs.append([g[j]['label'] if j < len(g) else '' for j in range(width)])
+        tid = _id()
+        name = f'{metric} — by cell'
+        tables.append({
+            'id': tid, 'name': name, 'type': 'nested', 'y_format': 'replicates', 'replicates': width,
+            'x_format': 'none', 'has_row_titles': False, 'titles': tags, 'sub_titles': subs,
+            'y': y, 'x': [], 'x_err': [], 'row_titles': [], 'excluded': [],
+        })
+        # A beeswarm of thousands of points takes ASTERISM seconds per
+        # redraw; above a few hundred points per group the points are
+        # drawn aligned instead (same data, instant).
+        n_points = max((sum(len(c['values']) for c in g) for g in kept), default=0)
+        dot = dict(_DOT, spread='swarm' if n_points <= SWARM_MAX_POINTS else 'aligned')
+        graphs.append({'id': _id(), 'name': name, 'auto_name': False, 'table': tid,
+                       'spec': {'title': name, 'default_style': dot, 'nested_layout': 'superplot',
+                                'nested': {'restart': paired}, 'y': {'title': metric}}})
+        # Nested t test / one-way ANOVA (cells as the random factor):
+        # independent groups only, each with 2+ cells.
+        if not paired and len(kept) >= 2 and all(len(g) >= 2 for g in kept):
+            analyses.append({'id': _id(), 'name': '', 'auto_name': True, 'type': 'nested',
+                             'table': tid, 'columns': list(range(len(tags))), 'params': {}})
+
+        # 3. Cumulative distribution: one curve per cell on a shared grid
+        #    (as Cohort's ECDF graph and the Prism export); the graph shows
+        #    each group's mean curve — switch to "Each replicate" for cells.
+        pooled = [v for g in groups for c in g for v in c['values']]
+        grid = _compute_ecdf_grid(pooled)
+        cells_with = [[c for c in g if c['values']] for g in groups]
+        width = max(1, max(len(g) for g in cells_with))
+        y = []
+        subs = []
+        for g in cells_with:
+            for j in range(width):
+                y.append([float(v) for v in _ecdf_at_grid(g[j]['values'], grid)] if j < len(g) else [])
+            subs.append([g[j]['label'] if j < len(g) else '' for j in range(width)])
+        tid = _id()
+        name = f'{metric} — cumulative distribution'
+        tables.append({
+            'id': tid, 'name': name, 'type': 'xy', 'y_format': 'replicates', 'replicates': width,
+            'x_format': 'numbers', 'has_row_titles': False, 'titles': tags, 'sub_titles': subs,
+            'y': y, 'x': [float(v) for v in grid], 'x_err': [], 'row_titles': [], 'excluded': [],
+        })
+        graphs.append({'id': _id(), 'name': name, 'auto_name': False, 'table': tid,
+                       'spec': {'title': name, 'default_style': dict(_XY_LINE), 'palette': True,
+                                'x': {'title': metric}, 'y': {'title': 'Cumulative fraction'}}})
+
+        # 4. Pooled events per group (Cohort's pooled K-S test for two
+        #    independent groups).
+        cols = [[v for c in g for v in c['values']] for g in groups]
+        tid = _id()
+        name = f'{metric} — pooled events'
+        tables.append({
+            'id': tid, 'name': name, 'type': 'column', 'y_format': 'single', 'replicates': 1,
+            'x_format': 'none', 'has_row_titles': False, 'titles': tags, 'sub_titles': [[''] for _ in tags],
+            'y': cols, 'x': [], 'x_err': [], 'row_titles': [], 'excluded': [],
+        })
+        graphs.append({'id': _id(), 'name': name, 'auto_name': False, 'table': tid,
+                       'spec': {'title': name, 'default_style': dict(_BOX), 'y': {'title': metric}}})
+        if design_kind == 'unpaired_2' and len(tags) == 2:
+            analyses.append({'id': _id(), 'name': '', 'auto_name': True, 'type': 'ttest', 'table': tid,
+                             'columns': [0, 1],
+                             'params': {'design': 'unpaired', 'distribution': 'nonparametric', 'test': 'ks'}})
+
+    def add_timeseries(metric: str, tags: list[str], groups: list[list[dict]],
+                       bin_width_s: Optional[float]) -> None:
+        """A value per time bin per cell: XY, one replicate per cell; the
+        graph shows mean ± SEM per bin; two-way ANOVA (time × group).
+        Paired designs keep each cell in the same sub-column under every
+        condition (the same cell measured in every column)."""
+        cells_with = groups if paired else [[c for c in g if c['values']] for g in groups]
+        n_bins = max(len(c['values']) for g in cells_with for c in g)
+        width = max(1, max(len(g) for g in cells_with))
+        y, subs = [], []
+        for g in cells_with:
+            for j in range(width):
+                vals = list(g[j]['values']) if j < len(g) else []
+                y.append((vals + [None] * n_bins)[:n_bins] if vals else [])
+            subs.append([g[j]['label'] if j < len(g) else '' for j in range(width)])
+        x = ([i * bin_width_s / 60.0 for i in range(n_bins)] if bin_width_s
+             else [float(i) for i in range(n_bins)])
+        tid = _id()
+        name = f'{metric} — time course'
+        tables.append({
+            'id': tid, 'name': name, 'type': 'xy', 'y_format': 'replicates', 'replicates': width,
+            'x_format': 'numbers', 'has_row_titles': False, 'titles': tags, 'sub_titles': subs,
+            'y': y, 'x': x, 'x_err': [], 'row_titles': [], 'excluded': [],
+        })
+        graphs.append({'id': _id(), 'name': name, 'auto_name': False, 'table': tid,
+                       'spec': {'title': name, 'default_style': dict(_XY_POINTS_LINE), 'palette': True,
+                                'x': {'title': 'Time (min)' if bin_width_s else 'Bin'},
+                                'y': {'title': metric}}})
+        # Two-way ANOVA, time × group. Each cell is a subject measured at
+        # every time point (rows); between groups the cells differ by
+        # column, within recordings the same cell is in every column. A
+        # mixed-effects model takes over when a cell misses some bins.
+        n_cols = len([g for g in cells_with if any(c['values'] for c in g)])
+        if n_cols >= 2 and n_bins >= 2:
+            analyses.append({'id': _id(), 'name': '', 'auto_name': True, 'type': 'anova2', 'table': tid,
+                             'columns': list(range(len(tags))),
+                             'params': {'design': 'rm_both' if paired else 'rm_rows', 'rm_method': 'auto',
+                                        'compare': 'none',
+                                        'row_factor': 'Time', 'col_factor': 'Condition' if paired else 'Group'}})
+
+    def choose_branch(metric: str, tags: list[str], cols: list[list]) -> Optional[str]:
+        """The test Cohort ran — or, when its statistics weren't run, the
+        one it would choose (normality, no-variation data → rank test), so
+        the file never carries a t-test Cohort would refuse."""
+        branch = (stats.get(metric) or {}).get('branch') or branches.get(metric)
+        if branch:
+            return branch
+        r = cohort_stats.run_test([{'tag': g, 'values': v} for g, v in zip(tags, cols)],
+                                  design_kind, override if override in cohort_stats.TEST_OVERRIDES else 'auto')
+        stats.setdefault(metric, r)
+        if r.get('error'):
+            return None    # Cohort can't test it (e.g. identical counts): no test in the file either
+        return r.get('branch') or ('nonparametric' if override == 'nonparametric' else 'parametric')
+
+    def add_column_table(name: str, metric: str, tags: list[str], cols: list[list],
+                         row_titles: list[str], y_title: str) -> None:
+        """One value per cell: table, scatter / before-after graph, test."""
+        tid = _id()
+        rows = [str(x) for x in row_titles] if paired else []
+        tables.append({
+            'id': tid, 'name': name, 'type': 'column', 'y_format': 'single', 'replicates': 1,
+            'x_format': 'none', 'has_row_titles': bool(rows),
+            'titles': tags, 'sub_titles': [[''] for _ in tags],
+            'y': cols, 'x': [], 'x_err': [], 'row_titles': rows, 'excluded': [],
+        })
+        style = _BEFORE_AFTER if paired else _SCATTER_SEM
+        graphs.append({
+            'id': _id(), 'name': name, 'auto_name': False, 'table': tid,
+            'spec': {'title': name, 'default_style': dict(style), 'connect_rows': paired,
+                     'y': {'title': y_title}},
+        })
+        branch = choose_branch(metric, tags, cols)
+        an = _analysis(design_kind, branch, len(tags)) if branch else None
+        if an:
+            analyses.append({'id': _id(), 'name': '', 'auto_name': True, 'type': an[0],
+                             'table': tid, 'columns': list(range(len(tags))), 'params': an[1]})
+
     for t in payload.get('tables') or []:
         tags = [str(x) for x in t.get('tags') or []]
         cols = [[_num(v) for v in col] for col in t.get('values') or []]
         if not tags or len(cols) != len(tags) or not any(v is not None for c in cols for v in c):
             continue
         name = str(t.get('label') or t.get('metric') or 'Metric')
-        tid = _id()
-        row_titles = [str(x) for x in (t.get('row_titles') or [])] if paired else []
-        tables.append({
-            'id': tid, 'name': name, 'type': 'column', 'y_format': 'single', 'replicates': 1,
-            'x_format': 'none', 'has_row_titles': bool(row_titles),
-            'titles': tags, 'sub_titles': [[''] for _ in tags],
-            'y': cols, 'x': [], 'x_err': [], 'row_titles': row_titles, 'excluded': [],
-        })
-        style = _BEFORE_AFTER if paired else _SCATTER_SEM
-        graphs.append({
-            'id': _id(), 'name': name, 'auto_name': False, 'table': tid,
-            'spec': {'title': name, 'default_style': dict(style), 'connect_rows': paired,
-                     'y': {'title': name}},
-        })
-        # The test Cohort ran — or, when its statistics weren't run, the
-        # one it would choose (normality, no-variation data → rank test),
-        # so the file never carries a t-test Cohort would refuse.
-        metric = t.get('metric')
-        branch = (stats.get(metric) or {}).get('branch') or branches.get(metric)
-        if not branch:
-            from analysis import cohort_stats
-            r = cohort_stats.run_test([{'tag': g, 'values': v} for g, v in zip(tags, cols)],
-                                      design_kind, override if override in cohort_stats.TEST_OVERRIDES else 'auto')
-            branch = r.get('branch') or ('nonparametric' if override == 'nonparametric' else 'parametric')
-            stats.setdefault(metric, r)
-        an = _analysis(design_kind, branch, len(tags))
-        if an:
-            analyses.append({'id': _id(), 'name': '', 'auto_name': True, 'type': an[0],
-                             'table': tid, 'columns': list(range(len(tags))), 'params': an[1]})
+        add_column_table(name, str(t.get('metric') or name), tags, cols, t.get('row_titles') or [], name)
+
+    for dist in payload.get('distributions') or []:
+        metric = str(dist.get('metric') or 'Metric')
+        tags = [str(x) for x in dist.get('tags') or []]
+        groups = [[{'label': str(c.get('label') or ''), 'values': [x for x in (_num(v) for v in c.get('values') or [])
+                                                                   if x is not None]}
+                   for c in g] for g in dist.get('cells') or []]
+        if not tags or len(groups) != len(tags) or not any(c['values'] for g in groups for c in g):
+            continue
+        if dist.get('kind') == 'timeseries':
+            add_timeseries(metric, tags, groups, _num(dist.get('bin_width_s')))
+        else:
+            add_distribution(metric, tags, groups)
 
     # Info sheet: provenance, so the numbers can be traced back.
     design = payload.get('design') or {}
@@ -162,11 +322,20 @@ def build_project(payload: dict) -> dict:
                              + (f" ({r['note']})" if r.get('note') else ''))
             elif r.get('error'):
                 lines.append(f"  {m}: not computed — {r['error']}")
-    skipped = payload.get('skipped_metrics') or []
-    if skipped:
+    if payload.get('distributions'):
         lines.append('')
-        lines.append('Not included (distribution metrics; use the Excel or Prism export): '
-                     + ', '.join(skipped))
+        lines.append('Metrics with many values per cell (events, intervals …) have four tables: '
+                     'the per-cell mean (one value per cell, tested like the others), "by cell" '
+                     '(a nested table — each cell a sub-column; nested t test / ANOVA with the cell as '
+                     'the random factor, for independent groups), the cumulative distribution (a curve '
+                     'per cell; the graph shows each group\'s mean curve) and the pooled events '
+                     '(Kolmogorov-Smirnov test for two independent groups, as Cohort\'s pooled K-S). '
+                     'Time courses: an XY table, one replicate per cell, mean ± SEM per bin, with a '
+                     'two-way repeated-measures ANOVA (time × group; mixed-effects model when bins are '
+                     'missing).')
+        sub = (design.get('subsample') or {})
+        if sub.get('mode') and sub.get('mode') != 'all':
+            lines.append(f"Events per cell: {sub.get('mode')} {sub.get('n') or ''} (as in Cohort's graphs).")
     info = {'id': _id(), 'name': 'TRACER cohort',
             'fields': {'Project': os.path.basename(folder.rstrip('/\\')),
                        'Protocol': str(payload.get('analysis_type') or '')},
@@ -186,7 +355,7 @@ def write_asterism(payload: dict) -> bytes:
     ``project.json``), the same layout ASTERISM writes."""
     project = build_project(payload)
     if not project['tables']:
-        raise ValueError('No scalar metric with values to export.')
+        raise ValueError('No metric with values to export.')
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, 'w') as z:
         z.writestr(zipfile.ZipInfo('mimetype'), MIMETYPE, zipfile.ZIP_STORED)
