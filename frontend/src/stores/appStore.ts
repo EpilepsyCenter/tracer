@@ -89,6 +89,8 @@ export interface SeriesInfo {
   holding?: number
   protocol?: string
   stimulus?: StimulusInfo | null
+  /** Recording type when the file states it (NWB); otherwise guessed. */
+  kind?: 'vc' | 'cc' | 'field' | null
 }
 
 export interface GroupInfo {

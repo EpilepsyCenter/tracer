@@ -9,6 +9,7 @@ from readers.heka_native.reader import HekaNativeReader
 from readers.heka_reader import HekaReader
 from readers.abf_reader import AbfReader
 from readers.neo_reader import NeoReader
+from readers.nwb_reader import NwbReader
 from readers.text_reader import TextReader
 from readers.models import Recording
 
@@ -28,7 +29,7 @@ _original_units: dict[str, str] | None = None
 # Order matters — binary readers first so an ambiguous extension
 # (e.g. ``.dat``, ``.txt``) is given to the format-specific reader
 # before the generic text fallback.
-READERS = [HekaNativeReader(), HekaReader(), AbfReader(), NeoReader(), TextReader()]
+READERS = [HekaNativeReader(), HekaReader(), AbfReader(), NwbReader(), NeoReader(), TextReader()]
 
 
 def get_current_recording() -> Recording:

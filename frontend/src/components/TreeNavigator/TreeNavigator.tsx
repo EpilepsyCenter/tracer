@@ -3,6 +3,7 @@ import { useAppStore, SeriesInfo } from '../../stores/appStore'
 
 /** Guess recording type from series label, protocol, or units */
 function guessRecordingType(series: SeriesInfo): 'vc' | 'cc' | 'field' | 'unknown' {
+  if (series.kind) return series.kind
   const label = (series.label || '').toLowerCase()
   const protocol = (series.protocol || '').toLowerCase()
   const combined = label + ' ' + protocol

@@ -80,6 +80,8 @@ class Series:
     cm: Optional[float] = None  # membrane capacitance (pF)
     timestamp: Optional[float] = None  # Unix timestamp
     stimulus: Optional[StimulusInfo] = None  # parsed test-pulse info, if any
+    # 'vc' / 'cc' / 'field' when the file states it (NWB); None = guess
+    kind: Optional[str] = None
 
     @property
     def sweep_count(self) -> int:
@@ -165,6 +167,7 @@ class Recording:
                             "cm": s.cm,
                             "holding": s.holding,
                             "protocol": s.protocol,
+                            "kind": s.kind,
                             "stimulus": {
                                 "unit": s.stimulus.unit,
                                 "vHold": s.stimulus.v_hold,

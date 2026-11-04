@@ -4,6 +4,8 @@ numpy>=1.26.0
 scipy>=1.14.0
 pyabf>=2.3.8
 neo>=0.13.0
+# NWB (.nwb) reading and writing.
+pynwb>=3.1.0
 myokit>=1.35.0
 pydantic>=2.10.0
 msgpack>=1.1.0

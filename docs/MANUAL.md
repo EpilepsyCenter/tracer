@@ -77,12 +77,13 @@ fully-tested formats are:
 |---|---|---|
 | HEKA Patchmaster | `.dat` | Multi-group, multi-series; stimulus reconstructed from the accompanying `.pgf` if present |
 | Axon Binary | `.abf` | ABF1 and ABF2; gap-free and episodic |
+| Neurodata Without Borders | `.nwb` | NWB 2.x patch-clamp and extracellular recordings; see below |
 | Plain text | `.csv`, `.tsv`, `.txt`, `.atf` | Routed through the **Text Import Wizard** for column mapping and unit assignment |
 
 In addition, TRACER can open a wider range of formats through
 the [Neo](https://neuralensemble.org/neo/) library — including
 Axograph (`.axgd`, `.axgx`), WinWCP (`.wcp`), Spike2 (`.smr`),
-NWB (`.nwb`), NIX (`.nix`), NeoHDF5 (`.h5`), Plexon (`.plx`),
+NIX (`.nix`), NeoHDF5 (`.h5`), Plexon (`.plx`),
 Blackrock (`.nev`, `.ns5`), Intan (`.rhd`, `.rhs`), Micromed
 (`.mcd`), and EDF/BDF (`.edf`, `.bdf`). These work in principle but
 have not been exercised on a wide variety of real-world files; if
@@ -90,6 +91,28 @@ you open one and something looks wrong — units misreported, sweeps
 collapsed together, channels missing — please report it. Treat them
 as supported-but-experimental until your particular variant has
 been verified.
+
+**NWB files.** TRACER reads the recordings in an NWB file and lays
+them out like any other recording:
+
+- *Patch clamp.* Each cell (electrode) is a group; for a paired
+  recording, the two electrodes recorded together share one group.
+  Each protocol run is a series, named after its protocol, and holds
+  its sweeps. Every sweep shows the recorded response (*Im* in voltage
+  clamp, *Vm* in current clamp) followed by the stimulus the amplifier
+  applied. The VC / CC badge comes from the file rather than being
+  guessed from the series name.
+- *Extracellular (field, LFP).* Each recording is one series in an
+  **Extracellular** group, with one channel per electrode, named from
+  the file's electrode table.
+
+Values are converted to mV and pA. If a file's units are wrong (some
+public files label microvolts as volts), correct them in **File ▸ Channel
+Scaling…** (chapter 2). NWB content that isn't a voltage or current
+recording (behaviour, images, spike-sorting results) is not shown.
+Extracellular recordings with more than 150 million samples in total
+(e.g. Neuropixels probes) are skipped, because TRACER keeps the
+recording in memory.
 
 Once a file opens, the **Tree Navigator** on the left fills with the
 recording's structure (groups, series, sweeps), the first sweep
@@ -418,9 +441,9 @@ single series at a time. Each row carries:
 
 - **A type badge** — *VC* (voltage clamp), *CC* (current clamp), or
   *FP* (field potential) — colour-coded so you can tell at a glance
-  what kind of recording you are looking at. TRACER guesses the
-  type from the series label, the protocol, and the holding
-  potential; if it is wrong, you can override the channel units in
+  what kind of recording you are looking at. NWB files state the
+  type; for other formats TRACER guesses it from the series label,
+  the protocol, and the holding potential. If it is wrong, you can override the channel units in
   the **Scaling** dialog.
 
 - **A sweep-count badge** showing how many sweeps the series
