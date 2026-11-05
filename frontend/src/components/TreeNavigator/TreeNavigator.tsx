@@ -4,6 +4,10 @@ import { useAppStore, SeriesInfo } from '../../stores/appStore'
 /** Guess recording type from series label, protocol, or units */
 function guessRecordingType(series: SeriesInfo): 'vc' | 'cc' | 'field' | 'unknown' {
   if (series.kind) return series.kind
+  // The command unit is the clearest sign: mV commands = voltage clamp,
+  // pA commands = current clamp ("I-V" step protocols are often CC).
+  if (series.stimulus?.unit === 'mV') return 'vc'
+  if (series.stimulus?.unit === 'pA') return 'cc'
   const label = (series.label || '').toLowerCase()
   const protocol = (series.protocol || '').toLowerCase()
   const combined = label + ' ' + protocol

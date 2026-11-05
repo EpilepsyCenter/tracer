@@ -15,6 +15,7 @@ import {
   type ChangelogEntry, WhatsNewDialog, checkWhatsNewOnStartup, entriesForMenu,
 } from './components/WhatsNew/WhatsNew'
 import { BugReportModal } from './components/BugReportModal/BugReportModal'
+import { NwbExportDialog } from './components/NwbExport/NwbExportDialog'
 import { useGlobalTooltips } from './hooks/useGlobalTooltips'
 
 // Same rule as the toolbar / start page: text recordings open through
@@ -87,6 +88,13 @@ export default function App() {
   // the ``open-bug-report`` window event, dispatched by the toolbar
   // button (and by analysis windows over BroadcastChannel below).
   const [showBugReport, setShowBugReport] = useState(false)
+  const [showNwbExport, setShowNwbExport] = useState(false)
+  // File ▸ Export as NWB… and the command palette both send this event.
+  useEffect(() => {
+    const onOpen = () => { if (useAppStore.getState().recording) setShowNwbExport(true) }
+    window.addEventListener('open-nwb-export', onOpen)
+    return () => window.removeEventListener('open-nwb-export', onOpen)
+  }, [])
   useEffect(() => {
     const onOpen = () => setShowBugReport(true)
     window.addEventListener('open-bug-report', onOpen)
@@ -150,6 +158,7 @@ export default function App() {
         case 'close-file': useAppStore.getState().closeFile().catch(() => { /* ignore */ }); break
         case 'open-settings': window.dispatchEvent(new CustomEvent('open-settings')); break
         case 'open-scaling': window.dispatchEvent(new CustomEvent('open-scaling-modal', { detail: {} })); break
+        case 'export-nwb': window.dispatchEvent(new CustomEvent('open-nwb-export')); break
         case 'open-help': setShowHelp(true); break
         case 'whats-new': setWhatsNew(entriesForMenu()); break
         case 'open-bug-report': setShowBugReport(true); break
@@ -245,6 +254,7 @@ export default function App() {
         onClose={() => setShowBugReport(false)}
         view="main"
       />
+      {showNwbExport && <NwbExportDialog onClose={() => setShowNwbExport(false)} />}
     </div>
   )
 }

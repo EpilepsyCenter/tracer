@@ -125,6 +125,65 @@ To switch to a different recording, simply open another file —
 TRACER replaces the current one. There is no separate close
 command; closing the application window quits the program.
 
+### Exporting as NWB
+
+**File ▸ Export as NWB…** writes the open recording as a
+Neurodata Without Borders file, the format the
+[DANDI archive](https://dandiarchive.org) and many journals and
+funders ask for when data is shared. It works for any recording
+TRACER opens (HEKA, ABF, NWB, text, …). The file holds the recorded
+traces, the stimuli and the details you give; analysis results stay
+in TRACER.
+
+The window has three parts:
+
+- **Subject**: animal ID, species, sex, age, and optionally genotype,
+  strain and a description. DANDI requires the first four; the
+  footer lists any that are still empty. The animal ID starts from
+  the recording's tags (chapter 17).
+- **Recording**: a description, when the recording started (read
+  from HEKA and ABF files; fill it in for formats that don't store
+  it), what the experiment tests, keywords (starting from the file's
+  tags), the brain region, and the experimenter, lab and institution.
+  For the brain region, Allen Brain Atlas names such as *Field CA1*
+  or *Dentate gyrus* pass DANDI's check.
+- **Series**: the recording type of each series, which decides how
+  NWB stores it: *Voltage clamp*, *Current clamp*, *Field /
+  extracellular*, or *Skip* to leave it out. TRACER fills these in
+  the same way as the tree's VC / CC / FP badges; check them before
+  exporting. If sweeps are marked as excluded, a checkbox leaves them
+  out.
+
+Everything except the recording's own description, start time,
+experiment and keywords is remembered for the next export, so
+consecutive cells from one animal need only a check.
+
+How the recording is stored:
+
+- **Patch clamp**: each cell (group) is an electrode; a paired
+  recording gets two. Every sweep is stored as the recorded response
+  with its stimulus: a recorded command channel when there is one,
+  otherwise (HEKA) the command waveform rebuilt from the PatchMaster
+  protocol. Sweeps are grouped into protocol runs named after the
+  protocol, using NWB's tables for intracellular recordings.
+- **Field / extracellular**: each sweep is stored with one column per
+  voltage channel; the channels become electrodes named after them.
+- Values are stored after any **Channel Scaling**, as mV and pA with
+  NWB's conversion to volts and amperes, and compressed. Start times
+  of each sweep come from the file when it records them.
+
+After writing, TRACER runs the **NWB Inspector**, the NWB project's
+own checking tool, with DANDI's settings, and lists what it reports:
+
+- **Errors** and **Must fix before depositing on DANDI**: the file
+  would be rejected (most often a missing subject field).
+- **Should fix** and **Suggestions**: best-practice advice, such as
+  a brain region that isn't an Allen Atlas name or a missing
+  experiment description. The file is valid without them.
+
+Opening the exported file in TRACER shows the same series, sweeps,
+channels and values as the original.
+
 ### What's new after an update
 
 The first time a new version of TRACER starts — after an in-app update
@@ -197,8 +256,9 @@ TRACER has a standard menu bar — at the top of the screen on macOS,
 inside the window on Windows and Linux:
 
 - **File** — **Open…** (`⌘O` / `Ctrl+O`), **Open Recent**, **Close
-  Recording** (back to the start page) and **Channel Scaling…**
-  (the per-channel units and scaling dialog described below). On
+  Recording** (back to the start page), **Channel Scaling…**
+  (the per-channel units and scaling dialog described below) and
+  **Export as NWB…** (chapter 1, *Exporting as NWB*). On
   Windows and Linux, **Settings…** (`Ctrl+,`) is here too; on macOS
   it is under the **TRACER** menu (`⌘,`).
 - **Edit** — the usual undo, cut, copy, paste and select-all for text

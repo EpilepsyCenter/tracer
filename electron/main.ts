@@ -208,6 +208,11 @@ function buildAppMenu() {
         enabled: menuHasRecording,
         click: () => sendMenuAction('open-scaling'),
       },
+      {
+        label: 'Export as NWB…',
+        enabled: menuHasRecording,
+        click: () => sendMenuAction('export-nwb'),
+      },
       { type: 'separator' },
       ...(isMac ? [] : [
         { label: 'Settings…', accelerator: 'Ctrl+,', click: () => sendMenuAction('open-settings') },
@@ -634,6 +639,12 @@ ipcMain.handle('open-folder-dialog', async (_event, defaultPath?: string) => {
     defaultPath: defaultPath || undefined,
   })
   return result.canceled ? null : result.filePaths[0]
+})
+
+// Reveal a file in Finder / Explorer (e.g. after an export).
+ipcMain.handle('show-item-in-folder', (_event, p: string) => {
+  if (typeof p === 'string' && p) shell.showItemInFolder(p)
+  return true
 })
 
 ipcMain.handle('save-file-dialog', async (event, defaultName: string, filters: Electron.FileFilter[]) => {

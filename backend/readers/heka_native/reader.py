@@ -111,6 +111,7 @@ class HekaNativeReader(BaseReader):
                     index=series_idx,
                     label=series_label,
                     protocol=pul_series.method_name or pul_series.label,
+                    timestamp=_heka_unix_time(pul_series.time),
                 )
 
                 # Match stimulation by linear index
@@ -136,6 +137,7 @@ class HekaNativeReader(BaseReader):
                     sweep = Sweep(
                         index=len(series.sweeps),
                         label=pul_sweep.label or f'Sweep {len(series.sweeps) + 1}',
+                        time=_heka_unix_time(pul_sweep.time),
                     )
 
                     for pul_trace in pul_sweep.traces:
@@ -318,3 +320,17 @@ def _convert_si_to_display(y_unit: str, values: np.ndarray) -> tuple[str, np.nda
         return u, values
     else:
         return 'pA', values * 1e12  # default: assume Amps
+
+
+# PatchMaster stores times as seconds since 1904-01-01 (Mac epoch) plus a
+# fixed 1580970496 s offset; subtracting both gives Unix time (UTC).
+_HEKA_UNIX_OFFSET = 1580970496.0 + 2082844800.0
+
+
+def _heka_unix_time(t: float) -> float | None:
+    try:
+        u = float(t) - _HEKA_UNIX_OFFSET
+    except (TypeError, ValueError):
+        return None
+    # Plausible range: 1990 to 2100; anything else is an unset field.
+    return u if 631152000.0 < u < 4102444800.0 else None

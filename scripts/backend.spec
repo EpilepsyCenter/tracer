@@ -5,7 +5,7 @@
 # `<resources>/backend/main`, and package.json's `extraResources` maps
 # `backend-dist/` -> `<resources>/backend/`.
 
-from PyInstaller.utils.hooks import collect_submodules, collect_data_files
+from PyInstaller.utils.hooks import collect_submodules, collect_data_files, copy_metadata
 from pathlib import Path
 
 PROJECT = Path(SPECPATH).resolve().parent
@@ -36,6 +36,7 @@ hidden += collect_submodules('scipy')
 # NWB: pynwb / hdmf load their type maps and schema (YAML) at import.
 hidden += collect_submodules('pynwb')
 hidden += collect_submodules('hdmf')
+hidden += collect_submodules('nwbinspector')
 
 datas = []
 datas += collect_data_files('neo')
@@ -51,6 +52,12 @@ datas += collect_data_files('pzfx')
 # import; without them `import pynwb` fails in the bundled backend.
 datas += collect_data_files('pynwb')
 datas += collect_data_files('hdmf')
+# nwbinspector's DANDI config (YAML) is read from the package folder.
+datas += collect_data_files('nwbinspector')
+# ...and it looks up its own version (importlib.metadata) when it runs.
+datas += copy_metadata('nwbinspector')
+datas += copy_metadata('pynwb')
+datas += copy_metadata('hdmf')
 # Bundled JetBrains Mono — used by cohort_graphs to render every
 # matplotlib chart in the app's mono. ``backend/assets/fonts/`` is
 # read by ``backend/utils/fonts.py`` via a path relative to its

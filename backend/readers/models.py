@@ -35,6 +35,7 @@ class Sweep:
     index: int
     traces: list[Trace] = field(default_factory=list)
     label: str = ""
+    time: Optional[float] = None  # start, Unix seconds (when the file records it)
 
     @property
     def trace_count(self) -> int:

@@ -143,6 +143,15 @@ export function CommandPalette() {
       run: handleOpenFile,
     })
 
+    if (recording) {
+      cmds.push({
+        id: 'file.exportNwb', group: 'File', icon: 'download',
+        label: 'Export as NWB…',
+        keywords: 'neurodata without borders dandi share deposit save',
+        run: () => { window.dispatchEvent(new CustomEvent('open-nwb-export')) },
+      })
+    }
+
     recentFiles.slice(0, 8).forEach((p) => {
       const fname = p.split(/[/\\]/).pop() || p
       cmds.push({

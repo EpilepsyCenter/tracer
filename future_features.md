@@ -6,7 +6,8 @@ commitment. Last reviewed 2026-11-04 (before the 1.2.0 release).
 Shipped from earlier versions of this list: startup splash screen,
 Spectral Analysis, dual-site propagation (Burst window), two-channel
 coupling (Spectral window), per-cell quality control in Cohort, the
-Batch fidelity audit, readable metric names and notes on the trace.
+Batch fidelity audit, readable metric names, notes on the trace,
+stacked channels and NWB reading / export.
 
 ---
 
@@ -21,10 +22,12 @@ window's detection.
 
 ### Smaller ideas
 
+- **NWB folder export** — export a whole folder (one NWB file per
+  recording, into a separate folder) with one Inspector summary, for
+  depositing a dataset on DANDI. Then list TRACER on the NWB
+  community tools page (pull request to nwb-overview).
 - **Comparing analysis states** — the same recording's results under
   two parameter sets or two dates: what changed?
-- **NWB export** — write recordings back as NWB (read already works
-  via Neo).
 - **Custom export columns** — user-defined CSV columns computed from
   existing per-event fields.
 
