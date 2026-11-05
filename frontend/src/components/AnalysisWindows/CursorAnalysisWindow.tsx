@@ -1667,7 +1667,7 @@ function MiniViewer({
 
   // Redraw on cursor / slot / result changes so bands and fit overlays
   // track the latest state. stateRef has already been updated above.
-  useEffect(() => { plotRef.current?.redraw() }, [baseline, slots, measurements, previewSweep, displayYOffset])
+  useEffect(() => { plotRef.current?.redraw(false) }, [baseline, slots, measurements, previewSweep, displayYOffset])
 
   return (
     <div

@@ -995,7 +995,7 @@ function IVPlot({
 
   // Redraw to update the selected-marker highlight.
   useEffect(() => {
-    plotRef.current?.redraw()
+    plotRef.current?.redraw(false)
   }, [entry?.selectedIdx])
 
   void sweepByIdx  // kept for potential future use
@@ -1554,8 +1554,8 @@ function TraceMiniViewer({
   }, [traceTime, traceValues, themeKey])
 
   // Redraw bands on cursor / theme changes.
-  useEffect(() => { plotRef.current?.redraw() }, [cursors])
-  useEffect(() => { plotRef.current?.redraw() }, [theme, fontSize])
+  useEffect(() => { plotRef.current?.redraw(false) }, [cursors])
+  useEffect(() => { plotRef.current?.redraw(false) }, [theme, fontSize])
 
   useEffect(() => {
     const el = containerRef.current

@@ -2146,7 +2146,7 @@ function OverlayViewer({
   }, [xRange, preData, postData])
 
   // Redraw on overlay-data changes (refs already hold the values).
-  useEffect(() => { plotRef.current?.redraw() },
+  useEffect(() => { plotRef.current?.redraw(false) },
     [detectionMarkers, postPeakMarkers,
      preBounds, postBounds, showPreBounds, showPostBounds])
 

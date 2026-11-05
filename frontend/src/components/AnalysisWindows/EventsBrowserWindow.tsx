@@ -1237,7 +1237,7 @@ function AllEventsOverlayPanel({
 
   // Cheap redraw when the highlight rank changes — avoids rebuilding
   // the whole uPlot instance for every step through the distance list.
-  useEffect(() => { plotRef.current?.redraw() }, [highlightedRowIdx])
+  useEffect(() => { plotRef.current?.redraw(false) }, [highlightedRowIdx])
 
   // ---- Most-Distant nav handlers ----
   const stepDistant = useCallback((delta: number) => {

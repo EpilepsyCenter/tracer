@@ -2122,7 +2122,11 @@ function FPspOverTimeGraph({
     return () => cancelAnimationFrame(raf)
   }, [heightSignal])
 
-  useEffect(() => { plotRef.current?.redraw() }, [entry?.selectedIdx])
+  // redraw(false): repaint the marker only. A plain redraw() re-applies
+  // the current x range, and right after the plot is built that range
+  // isn't set yet, so the plot came up blank (same for the other
+  // overlay-only redraws in the analysis windows).
+  useEffect(() => { plotRef.current?.redraw(false) }, [entry?.selectedIdx])
 
   if (!entry || xs.length === 0) {
     return (
@@ -2854,16 +2858,16 @@ function FPspSweepViewer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [traceTime, traceValues, themeKey])
 
-  useEffect(() => { plotRef.current?.redraw() }, [cursors])
-  useEffect(() => { plotRef.current?.redraw() }, [theme, fontSize])
+  useEffect(() => { plotRef.current?.redraw(false) }, [cursors])
+  useEffect(() => { plotRef.current?.redraw(false) }, [theme, fontSize])
   // Redraw when the marker point (selected row) changes so the
   // detection dots update without rebuilding the plot. Same for
   // zero-offset toggling — the dots need to shift with the trace.
-  useEffect(() => { plotRef.current?.redraw() }, [markerPoint, markerEntry, zeroOffsetApplied])
+  useEffect(() => { plotRef.current?.redraw(false) }, [markerPoint, markerEntry, zeroOffsetApplied])
   // PPR cursor bands live outside the main cursor store, so redraw
   // on their changes too (moving V1/F1 + clicking "Place V2/F2 from
   // ISI" must show the new positions immediately).
-  useEffect(() => { plotRef.current?.redraw() }, [pprBands])
+  useEffect(() => { plotRef.current?.redraw(false) }, [pprBands])
 
   useEffect(() => {
     const el = containerRef.current
@@ -3297,7 +3301,7 @@ function IOScatter({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [xs, ys, metric, entry?.responseUnit, entry?.ioUnit, themeKey])
 
-  useEffect(() => { plotRef.current?.redraw() }, [entry?.selectedIdx])
+  useEffect(() => { plotRef.current?.redraw(false) }, [entry?.selectedIdx])
 
   useEffect(() => {
     const el = containerRef.current
@@ -3664,7 +3668,7 @@ function PPRScatter({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [xs, ys, metric, entry?.responseUnit, themeKey])
 
-  useEffect(() => { plotRef.current?.redraw() }, [entry?.selectedIdx])
+  useEffect(() => { plotRef.current?.redraw(false) }, [entry?.selectedIdx])
 
   useEffect(() => {
     const el = containerRef.current
