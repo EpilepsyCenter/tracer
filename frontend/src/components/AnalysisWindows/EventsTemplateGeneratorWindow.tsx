@@ -1064,7 +1064,7 @@ function TemplateGeneratorViewer({
   }, [])
 
   useEffect(() => {
-    plotRef.current?.redraw()
+    plotRef.current?.redraw(false)
   }, [cursors, activeTemplate])
 
   return (

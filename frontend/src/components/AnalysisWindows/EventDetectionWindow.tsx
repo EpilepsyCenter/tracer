@@ -3669,7 +3669,7 @@ function EventsSweepViewer({
   // trains change. ``trainsForSweep`` flows in via a ref read inside
   // ``drawOverlays``, so a redraw is the only way to refresh the
   // shaded train spans without rebuilding the plot.
-  useEffect(() => { plotRef.current?.redraw() },
+  useEffect(() => { plotRef.current?.redraw(false) },
     [cursors, entry, params, baselineCurve, trainsForSweep])
 
   return (

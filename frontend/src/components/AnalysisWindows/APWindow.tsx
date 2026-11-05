@@ -3336,7 +3336,7 @@ function APSweepViewer({
   // without rebuilding the plot.
   const showBoundsRef = useRef(showBounds)
   showBoundsRef.current = showBounds
-  useEffect(() => { plotRef.current?.redraw() }, [showBounds])
+  useEffect(() => { plotRef.current?.redraw(false) }, [showBounds])
 
   // Per-sweep trains, mirrored in a ref so the imperative
   // ``drawOverlays`` callback (registered once on plot init) reads
@@ -3344,7 +3344,7 @@ function APSweepViewer({
   // triggered by the dedicated useEffect below.
   const trainsRef = useRef<TrainSummary[]>(trainsForSweep)
   trainsRef.current = trainsForSweep
-  useEffect(() => { plotRef.current?.redraw() }, [trainsForSweep])
+  useEffect(() => { plotRef.current?.redraw(false) }, [trainsForSweep])
 
   // Windowed mode: the viewport owns the x range. Y is left alone so
   // scrolling never resets a Y zoom (same as the Events window).
@@ -3943,8 +3943,8 @@ function APSweepViewer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [traceTime, traceValues, zeroOffsetApplied, themeKey])
 
-  useEffect(() => { plotRef.current?.redraw() }, [boundsStartS, boundsEndS])
-  useEffect(() => { plotRef.current?.redraw() }, [previewSpikes, entry, theme, fontSize])
+  useEffect(() => { plotRef.current?.redraw(false) }, [boundsStartS, boundsEndS])
+  useEffect(() => { plotRef.current?.redraw(false) }, [previewSpikes, entry, theme, fontSize])
 
   // Resize on container size changes (splitter drag, window resize)
   // and on heightSignal bumps (parent's topHeight). Same 0-dim guard
@@ -4557,7 +4557,7 @@ function APSpikesOverlayViewer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slices, spikesToShow, hideMarkers, themeKey, units])
 
-  useEffect(() => { plotRef.current?.redraw() }, [hideMarkers])
+  useEffect(() => { plotRef.current?.redraw(false) }, [hideMarkers])
 
   useEffect(() => {
     const el = containerRef.current

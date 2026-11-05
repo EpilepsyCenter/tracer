@@ -1096,7 +1096,7 @@ export function ResistanceWindow({
 
   // Redraw when cursors change (so the band overlays follow the drag
   // without rebuilding the whole plot).
-  useEffect(() => { tracePlotRef.current?.redraw() }, [cursors])
+  useEffect(() => { tracePlotRef.current?.redraw(false) }, [cursors])
 
   useEffect(() => {
     const el = traceChartRef.current
@@ -1111,7 +1111,7 @@ export function ResistanceWindow({
   }, [])
 
   // Redraw on theme change — band colors resolve at draw time via cssVar.
-  useEffect(() => { tracePlotRef.current?.redraw() }, [theme, fontSize])
+  useEffect(() => { tracePlotRef.current?.redraw(false) }, [theme, fontSize])
 
   // ---- CSV export ----
   const exportCSV = () => {
