@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Optional
@@ -421,6 +422,8 @@ def _build_ecephys(nwb, recording: Recording, t0: Optional[float]) -> list[str]:
             recording.groups.append(groups[label])
         return groups[label]
 
+    order: dict[int, tuple] = {}      # id(sweep) -> (start time, name) of a tagged sweep
+
     for es in _electrical_series(nwb):
         shape = es.data.shape
         n_ch = shape[1] if len(shape) > 1 else 1
@@ -446,12 +449,35 @@ def _build_ecephys(nwb, recording: Recording, t0: Optional[float]) -> list[str]:
         sweep = Sweep(index=len(ser.sweeps), label=f"Sweep {len(ser.sweeps) + 1}")
         if t0 is not None:
             sweep.time = t0 + _start_time(es)
+        if tag is not None:
+            order[id(sweep)] = (_start_time(es), _natural_key(es.name))
         for c in range(n_ch):
             extra = float(conv[c]) if conv is not None and c < len(conv) else 1.0
             sweep.traces.append(_trace(es, labels[c] if c < len(labels) else f"Ch {c + 1}",
                                        column=c if len(shape) > 1 else None, extra_scale=extra))
         ser.sweeps.append(sweep)
+
+    # pynwb lists objects by name, so "sweep 10" comes before "sweep 2".
+    # Put the sweeps of TRACER-exported series, and the series of their
+    # groups, back in recording order.
+    for ser in tagged.values():
+        ser.sweeps.sort(key=lambda sw: order[id(sw)])
+        for i, sw in enumerate(ser.sweeps):
+            sw.index, sw.label = i, f"Sweep {i + 1}"
+        if ser.sweeps and ser.sweeps[0].time is not None:
+            ser.timestamp = ser.sweeps[0].time
+    exported = {id(s) for s in tagged.values()}
+    for grp in groups.values():
+        if grp.series_list and all(id(s) in exported for s in grp.series_list):
+            grp.series_list.sort(key=lambda s: order[id(s.sweeps[0])])
+            for i, s in enumerate(grp.series_list):
+                s.index = i
     return skipped
+
+
+def _natural_key(name: str) -> list:
+    """Sort key that puts "sweep 2" before "sweep 10"."""
+    return [int(p) if p.isdigit() else p for p in re.split(r"(\d+)", name)]
 
 
 # ---------------------------------------------------------------------------

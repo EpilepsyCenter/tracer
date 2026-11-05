@@ -127,6 +127,23 @@ with tempfile.TemporaryDirectory() as tmp:
         check(abs(s1.sweeps[3].time - (1_700_000_000.0 + 30)) < 1e-3, 'field sweep time')
     check(not bad_messages(str(out)), f'field inspector: {bad_messages(str(out))[:2]}')
 
+    # 3b. Field sweeps and series come back in recording order, not name
+    #     order ("sweep 10" before "sweep 2", "Baseline" before "Test").
+    g = Group(index=0, label='Slice 3')
+    for i, (label, n) in enumerate((('Test', 12), ('Baseline', 3))):
+        s = Series(index=i, label=label, timestamp=1_700_000_000.0 + 1000 * i)
+        for k in range(n):
+            s.sweeps.append(Sweep(index=k, time=1_700_000_000.0 + 1000 * i + 15 * k,
+                                  traces=[Trace(np.full(100, float(k)), 10000.0, 'mV', 'CA1')]))
+        g.series_list.append(s)
+    rec = Recording(file_path='x', file_name='x', format='Text', groups=[g])
+    out = tmp / 'order.nwb'
+    write_nwb(rec, str(out), META, {'0:0': 'field', '0:1': 'field'}, None, None)
+    back = NwbReader().read(str(out)).groups[0].series_list
+    check([s.label for s in back] == ['Test', 'Baseline'], f'series order {[s.label for s in back]}')
+    check([round(float(w.traces[0].data[0])) for w in back[0].sweeps] == list(range(12)), 'sweep order')
+    check(all(b.time > a.time for a, b in zip(back[0].sweeps, back[0].sweeps[1:])), 'sweep times not increasing')
+
     # 4. Paired patch from a public NWB file: two electrodes per sweep, recorded commands.
     pub = ROOT / 'sample_data' / 'nwb_public' / 'icephys_000245_spinal.nwb'
     if pub.exists():
