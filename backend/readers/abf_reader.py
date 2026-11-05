@@ -42,6 +42,9 @@ class AbfReader(BaseReader):
             t0 = abf.abfDateTime.timestamp()
         except Exception:
             pass
+        # Some files carry an unset or garbage date (e.g. year 1806).
+        if t0 is not None and not (315532800.0 < t0 < 4102444800.0):   # 1980–2100
+            t0 = None
         try:
             sweep_times = [float(t) for t in abf.sweepTimesSec]
         except Exception:

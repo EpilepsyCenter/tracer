@@ -62,31 +62,39 @@ _FIELD_RE = re.compile(r"field|fepsp|epsp|pop.?spike|lfp|extracell")
 
 
 def guess_kind(ser: Series) -> str:
-    """Same order as the tree badge: the file's own type, the series name,
-    the stimulus / holding, then the channel units."""
+    """The file's own type, else the command unit, the series name and the
+    channel units — then made consistent with the channels: voltage clamp
+    needs a current channel, current clamp a voltage channel."""
     if ser.kind in KINDS:
         return ser.kind
+    first = ser.sweeps[0].traces if ser.sweeps else []
+    fams = {unit_info(t.units)[0] for t in first}
+    has_i, has_v = "current" in fams, "voltage" in fams
+    if not has_i and not has_v:
+        return "skip"
     # The command unit is the clearest sign: mV commands = voltage clamp,
     # pA commands = current clamp ("I-V" step protocols are often CC).
-    if ser.stimulus is not None:
-        if ser.stimulus.unit == "mV":
-            return "vc"
-        if ser.stimulus.unit == "pA":
-            return "cc"
-    text = f"{ser.label} {ser.protocol}".lower()
-    if _CC_RE.search(text):
+    # An mV command with only voltage channels is a field recording with an
+    # external stimulator (e.g. fEPSP / LTP from a patch amplifier).
+    if ser.stimulus is not None and ser.stimulus.unit == "mV":
+        return "vc" if has_i else "field"
+    if ser.stimulus is not None and ser.stimulus.unit == "pA":
+        kind = "cc"
+    else:
+        text = f"{ser.label} {ser.protocol}".lower()
+        if _CC_RE.search(text):
+            kind = "cc"
+        elif _VC_RE.search(text):
+            kind = "vc"
+        elif _FIELD_RE.search(text):
+            kind = "field"
+        else:
+            kind = "vc" if has_i else "cc"
+    if kind == "vc" and not has_i:
         return "cc"
-    if _VC_RE.search(text):
+    if kind in ("cc", "field") and not has_v:
         return "vc"
-    if _FIELD_RE.search(text):
-        return "field"
-    first = ser.sweeps[0].traces[0] if ser.sweeps and ser.sweeps[0].traces else None
-    fam = unit_info(first.units)[0] if first else None
-    if fam == "current":
-        return "vc"
-    if fam == "voltage":
-        return "cc"
-    return "skip"
+    return kind
 
 
 def plan(rec: Recording) -> dict:
@@ -241,6 +249,8 @@ def write_nwb(rec: Recording, path: str, meta: dict, kinds: dict[str, str],
             start_ts = None
     if start_ts is None:
         start_ts = pl["recordingStart"]
+    if start_ts is not None and not (315532800.0 < start_ts < 4102444800.0):   # 1980–2100
+        start_ts = None
     if start_ts is None:
         start_ts = os.path.getmtime(rec.file_path) if os.path.exists(rec.file_path) else 0.0
         result.notes.append("The recording doesn't store when it was made; "
@@ -492,3 +502,107 @@ def inspect(path: str) -> list[dict]:
     order = {"error": 0, "critical": 1, "violation": 2, "suggestion": 3}
     out.sort(key=lambda r: order.get(r["level"], 9))
     return out
+
+
+# ---------------------------------------------------------------------------
+# Folder export: per-file settings from the sidecar
+# ---------------------------------------------------------------------------
+
+# Formats exported from a folder. Text files need the import wizard's
+# settings and NWB files are already NWB, so neither is included.
+FOLDER_EXTENSIONS = {".dat", ".abf", ".wcp", ".axgd", ".axgx", ".smr", ".h5"}
+
+
+def read_sidecar(path: str) -> dict:
+    """The recording's ``.tracer`` sidecar, or {} when there is none."""
+    sc = path + ".tracer"
+    if not os.path.exists(sc):
+        return {}
+    try:
+        with open(sc, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def apply_scale_overrides(rec: Recording, overrides: dict) -> int:
+    """Apply the sidecar's Channel Scaling (``"<channel>|<file units>"`` →
+    units / y_scale / y_offset), as the app does on opening. Returns the
+    number of traces changed."""
+    parsed = {}
+    for key, o in (overrides or {}).items():
+        ch, _, units = str(key).partition("|")
+        try:
+            parsed[(int(ch), units)] = o
+        except ValueError:
+            continue
+    n = 0
+    for g in rec.groups:
+        for s in g.series_list:
+            for sw in s.sweeps:
+                for ci, tr in enumerate(sw.traces):
+                    o = parsed.get((ci, tr.units))
+                    if not o:
+                        continue
+                    tr.y_scale = float(o.get("y_scale", 1.0))
+                    tr.y_offset = float(o.get("y_offset", 0.0))
+                    tr.units = o.get("units") or tr.units
+                    n += 1
+    return n
+
+
+def scan_folder(folder: str, recursive: bool, out_dir: Optional[str] = None) -> dict:
+    """Recordings in ``folder`` with what their sidecars say (no file is
+    read, so this is quick)."""
+    out_abs = os.path.abspath(out_dir) if out_dir else None
+    files, skipped_text, skipped_nwb = [], 0, 0
+    for root, dirs, names in os.walk(folder):
+        if out_abs:
+            dirs[:] = [d for d in dirs if os.path.abspath(os.path.join(root, d)) != out_abs]
+        dirs.sort()
+        for name in sorted(names):
+            ext = os.path.splitext(name)[1].lower()
+            path = os.path.join(root, name)
+            if ext in (".csv", ".tsv", ".txt", ".atf"):
+                skipped_text += 1
+                continue
+            if ext == ".nwb":
+                skipped_nwb += 1
+                continue
+            if ext not in FOLDER_EXTENSIONS:
+                continue
+            sc = read_sidecar(path)
+            meta = sc.get("meta") or {}
+            tags = list(meta.get("group_tags") or [])
+            for lst in (meta.get("series_tags") or {}).values():
+                for t in lst or []:
+                    if t not in tags:
+                        tags.append(t)
+            excl = sc.get("excluded_sweeps") or {}
+            files.append({
+                "path": path,
+                "rel": os.path.relpath(path, folder),
+                "sizeBytes": os.path.getsize(path),
+                "animalId": meta.get("animal_id") or "",
+                "tags": tags,
+                "notes": meta.get("notes") or "",
+                "excludedSweeps": sum(len(v or []) for v in excl.values()),
+                "scaled": bool(sc.get("scale_overrides")),
+                "hasSidecar": bool(sc),
+            })
+        if not recursive:
+            break
+    return {"files": files, "skippedText": skipped_text, "skippedNwb": skipped_nwb}
+
+
+def output_path(source: str, folder: str, out_dir: str, taken: set[str]) -> str:
+    """Mirror the source's place under ``folder`` into ``out_dir``, as .nwb.
+    ``taken`` avoids two sources (a.dat, a.abf) writing one file."""
+    rel = os.path.relpath(source, folder)
+    stem, ext = os.path.splitext(rel)
+    target = os.path.join(out_dir, stem + ".nwb")
+    if target in taken:
+        target = os.path.join(out_dir, f"{stem}_{ext.lstrip('.')}.nwb")
+    taken.add(target)
+    return target

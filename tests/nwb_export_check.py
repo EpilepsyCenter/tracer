@@ -143,5 +143,53 @@ with tempfile.TemporaryDirectory() as tmp:
             check(all(same(x.data, y.data) for x, y in zip(a.sweeps[5].traces, b.sweeps[5].traces)),
                   'paired values')
 
+# 5. Folder export helpers: what the scan includes, output names, sidecar
+#    scaling, and the type guess on the sample files.
+from export.nwb_export import scan_folder, output_path, apply_scale_overrides, guess_kind  # noqa: E402
+with tempfile.TemporaryDirectory() as tmp:
+    tmp = Path(tmp)
+    (tmp / 'sub').mkdir()
+    (tmp / 'out').mkdir()
+    for name in ('a.dat', 'a.abf', 'sub/b.abf', 'c.csv', 'd.nwb', 'out/e.abf', 'notes.txt'):
+        (tmp / name).write_bytes(b'x')
+    (tmp / 'a.dat.tracer').write_text('{"meta": {"animal_id": "M7", "group_tags": ["WT"]}, '
+                                      '"excluded_sweeps": {"0:0": [1, 2]}, "scale_overrides": {"0|mV": {}}}')
+    sc = scan_folder(str(tmp), True, str(tmp / 'out'))
+    rels = [f['rel'] for f in sc['files']]
+    check(rels == ['a.abf', 'a.dat', 'sub/b.abf'], f'scan: {rels}')
+    check(sc['skippedText'] == 2 and sc['skippedNwb'] == 1, f'scan skipped: {sc}')
+    a = next(f for f in sc['files'] if f['rel'] == 'a.dat')
+    check(a['animalId'] == 'M7' and a['tags'] == ['WT'] and a['excludedSweeps'] == 2 and a['scaled'],
+          f'scan sidecar: {a}')
+    check(len(scan_folder(str(tmp), False)['files']) == 2, 'scan without subfolders')
+    taken = set()
+    outs = [output_path(str(tmp / r), str(tmp), str(tmp / 'out'), taken) for r in rels]
+    check(len(set(outs)) == 3 and outs[2].endswith('out/sub/b.nwb'), f'output names: {outs}')
+
+g = Group(index=0)
+ser = Series(index=0, label='x')
+ser.sweeps.append(Sweep(index=0, traces=[Trace(np.ones(4), 1000.0, 'mV', 'V')]))
+g.series_list.append(ser)
+rec = Recording(file_path='x', file_name='x', format='T', groups=[g])
+apply_scale_overrides(rec, {'0|mV': {'units': 'pA', 'y_scale': 2.0, 'y_offset': 1.0}})
+tr = ser.sweeps[0].traces[0]
+check((tr.units, tr.y_scale, tr.y_offset) == ('pA', 2.0, 1.0), 'sidecar scaling not applied')
+
+# Type guess: names say VC but only mV is recorded → CC; mV command with
+# only mV channels → field; a non-electrical first channel is passed over.
+def series(label, units, stim=None):
+    from readers.models import StimulusInfo
+    s = Series(index=0, label=label)
+    s.sweeps.append(Sweep(index=0, traces=[Trace(np.zeros(2), 1.0, u, u) for u in units]))
+    if stim:
+        s.stimulus = StimulusInfo(unit=stim, v_hold=0, v_step=1, v_step_absolute=1, pulse_start=0,
+                                  pulse_end=1, baseline_start=0, baseline_end=0)
+    return s
+cases = [(series('ramp', ['mV']), 'cc'), (series('LTP_BASE', ['mV'], 'mV'), 'field'),
+         (series('I-V (Dep)', ['mV'], 'pA'), 'cc'), (series('Test pulse', ['pA'], 'mV'), 'vc'),
+         (series('gapfree', ['dB', 'mV']), 'cc'), (series('sine', ['?']), 'skip')]
+for s, want in cases:
+    check(guess_kind(s) == want, f'guess {s.label}: {guess_kind(s)} != {want}')
+
 print('\n'.join(fail) if fail else 'OK')
 sys.exit(1 if fail else 0)

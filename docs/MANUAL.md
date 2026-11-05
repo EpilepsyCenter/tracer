@@ -184,6 +184,45 @@ own checking tool, with DANDI's settings, and lists what it reports:
 Opening the exported file in TRACER shows the same series, sweeps,
 channels and values as the original.
 
+### Exporting a folder as NWB
+
+To share a whole dataset, **File ▸ Export Folder as NWB…** writes one
+NWB file per recording, without opening each one. It needs no
+recording open.
+
+- **Folders**: the folder of recordings (with or without its
+  subfolders) and the folder to write to. The output folder is
+  separate (by default a new folder named after the source, with
+  *NWB* added), so the NWB copies never mix with the originals; the
+  subfolder layout is kept.
+- **Shared by every file**: species, strain, experiment description,
+  extra keywords, brain region, experimenter, lab and institution.
+- **Recordings**: one row per file, with its animal ID, sex, age and
+  genotype. The animal ID starts from the file's Metadata (chapter
+  17), the keywords from its tags, and the experiment description
+  from its notes when you leave the shared one empty. The **↓** next
+  to a column heading copies the first row's value to every row;
+  untick a row to leave that file out.
+- **Types**: each file's series types are set as on the tree badges.
+  **Review** lists a file's series so you can change them.
+
+Each file keeps its own **Channel Scaling** and excluded sweeps (from
+its sidecar), as if you had opened it and exported it yourself. HEKA,
+ABF and the other binary formats are included; text files (which need
+the import wizard) and files that are already NWB are not.
+
+TRACER then exports the files one by one, with progress, and lists for
+each the file size and the NWB Inspector's verdict: **Ready** or the
+number of issues to fix before depositing on DANDI (most often a
+missing animal ID); click it for the details. **Stop after this file**
+ends the run early, and **Back** returns to the settings, for example
+to fill in missing animal IDs and export again. Files with no voltage
+or current recording are listed as skipped.
+
+The settings and each file's subject details are remembered for the
+next export of the same folder. Before uploading to DANDI, its
+`dandi organize` command renames the files to DANDI's layout.
+
 ### What's new after an update
 
 The first time a new version of TRACER starts — after an in-app update
@@ -257,8 +296,9 @@ inside the window on Windows and Linux:
 
 - **File** — **Open…** (`⌘O` / `Ctrl+O`), **Open Recent**, **Close
   Recording** (back to the start page), **Channel Scaling…**
-  (the per-channel units and scaling dialog described below) and
-  **Export as NWB…** (chapter 1, *Exporting as NWB*). On
+  (the per-channel units and scaling dialog described below),
+  **Export as NWB…** and **Export Folder as NWB…** (chapter 1,
+  *Exporting as NWB*). On
   Windows and Linux, **Settings…** (`Ctrl+,`) is here too; on macOS
   it is under the **TRACER** menu (`⌘,`).
 - **Edit** — the usual undo, cut, copy, paste and select-all for text

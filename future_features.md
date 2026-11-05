@@ -22,10 +22,9 @@ window's detection.
 
 ### Smaller ideas
 
-- **NWB folder export** — export a whole folder (one NWB file per
-  recording, into a separate folder) with one Inspector summary, for
-  depositing a dataset on DANDI. Then list TRACER on the NWB
-  community tools page (pull request to nwb-overview).
+- **NWB community listing** — pull request to nwb-overview adding
+  TRACER to the community tools page (reads and writes icephys and
+  ecephys NWB; files checked with the NWB Inspector).
 - **Comparing analysis states** — the same recording's results under
   two parameter sets or two dates: what changed?
 - **Custom export columns** — user-defined CSV columns computed from

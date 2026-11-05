@@ -16,6 +16,7 @@ import {
 } from './components/WhatsNew/WhatsNew'
 import { BugReportModal } from './components/BugReportModal/BugReportModal'
 import { NwbExportDialog } from './components/NwbExport/NwbExportDialog'
+import { NwbFolderExportDialog } from './components/NwbExport/NwbFolderExportDialog'
 import { useGlobalTooltips } from './hooks/useGlobalTooltips'
 
 // Same rule as the toolbar / start page: text recordings open through
@@ -89,11 +90,17 @@ export default function App() {
   // button (and by analysis windows over BroadcastChannel below).
   const [showBugReport, setShowBugReport] = useState(false)
   const [showNwbExport, setShowNwbExport] = useState(false)
+  const [showNwbFolderExport, setShowNwbFolderExport] = useState(false)
   // File ▸ Export as NWB… and the command palette both send this event.
   useEffect(() => {
     const onOpen = () => { if (useAppStore.getState().recording) setShowNwbExport(true) }
+    const onOpenFolder = () => setShowNwbFolderExport(true)
     window.addEventListener('open-nwb-export', onOpen)
-    return () => window.removeEventListener('open-nwb-export', onOpen)
+    window.addEventListener('open-nwb-folder-export', onOpenFolder)
+    return () => {
+      window.removeEventListener('open-nwb-export', onOpen)
+      window.removeEventListener('open-nwb-folder-export', onOpenFolder)
+    }
   }, [])
   useEffect(() => {
     const onOpen = () => setShowBugReport(true)
@@ -159,6 +166,7 @@ export default function App() {
         case 'open-settings': window.dispatchEvent(new CustomEvent('open-settings')); break
         case 'open-scaling': window.dispatchEvent(new CustomEvent('open-scaling-modal', { detail: {} })); break
         case 'export-nwb': window.dispatchEvent(new CustomEvent('open-nwb-export')); break
+        case 'export-nwb-folder': window.dispatchEvent(new CustomEvent('open-nwb-folder-export')); break
         case 'open-help': setShowHelp(true); break
         case 'whats-new': setWhatsNew(entriesForMenu()); break
         case 'open-bug-report': setShowBugReport(true); break
@@ -255,6 +263,7 @@ export default function App() {
         view="main"
       />
       {showNwbExport && <NwbExportDialog onClose={() => setShowNwbExport(false)} />}
+      {showNwbFolderExport && <NwbFolderExportDialog onClose={() => setShowNwbFolderExport(false)} />}
     </div>
   )
 }

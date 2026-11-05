@@ -9,9 +9,9 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useAppStore } from '../../stores/appStore'
 
-type Kind = 'vc' | 'cc' | 'field' | 'skip'
+export type Kind = 'vc' | 'cc' | 'field' | 'skip'
 
-interface PlanSeries {
+export interface PlanSeries {
   group: number
   series: number
   groupLabel: string
@@ -21,14 +21,14 @@ interface PlanSeries {
   kind: Kind
 }
 
-interface Plan {
+export interface Plan {
   fileName: string
   format: string
   series: PlanSeries[]
   recordingStart: number | null
 }
 
-interface InspectorRow {
+export interface InspectorRow {
   level: 'error' | 'critical' | 'violation' | 'suggestion'
   importance: string
   message: string
@@ -36,7 +36,7 @@ interface InspectorRow {
   object: string
 }
 
-interface Result {
+export interface Result {
   path: string
   sizeBytes: number
   seriesWritten: number
@@ -71,13 +71,13 @@ const REMEMBERED: (keyof Meta)[] = [
   'genotype', 'strain', 'subjectId', 'subjectDescription',
 ]
 
-const SPECIES = ['Mus musculus', 'Rattus norvegicus', 'Homo sapiens', 'Macaca mulatta']
+export const SPECIES = ['Mus musculus', 'Rattus norvegicus', 'Homo sapiens', 'Macaca mulatta']
 
-const KIND_LABEL: Record<Kind, string> = {
+export const KIND_LABEL: Record<Kind, string> = {
   vc: 'Voltage clamp', cc: 'Current clamp', field: 'Field / extracellular', skip: 'Skip',
 }
 
-const LEVEL_STYLE: Record<InspectorRow['level'], { color: string; title: string }> = {
+export const LEVEL_STYLE: Record<InspectorRow['level'], { color: string; title: string }> = {
   error: { color: 'var(--danger, #c62828)', title: 'Errors' },
   critical: { color: 'var(--danger, #c62828)', title: 'Must fix before depositing on DANDI' },
   violation: { color: 'var(--warning, #b26a00)', title: 'Should fix' },
@@ -92,7 +92,7 @@ function toLocalInput(t: number | null): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
 }
 
-function formatBytes(n: number): string {
+export function formatBytes(n: number): string {
   if (n < 1024 * 1024) return `${Math.max(1, Math.round(n / 1024))} KB`
   return `${(n / 1024 / 1024).toFixed(1)} MB`
 }
@@ -445,7 +445,7 @@ export function NwbExportDialog({ onClose }: { onClose: () => void }) {
   )
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+export function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div style={{ marginBottom: 14 }}>
       <div style={{ fontWeight: 600, fontSize: 'var(--font-size-sm)', marginBottom: 6 }}>{title}</div>
@@ -454,7 +454,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   )
 }
 
-function Row({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+export function Row({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5, fontSize: 'var(--font-size-sm)' }}>
       <span style={{ width: 110, flexShrink: 0, color: 'var(--text-secondary)' }}>{label}</span>
@@ -464,25 +464,25 @@ function Row({ label, hint, children }: { label: string; hint?: string; children
   )
 }
 
-const overlay: React.CSSProperties = {
+export const overlay: React.CSSProperties = {
   position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.18)',
   display: 'flex', alignItems: 'center', justifyContent: 'center',
 }
-const panel: React.CSSProperties = {
+export const panel: React.CSSProperties = {
   width: 'min(760px, 92vw)', maxHeight: '88vh', background: 'var(--bg-secondary)',
   color: 'var(--text-primary)', borderRadius: 'var(--radius-lg)',
   boxShadow: 'var(--shadow-popover), 0 24px 60px rgba(0,0,0,0.25)',
   display: 'flex', flexDirection: 'column', overflow: 'hidden', fontFamily: 'var(--font-ui)',
 }
-const header: React.CSSProperties = {
+export const header: React.CSSProperties = {
   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
   padding: '10px 12px 10px 16px', borderBottom: '1px solid var(--border)',
 }
-const footer: React.CSSProperties = {
+export const footer: React.CSSProperties = {
   display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8,
   padding: '10px 12px', borderTop: '1px solid var(--border)',
 }
-const intro: React.CSSProperties = {
+export const intro: React.CSSProperties = {
   margin: '0 0 12px', fontSize: 'var(--font-size-sm)', color: 'var(--text-secondary)', lineHeight: 1.45,
 }
 const dateInput: React.CSSProperties = {
@@ -490,5 +490,5 @@ const dateInput: React.CSSProperties = {
   borderRadius: 'var(--radius)', color: 'var(--text-primary)', fontFamily: 'var(--font-ui)',
   fontSize: 'var(--font-size-sm)',
 }
-const th: React.CSSProperties = { padding: '5px 8px', textAlign: 'left' }
-const td: React.CSSProperties = { padding: '4px 8px', verticalAlign: 'middle' }
+export const th: React.CSSProperties = { padding: '5px 8px', textAlign: 'left' }
+export const td: React.CSSProperties = { padding: '4px 8px', verticalAlign: 'middle' }

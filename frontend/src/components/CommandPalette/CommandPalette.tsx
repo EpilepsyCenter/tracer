@@ -152,6 +152,13 @@ export function CommandPalette() {
       })
     }
 
+    cmds.push({
+      id: 'file.exportNwbFolder', group: 'File', icon: 'download',
+      label: 'Export Folder as NWB…',
+      keywords: 'neurodata without borders dandi share deposit batch convert',
+      run: () => { window.dispatchEvent(new CustomEvent('open-nwb-folder-export')) },
+    })
+
     recentFiles.slice(0, 8).forEach((p) => {
       const fname = p.split(/[/\\]/).pop() || p
       cmds.push({
