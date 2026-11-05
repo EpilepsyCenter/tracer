@@ -125,9 +125,13 @@ Quick keyboard reference: press `?` inside the app for the shortcuts overlay; th
 
 ## License
 
-Free for noncommercial use under the PolyForm Noncommercial License 1.0.0 (see
-[`LICENSE`](LICENSE)): personal research and study, and use by universities, hospitals, public
-research organisations, charities and government bodies. Commercial use needs a commercial
-licence from the copyright holder. Versions up to and including 1.0.1 were released under the
-MIT License. Contributions are accepted only if their author agrees that they may also be
-offered under other licences.
+Copyright © 2026 Marco Ledri.
+
+TRACER is free and open-source software: you can redistribute it and/or modify it under the
+terms of the GNU General Public License as published by the Free Software Foundation, either
+version 3 of the License, or (at your option) any later version (see [`LICENSE`](LICENSE)). It is
+distributed in the hope that it will be useful, but without any warranty.
+
+Earlier versions were released under other licences: up to and including 1.0.1 under the MIT
+License, and 1.0.2 to 1.2.0 under the PolyForm Noncommercial License 1.0.0. Contributions are
+accepted under the GPL, version 3 or later.
