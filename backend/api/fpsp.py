@@ -63,6 +63,18 @@ def _pick_stim_channel(stim: PgfStimulation) -> Optional[PgfChannel]:
     return best
 
 
+def _interval_from_sweep_times(ser) -> float:
+    """Sweep interval (s) from the sweeps' recorded start times — for
+    files without a PatchMaster protocol (ABF, NWB). Median spacing, so a
+    pause or a missing sweep doesn't skew it; 0 when unknown."""
+    times = [sw.time for sw in getattr(ser, "sweeps", []) if sw.time is not None]
+    if len(times) < 2:
+        return 0.0
+    d = np.diff(np.asarray(times, dtype=float))
+    d = d[d > 0]
+    return float(np.median(d)) if d.size else 0.0
+
+
 def _detect_stim_onset_s(target: PgfStimulation) -> float:
     """Find the first non-trivial stim segment onset (seconds from sweep
     start) on the driving channel. Returns 0.0 if no pulse is found."""
@@ -255,6 +267,8 @@ async def run_fpsp(
     stim_a = _stim_for_series(rec, group, series)
     stim_onset_s_a = _detect_stim_onset_s(stim_a) if stim_a else 0.0
     sweep_interval_a = float(stim_a.sweep_interval) if stim_a and stim_a.sweep_interval else 0.0
+    if sweep_interval_a <= 0:
+        sweep_interval_a = _interval_from_sweep_times(ser_a)
 
     points_a, unit_a, flagged_a = _run_on_series(ser_a, series, sweep_filter, cfg)
 
@@ -267,6 +281,8 @@ async def run_fpsp(
         stim_b = _stim_for_series(rec, group, series_b)
         stim_onset_s_b = _detect_stim_onset_s(stim_b) if stim_b else 0.0
         sweep_interval_b = float(stim_b.sweep_interval) if stim_b and stim_b.sweep_interval else 0.0
+        if sweep_interval_b <= 0:
+            sweep_interval_b = _interval_from_sweep_times(ser_b)
         # The user's sweep range is typed for A; B uses all its sweeps
         # except the ones excluded on B.
         filter_b = None
