@@ -624,6 +624,9 @@ export function FPspWindow({
       // detection markers show up on the displayed trace (without
       // this, clicking a row would only move the main viewer and
       // leave the analysis-window's mini-viewer on the previous sweep).
+      // Show it from the bin's own series: a post-tetanus bin's sweep
+      // numbers count within the LTP series, not the baseline.
+      if (seriesB != null) setViewerSource(p.sourceSeries === seriesB ? 'B' : 'A')
       setPreviewSweep(p.sweepIndices[0])
       try {
         const ch = new BroadcastChannel('tracer-sync')
