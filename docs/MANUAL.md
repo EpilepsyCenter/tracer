@@ -3472,9 +3472,11 @@ extra controls then become relevant:
   baseline and the LTP / LTD response above or below it.
 
 The **time-axis mode** picks between *minutes from the series
-start* (when the recording's sweep interval is known) and *bin
-index*. The two series are joined on a common axis, with
-post-induction time at *t > 0* and baseline at *t < 0*.
+start* and *bin index*. Minutes need the sweep interval: TRACER
+takes it from the PatchMaster protocol for HEKA files, and from the
+sweeps' recorded start times for ABF and NWB files. The two series
+are joined on a common axis, with post-induction time at *t > 0* and
+baseline at *t < 0*.
 
 A small **flagged ratio** column on the table marks bins whose
 fEPSP-to-volley ratio falls below 3.0 — a convention for "the
