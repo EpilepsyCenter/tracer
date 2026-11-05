@@ -13,6 +13,24 @@ starts, and from Help ▸ What's New. Newest version first.
   `python3 scripts/release_notes.py <version> --apply`.
 -->
 
+## 1.3.1
+
+### Improved
+
+- **LTP time course in minutes for ABF and NWB recordings.** The time axis used to need a HEKA PatchMaster protocol; TRACER now also takes the sweep interval from the sweeps' recorded start times. [Read more](manual:15. Field Potential (fEPSP / LTP) > LTP-mode specifics)
+
+### Fixed
+
+- **NWB field recordings with 10 or more sweeps open in the right order.** Sweeps came back in name order (1, 10, 11 … 2), so analyses across sweeps saw them out of order. Files already exported are fine; only reading them was affected.
+
+- **Reopening a saved LTP analysis** shows the time course straight away; it stayed blank until the analysis was run again or the axis switched between Time and Index. Plots in other analysis windows had the same problem and are fixed too.
+
+- **Selecting a post-tetanus bin** shows its sweep from the post-tetanus series. The preview stayed on the baseline series and showed a baseline sweep with the same number, or nothing.
+
+- **A saved Field Potential analysis restores its cursors**, so the bands on the trace match the windows the results were measured with.
+
+- **No more stray dot** in the top-left corner of plots.
+
 ## 1.3.0
 
 ### New
