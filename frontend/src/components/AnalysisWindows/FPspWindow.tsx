@@ -479,6 +479,17 @@ export function FPspWindow({
     setFilterLow(entry.filterLow)
     setFilterHigh(entry.filterHigh)
     setFilterOrder(entry.filterOrder)
+    // The cursor windows the results were measured with. They live in
+    // the shared cursor state (main viewer), so restore them there too —
+    // otherwise the bands show other positions than the table's results.
+    if ([entry.baselineStartS, entry.baselineEndS, entry.volleyStartS, entry.volleyEndS,
+      entry.fepspStartS, entry.fepspEndS].every((v) => typeof v === 'number' && isFinite(v))) {
+      updateCursors({
+        baselineStart: entry.baselineStartS, baselineEnd: entry.baselineEndS,
+        fitStart: entry.volleyStartS, fitEnd: entry.volleyEndS,
+        peakStart: entry.fepspStartS, peakEnd: entry.fepspEndS,
+      })
+    }
     if (entry.mode === 'io') {
       if (entry.ioInitialIntensity != null) setIoInitialIntensity(entry.ioInitialIntensity)
       if (entry.ioIntensityStep != null) setIoIntensityStep(entry.ioIntensityStep)
@@ -497,7 +508,7 @@ export function FPspWindow({
     if (entry.sweepFrom != null) setSweepFrom(entry.sweepFrom)
     if (entry.sweepTo != null) setSweepTo(entry.sweepTo)
     if (entry.sweepOne != null) setSweepOne(entry.sweepOne)
-  }, [entry, key])
+  }, [entry, key, updateCursors])
 
   /** Auto-place cursors: detect stim onset from the backend, then place
    *  baseline / volley / fEPSP windows at sensible defaults around it.
