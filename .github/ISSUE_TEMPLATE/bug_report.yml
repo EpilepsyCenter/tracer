@@ -1,0 +1,31 @@
+name: Bug report
+description: Something in TRACER doesn't work as expected
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: TRACER version
+      description: Shown in the status bar (bottom right).
+      placeholder: "1.2.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options: [macOS, Windows, Linux]
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead. Screenshots help.
+    validations:
+      required: true
+  - type: input
+    id: file
+    attributes:
+      label: Recording format
+      description: e.g. HEKA .dat, ABF, NWB. Mention if you can share an example file.

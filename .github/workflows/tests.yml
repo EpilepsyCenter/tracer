@@ -1,0 +1,45 @@
+name: Tests
+
+# Runs the analysis tests and type checks on every push to main and on
+# every pull request. (The installers are built by build.yml on tags.)
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install Python deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: Install Node deps
+        run: npm ci
+
+      - name: Python tests
+        run: python tests/run_all.py
+
+      - name: Type check (app and Electron)
+        run: |
+          npx tsc --noEmit -p .
+          npx tsc --noEmit -p tsconfig.node.json
+
+      - name: Manual links in the release notes
+        run: node tests/whats_new_check.mjs

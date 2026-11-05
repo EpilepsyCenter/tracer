@@ -1,0 +1,16 @@
+name: Feature request
+description: Suggest an analysis, measurement or improvement
+labels: [enhancement]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: What do you need?
+      description: The experiment and the measurement you want, and how you do it today.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: How could TRACER do it?
+      description: Optional. A sketch of how it could work, or a tool that does it well.
