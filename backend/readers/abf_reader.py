@@ -36,15 +36,32 @@ class AbfReader(BaseReader):
         if hasattr(abf, "holdingCommand") and abf.holdingCommand:
             holding = abf.holdingCommand[0] if abf.holdingCommand else None
 
+        # Recording start (abfDateTime is local time) and sweep start times.
+        t0 = None
+        try:
+            t0 = abf.abfDateTime.timestamp()
+        except Exception:
+            pass
+        # Some files carry an unset or garbage date (e.g. year 1806).
+        if t0 is not None and not (315532800.0 < t0 < 4102444800.0):   # 1980–2100
+            t0 = None
+        try:
+            sweep_times = [float(t) for t in abf.sweepTimesSec]
+        except Exception:
+            sweep_times = []
+
         series = Series(
             index=0,
             label=protocol or f"Series 1",
             protocol=protocol,
             holding=holding,
+            timestamp=t0,
         )
 
         for sweep_idx in range(abf.sweepCount):
             sweep = Sweep(index=sweep_idx, label=f"Sweep {sweep_idx + 1}")
+            if t0 is not None and sweep_idx < len(sweep_times):
+                sweep.time = t0 + sweep_times[sweep_idx]
 
             for channel in range(abf.channelCount):
                 abf.setSweep(sweep_idx, channel=channel)

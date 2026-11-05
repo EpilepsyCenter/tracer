@@ -54,6 +54,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('open-folder-dialog', defaultPath),
   saveFileDialog: (defaultName: string, filters?: { name: string; extensions: string[] }[]): Promise<string | null> =>
     ipcRenderer.invoke('save-file-dialog', defaultName, filters),
+  showItemInFolder: (path: string): Promise<boolean> => ipcRenderer.invoke('show-item-in-folder', path),
 
   // Write a UTF-8 text file at ``targetPath`` (already chosen via
   // ``saveFileDialog``). Returns ``{ ok: true }`` on success or

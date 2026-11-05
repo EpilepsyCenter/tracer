@@ -1,19 +1,34 @@
 import React, { useState } from 'react'
 import { useAppStore, SeriesInfo } from '../../stores/appStore'
 
-/** Guess recording type from series label, protocol, or units */
+/** Recording type for the badge. Same rules as the NWB export
+ *  (backend ``export/nwb_export.py::guess_kind``): the file's own type,
+ *  else the command unit, the series name and the channel units — then
+ *  made consistent with the channels (voltage clamp needs a current
+ *  channel, current clamp a voltage channel). */
 function guessRecordingType(series: SeriesInfo): 'vc' | 'cc' | 'field' | 'unknown' {
   if (series.kind) return series.kind
-  const label = (series.label || '').toLowerCase()
-  const protocol = (series.protocol || '').toLowerCase()
-  const combined = label + ' ' + protocol
-
-  if (/\bcc\b|current.?clamp|i.?clamp|c-clamp/.test(combined)) return 'cc'
-  if (/\bvc\b|voltage.?clamp|v.?clamp|test.?pulse|i-v|ramp|seal/.test(combined)) return 'vc'
-  if (/field|fepsp|epsp|pop.?spike|lfp|extracell/.test(combined)) return 'field'
-
-  if (series.holding !== undefined && series.holding !== null) return 'vc'
-  return 'unknown'
+  const kinds = new Set((series.channels ?? []).map((c) => c.kind))
+  const hasI = kinds.has('current')
+  const hasV = kinds.has('voltage')
+  if (!hasI && !hasV) return 'unknown'
+  // mV commands = voltage clamp, pA commands = current clamp ("I-V" step
+  // protocols are often CC). An mV command with only voltage channels is
+  // a field recording driven by an external stimulator (fEPSP / LTP).
+  if (series.stimulus?.unit === 'mV') return hasI ? 'vc' : 'field'
+  let kind: 'vc' | 'cc' | 'field'
+  if (series.stimulus?.unit === 'pA') {
+    kind = 'cc'
+  } else {
+    const combined = `${series.label || ''} ${series.protocol || ''}`.toLowerCase()
+    if (/\bcc\b|current.?clamp|i.?clamp|c-clamp/.test(combined)) kind = 'cc'
+    else if (/\bvc\b|voltage.?clamp|v.?clamp|test.?pulse|i-v|ramp|seal/.test(combined)) kind = 'vc'
+    else if (/field|fepsp|epsp|pop.?spike|lfp|extracell/.test(combined)) kind = 'field'
+    else kind = hasI ? 'vc' : 'cc'
+  }
+  if (kind === 'vc' && !hasI) return 'cc'
+  if ((kind === 'cc' || kind === 'field') && !hasV) return 'vc'
+  return kind
 }
 
 const TYPE_COLORS: Record<string, string> = {

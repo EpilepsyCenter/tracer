@@ -6662,6 +6662,7 @@ declare global {
       openFileDialog: () => Promise<string | null>
       openFolderDialog: (defaultPath?: string) => Promise<string | null>
       saveFileDialog: (defaultName: string, filters?: { name: string; extensions: string[] }[]) => Promise<string | null>
+      showItemInFolder?: (path: string) => Promise<boolean>
       writeTextFile: (targetPath: string, contents: string) => Promise<{ ok: boolean; error?: string }>
       writeBinaryFile: (targetPath: string, base64: string) => Promise<{ ok: boolean; error?: string }>
       /** SVG → vector PDF (Chromium print), returned as base64. */

@@ -23,6 +23,7 @@ Values are converted from NWB's SI units to TRACER's display units
 
 from __future__ import annotations
 
+import json
 import os
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -338,6 +339,8 @@ def _build_icephys(nwb, recording: Recording, t0: Optional[float]) -> None:
         ser.kind = 'vc' if rtype.startswith('VoltageClamp') else 'cc' if rtype.startswith('CurrentClamp') else None
         for si, sw in enumerate(spec.sweeps):
             sweep = Sweep(index=si, label=f"Sweep {si + 1}")
+            if t0 is not None:
+                sweep.time = t0 + _start_time(sw.recs[0].response)
             for r in sw.recs:
                 sweep.traces.append(_trace(r.response, _resp_label(r, multi), r.r_start, r.r_count))
             for r in sw.recs:
@@ -394,31 +397,60 @@ def _electrode_labels(es, n: int) -> list[str]:
         return [f"Ch {i + 1}" for i in range(n)]
 
 
+def _tracer_tag(es) -> Optional[dict]:
+    """Sweeps of one series written by TRACER's NWB export share a JSON tag
+    in ``comments``; files from elsewhere have none."""
+    try:
+        tag = json.loads(getattr(es, "comments", "") or "")
+    except (ValueError, TypeError):
+        return None
+    return tag if isinstance(tag, dict) and "tracer_series" in tag else None
+
+
 def _build_ecephys(nwb, recording: Recording, t0: Optional[float]) -> list[str]:
+    """Each ElectricalSeries is a continuous series in "Extracellular" —
+    except series exported by TRACER, whose sweeps are regrouped into one
+    series in a group named as in the original recording."""
     skipped: list[str] = []
-    grp: Optional[Group] = None
+    groups: dict[str, Group] = {}
+    tagged: dict[str, Series] = {}
+
+    def group(label: str) -> Group:
+        if label not in groups:
+            groups[label] = Group(index=len(recording.groups), label=label)
+            recording.groups.append(groups[label])
+        return groups[label]
+
     for es in _electrical_series(nwb):
         shape = es.data.shape
         n_ch = shape[1] if len(shape) > 1 else 1
         if shape[0] * n_ch > MAX_ECEPHYS_VALUES:
             skipped.append(f"{es.name} ({n_ch} channels × {shape[0]} samples)")
             continue
-        if grp is None:
-            grp = Group(index=len(recording.groups), label="Extracellular")
-            recording.groups.append(grp)
         labels = _electrode_labels(es, n_ch)
         conv = getattr(es, "channel_conversion", None)
         conv = np.asarray(conv[:], dtype=np.float64) if conv is not None else None
-        sweep = Sweep(index=0, label="Sweep 1")
+        tag = _tracer_tag(es)
+        if tag is not None and tag["tracer_series"] in tagged:
+            ser = tagged[tag["tracer_series"]]
+        else:
+            grp = group(str(tag.get("group") or "Extracellular") if tag else "Extracellular")
+            ser = Series(index=len(grp.series_list),
+                         label=str(tag.get("label") or es.name) if tag else es.name,
+                         protocol="", kind="field")
+            if t0 is not None:
+                ser.timestamp = t0 + _start_time(es)
+            grp.series_list.append(ser)
+            if tag is not None:
+                tagged[tag["tracer_series"]] = ser
+        sweep = Sweep(index=len(ser.sweeps), label=f"Sweep {len(ser.sweeps) + 1}")
+        if t0 is not None:
+            sweep.time = t0 + _start_time(es)
         for c in range(n_ch):
             extra = float(conv[c]) if conv is not None and c < len(conv) else 1.0
             sweep.traces.append(_trace(es, labels[c] if c < len(labels) else f"Ch {c + 1}",
                                        column=c if len(shape) > 1 else None, extra_scale=extra))
-        ser = Series(index=len(grp.series_list), label=es.name, protocol="", kind="field")
-        if t0 is not None:
-            ser.timestamp = t0 + _start_time(es)
         ser.sweeps.append(sweep)
-        grp.series_list.append(ser)
     return skipped
 
 

@@ -208,6 +208,15 @@ function buildAppMenu() {
         enabled: menuHasRecording,
         click: () => sendMenuAction('open-scaling'),
       },
+      {
+        label: 'Export as NWB…',
+        enabled: menuHasRecording,
+        click: () => sendMenuAction('export-nwb'),
+      },
+      {
+        label: 'Export Folder as NWB…',
+        click: () => sendMenuAction('export-nwb-folder'),
+      },
       { type: 'separator' },
       ...(isMac ? [] : [
         { label: 'Settings…', accelerator: 'Ctrl+,', click: () => sendMenuAction('open-settings') },
@@ -630,10 +639,17 @@ ipcMain.handle('open-folder-dialog', async (_event, defaultPath?: string) => {
   const sender = BrowserWindow.fromWebContents(_event.sender) ?? mainWindow
   if (!sender) return null
   const result = await dialog.showOpenDialog(sender, {
-    properties: ['openDirectory'],
+    // createDirectory: macOS shows "New Folder" (e.g. for an export folder)
+    properties: ['openDirectory', 'createDirectory'],
     defaultPath: defaultPath || undefined,
   })
   return result.canceled ? null : result.filePaths[0]
+})
+
+// Reveal a file in Finder / Explorer (e.g. after an export).
+ipcMain.handle('show-item-in-folder', (_event, p: string) => {
+  if (typeof p === 'string' && p) shell.showItemInFolder(p)
+  return true
 })
 
 ipcMain.handle('save-file-dialog', async (event, defaultName: string, filters: Electron.FileFilter[]) => {
