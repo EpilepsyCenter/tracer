@@ -1,0 +1,29 @@
+cff-version: 1.2.0
+message: "If you use TRACER in your research, please cite it as below."
+title: "TRACER: electrophysiology analysis for patch-clamp and field recordings"
+type: software
+authors:
+  - family-names: Ledri
+    given-names: Marco
+    orcid: "https://orcid.org/0000-0001-8317-7976"
+    affiliation: "Lund University"
+    email: marco.ledri@med.lu.se
+version: 1.2.0
+date-released: "2026-11-04"
+license: GPL-3.0-or-later
+repository-code: "https://github.com/EpilepsyCenter/tracer"
+url: "https://epilepsycenter.github.io/tracer/"
+abstract: >-
+  TRACER is a desktop application for analysing patch-clamp and field
+  recordings. It reads HEKA PatchMaster, Axon ABF, NWB and other formats,
+  and provides event detection, action potentials, I-V curves,
+  passive properties, field potentials and LTP, burst detection,
+  paired recordings, spectral analysis and cohort statistics across
+  recordings, with exports to Excel, Prism, ASTERISM and NWB.
+keywords:
+  - electrophysiology
+  - patch clamp
+  - field potential
+  - neuroscience
+  - data analysis
+  - NWB

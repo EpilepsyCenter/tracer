@@ -29,6 +29,10 @@ def check(name, cond, detail=""):
 
 
 path = str(ROOT / "sample_data/heka_test_files/Burst_2.dat")
+if not Path(path).exists():
+    # The recording is lab data, not in the repository.
+    print("SKIP: needs sample_data/heka_test_files/Burst_2.dat")
+    sys.exit(0)
 reader = next(r for r in af.READERS if r.can_read(path))
 rec = reader.read(path, options=None)
 tr = rec.groups[0].series_list[6].sweeps[0].traces[0]

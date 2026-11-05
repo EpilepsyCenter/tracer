@@ -110,18 +110,40 @@ npm run dev                 # runs Python backend + Electron concurrently
 
 Or use the shell helper: `./scripts/dev.sh`.
 
-To verify a build before shipping:
+To run the tests and type checks (the same as CI runs on every pull request):
 
 ```bash
-cd frontend && npx tsc --noEmit && npx vite build
-python tests/trains_parity.py
+python tests/run_all.py
+npx tsc --noEmit -p . && npx tsc --noEmit -p tsconfig.node.json
 ```
+
+Each file in `tests/` is a standalone script that prints `OK`. A few also use lab recordings
+in `sample_data/` (not in the repository) and skip those parts when the files are missing.
 
 ## Documentation
 
 The full user manual is bundled into the app (`Help → User Manual`, or open the `manual` analysis window) and lives at [`docs/MANUAL.md`](docs/MANUAL.md) for off-line reading.
 
 Quick keyboard reference: press `?` inside the app for the shortcuts overlay; the manual's chapter 8 has the full list.
+
+## Getting help and contributing
+
+- **Questions and bugs:** open an [issue](https://github.com/EpilepsyCenter/tracer/issues/new/choose),
+  or use **Help ▸ Report a Bug…** in the app.
+- **Contributing code:** see [`CONTRIBUTING.md`](CONTRIBUTING.md). Everyone taking part is asked
+  to follow the [code of conduct](CODE_OF_CONDUCT.md).
+
+**Support and maintenance.** TRACER is developed and maintained by Marco Ledri at Lund
+University and is used for the lab's patch-clamp and field-recording analysis, so it is kept
+working with each release. Issues are usually answered within a week. New versions are
+released when features or fixes are ready; each comes with release notes, also shown in the
+app on first start. Planned and considered features are listed in
+[`future_features.md`](future_features.md).
+
+## Citing TRACER
+
+If you use TRACER in published work, please cite it. GitHub's **Cite this repository** button
+(from [`CITATION.cff`](CITATION.cff)) gives the reference in APA and BibTeX.
 
 ## License
 
