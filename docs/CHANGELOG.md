@@ -13,6 +13,32 @@ starts, and from Help ▸ What's New. Newest version first.
   `python3 scripts/release_notes.py <version> --apply`.
 -->
 
+## 1.3.0
+
+### New
+
+- **Native NWB reading.** Patch-clamp and field recordings in the Neurodata Without Borders format open with their full structure: one group per cell, one series per protocol run, the stimulus next to each response, and named electrodes for field and LFP recordings. [Read more](manual:1. Getting Started > Opening a recording)
+
+- **Export as NWB.** *File ▸ Export as NWB…* writes the open recording as an NWB file, ready to deposit on DANDI or share with a paper: subject and recording details, the type of each series, traces after your Channel Scaling, and the stimuli. TRACER then checks the file with the NWB Inspector and shows what, if anything, needs fixing. [Read more](manual:1. Getting Started > Exporting as NWB)
+
+- **Export a whole folder as NWB.** *File ▸ Export Folder as NWB…* writes one NWB file per recording into a separate folder, with each file's animal, sex and age in one table and a check of every file. [Read more](manual:1. Getting Started > Exporting a folder as NWB)
+
+- **Stacked channels.** With three or more channels visible, each gets its own lane with its own scale: drag or Option-scroll a lane to adjust just that channel, while time, cursors and notes stay shared. The new button next to *Traces* switches it on or off. [Read more](manual:4. The Trace Viewer > Stacked channels)
+
+- **TRACER is now free and open-source software**, released under the GNU General Public License (version 3 or later).
+
+### Improved
+
+- **Nine distinct channel colours** instead of five, matching between the viewer and the *Traces* menu. [Read more](manual:6. Settings and Appearance > Trace colours)
+
+- **The VC / CC / FP badges are more accurate**: current-step protocols named "I-V" show CC, and field recordings made with a patch amplifier (fEPSP, LTP) show FP.
+
+- **Recording times** are read from HEKA and ABF files and kept in NWB exports.
+
+### Fixed
+
+- **Formats read through Neo** (WinWCP, Axograph, Spike2 and others): currents and voltages are now converted to pA and mV (a recording in nA showed nA values labelled pA), channels stored together are no longer mixed into one trace, and a channel without a name no longer stops the file from opening. [Read more](manual:1. Getting Started > Opening a recording)
+
 ## 1.2.0
 
 ### New
