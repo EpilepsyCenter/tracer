@@ -2,7 +2,7 @@
   "name": "tracer",
   "version": "1.2.0",
   "description": "Electrophysiology analysis software",
-  "license": "PolyForm-Noncommercial-1.0.0",
+  "license": "GPL-3.0-or-later",
   "author": "Marco Ledri",
   "main": "dist-electron/main.js",
   "scripts": {
@@ -42,7 +42,7 @@
   "build": {
     "appId": "com.tracer.app",
     "productName": "TRACER",
-    "copyright": "Copyright © 2026 Marco Ledri. Free for noncommercial use (PolyForm Noncommercial 1.0.0).",
+    "copyright": "Copyright © 2026 Marco Ledri. Free and open source under the GNU GPL v3 or later.",
     "files": [
       "dist/**/*",
       "dist-electron/**/*"
