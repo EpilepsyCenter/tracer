@@ -8,6 +8,8 @@ Current release: **v1.3.0**. macOS Apple-Silicon DMG, Windows NSIS, and Linux Ap
 
 **[Website](https://epilepsycenter.github.io/tracer/)** · **[Releases](https://github.com/EpilepsyCenter/tracer/releases)** · **[Manual](docs/MANUAL.md)**
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23975779.svg)](https://doi.org/10.5281/zenodo.23975779) [![Tests](https://github.com/EpilepsyCenter/tracer/actions/workflows/tests.yml/badge.svg)](https://github.com/EpilepsyCenter/tracer/actions/workflows/tests.yml) [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
+
 ## Install
 
 No build required — pre-built installers for every supported platform are attached to each tagged release on the [releases page](https://github.com/EpilepsyCenter/tracer/releases/latest):
@@ -143,7 +145,9 @@ app on first start. Planned and considered features are listed in
 ## Citing TRACER
 
 If you use TRACER in published work, please cite it. GitHub's **Cite this repository** button
-(from [`CITATION.cff`](CITATION.cff)) gives the reference in APA and BibTeX.
+(from [`CITATION.cff`](CITATION.cff)) gives the reference in APA and BibTeX. Every release is
+archived on Zenodo: [10.5281/zenodo.23975779](https://doi.org/10.5281/zenodo.23975779) always
+points to the latest version, and each version also has its own DOI.
 
 ## License
 
