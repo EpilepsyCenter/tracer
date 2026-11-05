@@ -89,6 +89,11 @@ EXCLUDES = [
     'wx', 'tk',
     'pytest', 'sphinx', 'docutils',
     'deeplabcut',
+    # pkg_resources (setuptools) is only a Python < 3.8 fallback in
+    # nwbinspector; bundling it adds PyInstaller's pkg_resources startup
+    # hook, which crashes with setuptools >= 81 ("no attribute
+    # NullProvider") — the macOS runner installs setuptools 84.
+    'pkg_resources',
     'cv2',
 ]
 
