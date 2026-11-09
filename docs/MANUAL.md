@@ -1084,6 +1084,12 @@ samples are written into the sidecar so they can be displayed and
 analysed without having to recompute the average from the original
 sweeps every time the file is opened.
 
+Each window saves what it changed itself, about a second after the
+change: the Field Potential window its results, the main window its
+cursors and exclusions, and so on. A save replaces only those parts and
+keeps everything else in the file as it is, so a window that hasn't yet
+caught up with another one can't overwrite its results.
+
 ![Sidecar JSON excerpt](screenshots/sidecar-json-excerpt.png)
 
 ### What is *not* persisted
