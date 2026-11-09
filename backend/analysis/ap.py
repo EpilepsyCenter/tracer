@@ -401,7 +401,11 @@ def _interp_to_200khz(vm: np.ndarray, sr: float) -> tuple[np.ndarray, float]:
         return vm, sr
     n = vm.size
     x_old = np.arange(n)
-    x_new = np.linspace(0, n - 1, n * factor)
+    # Exactly ``factor`` points per original sample interval, so index k
+    # of the result is at k / (sr * factor) — the clock the callers use.
+    # (``linspace(0, n - 1, n * factor)`` spaced them (n−1)/(n·factor−1)
+    # apart and stretched crossing times on short segments by up to ~20 %.)
+    x_new = np.arange((n - 1) * factor + 1) / factor
     # Use np.interp (linear) — fast and good enough for measuring
     # crossings on short windows. Cubic was overkill here; the dV/dt
     # quantities we measure are computed on the ORIGINAL signal, only
@@ -639,27 +643,26 @@ def _measure_spike(
     fahp_vm, fahp_t = _min_in_window(fahp_search_start_ms, fahp_search_end_ms)
     mahp_vm, mahp_t = _min_in_window(mahp_search_start_ms, mahp_search_end_ms)
 
-    # Max rise / decay slopes — fit a line to the steepest
-    # max_slope_window_ms-wide stretch of dV/dt.
-    win_samples = max(2, int(round(max_slope_window_ms / dt_ms)))
-    rise_dvdt = dvdt[thr_idx:spike.peak_idx + 1]
-    decay_dvdt = dvdt[spike.peak_idx:decay_end_idx]
-
-    def _max_abs_slope(arr: np.ndarray) -> Optional[float]:
-        if arr.size < win_samples:
-            return None
-        # Sliding mean of dV/dt is a clean stand-in for the linear-fit
-        # slope on a constant-spacing grid (the fit collapses to mean
-        # for evenly-spaced y values).
-        kernel = np.ones(win_samples) / win_samples
-        smoothed = np.convolve(arr, kernel, mode="valid")
-        if smoothed.size == 0:
-            return None
-        i = int(np.argmax(np.abs(smoothed)))
-        return float(smoothed[i])
-
-    max_rise = _max_abs_slope(rise_dvdt)
-    max_decay = _max_abs_slope(decay_dvdt)
+    # Max rise / decay slopes: dV/dt averaged over a centred window of
+    # max_slope_window_ms, then the largest value between threshold and
+    # peak (+slope) and the most negative between the peak and the fAHP
+    # minimum (−slope). The average is taken on the trace around the
+    # spike, not inside the phase, so a rise shorter than the window
+    # still gets a value (#21); and the falling phase stops at the fAHP,
+    # so the next spike's upstroke can't be picked up (#22).
+    win_samples = max(1, int(round(max_slope_window_ms / dt_ms)))
+    fall_end_idx = decay_end_idx
+    if fahp_t is not None:
+        fall_end_idx = min(decay_end_idx, int(round(fahp_t * sr)) + 1)
+    pad = win_samples
+    s0 = max(0, thr_idx - pad)
+    s1 = min(dvdt.size, max(fall_end_idx, spike.peak_idx + 1) + pad)
+    kernel = np.ones(win_samples) / win_samples
+    smoothed = np.convolve(dvdt[s0:s1], kernel, mode="same")
+    rise_sm = smoothed[thr_idx - s0:spike.peak_idx + 1 - s0]
+    fall_sm = smoothed[spike.peak_idx - s0:fall_end_idx - s0]
+    max_rise = float(rise_sm.max()) if rise_sm.size else None
+    max_decay = float(fall_sm.min()) if fall_sm.size else None
 
     return {
         "threshold_vm": threshold_vm,
@@ -824,10 +827,11 @@ def run_ap(
     kinetics: dict,
     rheobase_mode: str,                   # 'record' | 'exact' | 'ramp'
     ramp_params: Optional[dict],          # {t_start_s, t_end_s, im_start_pa, im_end_pa}
-    im_onset_s: Optional[float],          # from .pgf, used for first-spike latency
+    im_onset_s: Optional[float],          # step onset (s), used for first-spike latency
     manual_edits: Optional[dict] = None,  # {added: {sweep: [t_s,...]}, removed: {...}}
     measure_kinetics: bool = True,
     mode: str = "evoked",                 # 'evoked' | 'spontaneous'
+    im_windows_s: Optional[list] = None,  # per sweep (start_s, end_s) of the step, or None
 ) -> dict:
     """Run AP detection + counting + (optionally) kinetics across all sweeps.
 
@@ -838,6 +842,12 @@ def run_ap(
     ``mode='spontaneous'`` is for continuous recordings without a
     stimulus: F-I, rheobase, latency and SFA are skipped; detection and
     kinetics are unchanged.
+
+    ``im_windows_s`` gives, per sweep, the window the step's current is
+    averaged over for the F-I curve and rheobase 'record' (the step
+    itself). Without it, the analysis bounds are used — which dilutes the
+    step towards the holding current when the bounds cover the whole
+    sweep (#20).
     """
     spontaneous = str(mode) == "spontaneous"
     bounds_start_s = float(detection.get("bounds_start_s", 0.0))
@@ -953,8 +963,10 @@ def run_ap(
         # Im channel mean over the bounded window (for F-I + rheobase 'record').
         im_mean_pa: Optional[float] = None
         if sweeps_im is not None and i < len(sweeps_im) and sweeps_im[i].size:
-            i0 = max(0, int(round(bounds_start_s * sr)))
-            i1 = min(sweeps_im[i].size, int(round(eff_end * sr)))
+            win = im_windows_s[i] if im_windows_s is not None and i < len(im_windows_s) else None
+            w0, w1 = win if win else (bounds_start_s, eff_end)
+            i0 = max(0, int(round(w0 * sr)))
+            i1 = min(sweeps_im[i].size, int(round(w1 * sr)))
             if i1 > i0:
                 im_mean_pa = float(np.mean(sweeps_im[i][i0:i1]))
 

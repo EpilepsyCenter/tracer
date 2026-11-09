@@ -2263,12 +2263,15 @@ Each detected sweep contributes one row. The columns are:
   bounds, manual edits applied.
 - **Rate (Hz)** — spike count divided by the duration of the
   analysis bounds.
-- **Im (pA)** — the mean stimulus current over the analysis
-  bounds, used as the X coordinate of the F–I curve. The source —
-  reconstructed from the protocol or supplied manually — is shown
-  in a small caption above the curve.
-- **Latency (s)** — time from the stimulus onset (read from the
-  recording's `.pgf` protocol) to the first detected peak.
+- **Im (pA)** — the step's current: the mean stimulus current over
+  the step (the protocol's step segment, or the Manual Im window),
+  used as the X coordinate of the F–I curve and for rheobase. It
+  doesn't depend on the analysis bounds. The source — reconstructed
+  from the protocol or supplied manually — is shown in a small caption
+  above the curve.
+- **Latency (s)** — time from the stimulus onset to the first detected
+  peak. The onset is read from the recording's `.pgf` protocol; with
+  Manual Im it's the window's *start (s)*.
 - **Mean ISI (s)** — the mean of the inter-spike intervals when
   there are at least two spikes.
 - **SFA** — the **spike-frequency adaptation** ratio, computed as
@@ -2391,7 +2394,7 @@ the rest of the per-spike measurement.
 | **Decay end** | *to_threshold* | Whether the decay percentages refer to the trace returning *to threshold* or *to the fAHP minimum* |
 | **fAHP start / end (ms)** | 0 / 5 | Window after the peak in which the **fast AHP** minimum is searched |
 | **mAHP start / end (ms)** | 5 / 100 | Window after the peak in which the **medium AHP** minimum is searched |
-| **Max-slope window (ms)** | 0.5 | Sliding window over which dV/dt is averaged before taking max(|·|) for the **+slope** and **−slope** outputs |
+| **Max-slope window (ms)** | 0.5 | Width of the centred window over which dV/dt is averaged for the **+slope** and **−slope** outputs |
 | **Interp to 200 kHz** | on | Resamples the rise and decay segments to 200 kHz with linear interpolation before measuring percentage-crossing times; the slopes themselves remain on the original sampling grid |
 
 The interpolation is purely for *time-of-crossing* refinement —
@@ -2446,8 +2449,10 @@ spike. Columns:
 - **fAHP (mV)** — minimum Vm in the fAHP search window, expressed
   as Vm directly (not as the fAHP amplitude relative to threshold).
 - **mAHP (mV)** — minimum Vm in the mAHP search window.
-- **+slope (mV/ms)** — maximum smoothed dV/dt on the rising phase.
-- **−slope (mV/ms)** — minimum smoothed dV/dt on the falling phase.
+- **+slope (mV/ms)** — maximum smoothed dV/dt between threshold and
+  peak.
+- **−slope (mV/ms)** — minimum smoothed dV/dt between the peak and the
+  fAHP minimum, so a following spike never counts.
 
 A checkbox column on the left lets you select a subset of rows;
 the **Phase plot** (next section) draws an overlay loop for every
@@ -4254,7 +4259,8 @@ current form (which may have been edited since):
 - **Field Potential LTP**: the post-tetanus series is the one in the
   same group with the template's post-tetanus tag; none or several is
   an error. A template whose post-tetanus series has no tag is skipped
-  (it couldn't be matched).
+  (it couldn't be matched). Normalisation (on / off and the baseline
+  bins) and the time axis follow the template too.
 - **Spectral**: a template series without results is skipped.
 - Different analyses on the same series (Events and Resistance on
   sweeps with an in-sweep test pulse, say) run together; two recipes

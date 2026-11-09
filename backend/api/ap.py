@@ -240,6 +240,35 @@ async def ap_run(req: APRunRequest):
         except Exception:
             im_onset_s = None
 
+    # Window of the step, per sweep, for the F-I current and rheobase
+    # 'record' (#20): the manual window, or the protocol's dominant
+    # segment. Averaging over the analysis bounds instead diluted the step
+    # towards the holding level when the bounds covered the whole sweep.
+    im_windows_s: Optional[list] = None
+    if use_manual and req.manual_im_end_s > req.manual_im_start_s:
+        im_windows_s = [(float(req.manual_im_start_s), float(req.manual_im_end_s))] * len(sweep_indices)
+        # No protocol to read the onset from (ABF, NWB): the manual
+        # step start is the onset for first-spike latency (#25).
+        if im_onset_s is None:
+            im_onset_s = float(req.manual_im_start_s)
+    elif synth_channel is not None:
+        im_windows_s = []
+        for sweep_idx in sweep_indices:
+            t = 0.0
+            win = None
+            best_abs = 0.0
+            for seg in synth_channel.segments:
+                try:
+                    dur = seg.duration_at_sweep(sweep_idx)
+                    level = seg.voltage_at_sweep(sweep_idx)
+                except Exception:
+                    continue
+                if dur > 0 and abs(level) > best_abs:
+                    best_abs = abs(level)
+                    win = (t, t + dur)
+                t += dur
+            im_windows_s.append(win)
+
     # Default bounds_end_s to the Vm sweep length when not provided —
     # mirrors how FPsp handles "no end set".
     detection = dict(req.detection)
@@ -259,52 +288,8 @@ async def ap_run(req: APRunRequest):
         manual_edits=req.manual_edits,
         measure_kinetics=req.measure_kinetics,
         mode="spontaneous" if spontaneous else "evoked",
+        im_windows_s=im_windows_s,
     )
-
-    # Auto/protocol Im patch: for step protocols the per-sweep Im mean
-    # over [bounds_start_s, bounds_end_s] (typically the full sweep)
-    # is diluted by long stretches at holding (0 pA) and collapses
-    # toward zero. F-I points then all stack at x ≈ 0. Recompute
-    # im_mean from the most-active stim segment for each sweep, and
-    # rebuild the F-I curve from those step-level values. Spike
-    # counts/rates are not changed. (Manual mode doesn't need this —
-    # the user's start_s/end_s already bracket the step and the formula
-    # returns a single level per sweep.)
-    if (not use_manual) and synth_channel is not None:
-        new_fi_im: list[float] = []
-        new_fi_rate: list[float] = []
-        new_fi_sweep: list[int] = []
-        for i, sweep_idx in enumerate(sweep_indices):
-            # Find the dominant non-trivial segment for this sweep.
-            t = 0.0
-            step_t0 = step_t1 = None
-            best_abs = 0.0
-            for seg in synth_channel.segments:
-                try:
-                    dur = seg.duration_at_sweep(sweep_idx)
-                    level = seg.voltage_at_sweep(sweep_idx)
-                except Exception:
-                    continue
-                if dur > 0 and abs(level) > best_abs:
-                    best_abs = abs(level)
-                    step_t0 = t
-                    step_t1 = t + dur
-                t += dur
-            if step_t0 is None or i >= len(sweeps_im):
-                continue
-            i0 = max(0, int(round(step_t0 * sr)))
-            i1 = min(sweeps_im[i].size, int(round(step_t1 * sr)))
-            if i1 <= i0:
-                continue
-            step_im = float(np.mean(sweeps_im[i][i0:i1]))
-            ps = result["per_sweep"][i]
-            ps["im_mean_pa"] = step_im
-            if ps.get("spike_rate_hz") is not None:
-                new_fi_im.append(step_im)
-                new_fi_rate.append(ps["spike_rate_hz"])
-                new_fi_sweep.append(int(sweep_idx))
-        if new_fi_im:
-            result["fi_curve"] = {"im": new_fi_im, "rate": new_fi_rate, "sweep": new_fi_sweep}
 
     # Report back which Im source got used, so the UI's ImSourceCard
     # info line can say "detected: X" or "manual values" rather than
