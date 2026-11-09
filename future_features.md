@@ -29,6 +29,11 @@ window's detection.
   two parameter sets or two dates: what changed?
 - **Custom export columns** — user-defined CSV columns computed from
   existing per-event fields.
+- **Copy series tags between files** — tagging a folder for Batch means
+  tagging every file by hand. When files have the same structure (same
+  groups and series), copy the series tags from one file to the others
+  in one step, e.g. from the Batch template. Raised 2026-11-09 while
+  tagging the ground-truth recordings.
 
 ---
 
