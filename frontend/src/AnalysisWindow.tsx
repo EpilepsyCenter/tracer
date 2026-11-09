@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef, Suspense, lazy } from 'react'
 import { useThemeStore } from './stores/themeStore'
 import { CursorPositions, useAppStore } from './stores/appStore'
+import { WINDOW_KIND } from './utils/windowKind'
 
 // Each analysis window is its own lazy chunk so the shared bundle
 // doesn't carry code for all 14 windows in every renderer process.
@@ -170,6 +171,12 @@ export function AnalysisWindow({ view }: { view: string }) {
       const ch = new BroadcastChannel('tracer-sync')
 
       ch.onmessage = (ev) => {
+        // The store's own broadcasts come back to this window too, and
+        // late: adopting one during or after a file switch re-armed the
+        // auto-save and emptied the previous file's sidecar in Batch
+        // (#19), or could carry its results into the next file. This
+        // window already has that state, so ignore its own echoes.
+        if (ev.data?.src === WINDOW_KIND) return
         if (ev.data?.type === 'cursor-update' && ev.data.cursors) {
           setCursors(ev.data.cursors)
         }

@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { WINDOW_KIND } from '../utils/windowKind'
 import type { TrainParams } from '../utils/trains'
 import { computeBurstTrainIds } from '../utils/burstTrains'
 import {
@@ -191,7 +192,7 @@ const EMPTY_VISIBLE_TRACES: number[] = []
 function _broadcastIVCurves(ivCurves: Record<string, IVCurveData>) {
   try {
     const ch = new BroadcastChannel('tracer-sync')
-    ch.postMessage({ type: 'iv-update', ivCurves })
+    ch.postMessage({ src: WINDOW_KIND, type: 'iv-update', ivCurves })
     ch.close()
   } catch { /* ignore */ }
 }
@@ -199,7 +200,7 @@ function _broadcastIVCurves(ivCurves: Record<string, IVCurveData>) {
 function _broadcastFPsp(fpspCurves: Record<string, FPspData>) {
   try {
     const ch = new BroadcastChannel('tracer-sync')
-    ch.postMessage({ type: 'fpsp-update', fpspCurves })
+    ch.postMessage({ src: WINDOW_KIND, type: 'fpsp-update', fpspCurves })
     ch.close()
   } catch { /* ignore */ }
 }
@@ -207,7 +208,7 @@ function _broadcastFPsp(fpspCurves: Record<string, FPspData>) {
 function _broadcastCursorAnalyses(cursorAnalyses: Record<string, CursorAnalysisData>) {
   try {
     const ch = new BroadcastChannel('tracer-sync')
-    ch.postMessage({ type: 'cursor-analyses-update', cursorAnalyses })
+    ch.postMessage({ src: WINDOW_KIND, type: 'cursor-analyses-update', cursorAnalyses })
     ch.close()
   } catch { /* ignore */ }
 }
@@ -215,7 +216,7 @@ function _broadcastCursorAnalyses(cursorAnalyses: Record<string, CursorAnalysisD
 function _broadcastAP(apAnalyses: Record<string, APData>) {
   try {
     const ch = new BroadcastChannel('tracer-sync')
-    ch.postMessage({ type: 'ap-update', apAnalyses })
+    ch.postMessage({ src: WINDOW_KIND, type: 'ap-update', apAnalyses })
     ch.close()
   } catch { /* ignore */ }
 }
@@ -549,7 +550,7 @@ async function _saveSidecar(filePath: string, state: AppState): Promise<void> {
 function _broadcastScaleOverrides(scaleOverrides: ScaleOverrides) {
   try {
     const ch = new BroadcastChannel('tracer-sync')
-    ch.postMessage({ type: 'scale-overrides-update', scaleOverrides })
+    ch.postMessage({ src: WINDOW_KIND, type: 'scale-overrides-update', scaleOverrides })
     ch.close()
   } catch { /* ignore */ }
 }
@@ -557,7 +558,7 @@ function _broadcastScaleOverrides(scaleOverrides: ScaleOverrides) {
 function _broadcastEvents(eventsAnalyses: Record<string, EventsData>) {
   try {
     const ch = new BroadcastChannel('tracer-sync')
-    ch.postMessage({ type: 'events-update', eventsAnalyses })
+    ch.postMessage({ src: WINDOW_KIND, type: 'events-update', eventsAnalyses })
     ch.close()
   } catch { /* ignore */ }
 }
@@ -568,6 +569,7 @@ function _broadcastEvents(eventsAnalyses: Record<string, EventsData>) {
 export function stateSnapshotMessage(state: AppState) {
   return {
     type: 'state-update',
+    src: WINDOW_KIND,
     cursors: state.cursors,
     sweep: state.currentSweep,
     group: state.currentGroup,
@@ -608,7 +610,7 @@ function _broadcastPaired(
 ) {
   try {
     const ch = new BroadcastChannel('tracer-sync')
-    ch.postMessage({ type: 'paired-update', pairedAnalyses, pairedForm })
+    ch.postMessage({ src: WINDOW_KIND, type: 'paired-update', pairedAnalyses, pairedForm })
     ch.close()
   } catch { /* ignore */ }
 }
@@ -710,7 +712,7 @@ export function defaultEventsParams(): EventsParams {
 function _broadcastTraceNotes(traceNotes: Record<string, TraceNote[]>) {
   try {
     const ch = new BroadcastChannel('tracer-sync')
-    ch.postMessage({ type: 'notes-update', traceNotes })
+    ch.postMessage({ src: WINDOW_KIND, type: 'notes-update', traceNotes })
     ch.close()
   } catch { /* ignore */ }
 }
@@ -718,7 +720,7 @@ function _broadcastTraceNotes(traceNotes: Record<string, TraceNote[]>) {
 function _broadcastExcludedSweeps(excludedSweeps: Record<string, number[]>) {
   try {
     const ch = new BroadcastChannel('tracer-sync')
-    ch.postMessage({ type: 'excluded-update', excludedSweeps })
+    ch.postMessage({ src: WINDOW_KIND, type: 'excluded-update', excludedSweeps })
     ch.close()
   } catch { /* ignore */ }
 }
@@ -726,7 +728,7 @@ function _broadcastExcludedSweeps(excludedSweeps: Record<string, number[]>) {
 function _broadcastAveragedSweeps(averagedSweeps: Record<string, AveragedSweep[]>) {
   try {
     const ch = new BroadcastChannel('tracer-sync')
-    ch.postMessage({ type: 'averaged-update', averagedSweeps })
+    ch.postMessage({ src: WINDOW_KIND, type: 'averaged-update', averagedSweeps })
     ch.close()
   } catch { /* ignore */ }
 }
@@ -736,7 +738,7 @@ function _broadcastAveragedSweeps(averagedSweeps: Record<string, AveragedSweep[]
 function _broadcastSpectral(spectralAnalyses: Record<string, SpectralData>) {
   try {
     const ch = new BroadcastChannel('tracer-sync')
-    ch.postMessage({ type: 'spectral-update', spectralAnalyses })
+    ch.postMessage({ src: WINDOW_KIND, type: 'spectral-update', spectralAnalyses })
     ch.close()
   } catch { /* ignore — BroadcastChannel unavailable */ }
 }
@@ -747,7 +749,7 @@ function _broadcastSpectral(spectralAnalyses: Record<string, SpectralData>) {
 function _broadcastBursts(fieldBursts: Record<string, FieldBurstsData>, params: FieldBurstsParams) {
   try {
     const ch = new BroadcastChannel('tracer-sync')
-    ch.postMessage({ type: 'bursts-update', fieldBursts })
+    ch.postMessage({ src: WINDOW_KIND, type: 'bursts-update', fieldBursts })
     // Also push the detection filter config so the main viewer can adopt it
     // (keeps the visual-trace and burst-marker y-values aligned).
     if (params.filter_enabled) {
@@ -775,7 +777,7 @@ function _broadcastBursts(fieldBursts: Record<string, FieldBurstsData>, params: 
 function _broadcastBurstDualForm(burstDualForm: Record<string, BurstDualForm>) {
   try {
     const ch = new BroadcastChannel('tracer-sync')
-    ch.postMessage({ type: 'burst-dual-form-update', burstDualForm })
+    ch.postMessage({ src: WINDOW_KIND, type: 'burst-dual-form-update', burstDualForm })
     ch.close()
   } catch { /* ignore */ }
 }
@@ -785,7 +787,7 @@ function _broadcastBurstFormParams(
 ) {
   try {
     const ch = new BroadcastChannel('tracer-sync')
-    ch.postMessage({ type: 'burst-form-params-update', burstFormParams })
+    ch.postMessage({ src: WINDOW_KIND, type: 'burst-form-params-update', burstFormParams })
     ch.close()
   } catch { /* ignore */ }
 }
@@ -796,7 +798,7 @@ function _broadcastBurstFormParams(
 function _broadcastTrainParams(trainParams: TrainParamsBundle) {
   try {
     const ch = new BroadcastChannel('tracer-sync')
-    ch.postMessage({ type: 'train-params-update', trainParams })
+    ch.postMessage({ src: WINDOW_KIND, type: 'train-params-update', trainParams })
     ch.close()
   } catch { /* ignore */ }
 }
@@ -3336,11 +3338,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const { backendUrl, recording } = get()
     // Flush a pending (debounced) sidecar save first, as openFile does,
     // so an edit made just before closing isn't lost.
-    if (recording?.filePath && _sidecarTimer) {
-      clearTimeout(_sidecarTimer)
-      _sidecarTimer = null
-      try { await _saveSidecar(recording.filePath, get()) } catch { /* ignore */ }
-    }
+    if (recording?.filePath) await _flushPendingSidecar(recording.filePath)
     // Best-effort backend close — silently swallow failures so a
     // backend that never had a file open (rare race) doesn't block
     // the rest of the cleanup.
@@ -3371,13 +3369,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     // clobber the OLD file's sidecar with NEW data keyed to the
     // wrong filePath.
     const currentFilePath = get().recording?.filePath
-    if (currentFilePath && _sidecarTimer) {
-      clearTimeout(_sidecarTimer)
-      _sidecarTimer = null
-      try {
-        await _saveSidecar(currentFilePath, get())
-      } catch { /* ignore */ }
-    }
+    if (currentFilePath) await _flushPendingSidecar(currentFilePath)
+    // From here until the new file is loaded the per-file slices are
+    // reset while ``recording`` still names the old file: no debounced
+    // save may write in between (that wrote empty sidecars in Batch, #19).
+    _sidecarSwitching = true
     set({
       loading: true,
       error: null,
@@ -3472,7 +3468,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         const sidecar = await _loadSidecar(recording.filePath)
         if (sidecar) {
           const bc = new BroadcastChannel('tracer-sync')
-          const post = (msg: any) => { try { bc.postMessage(msg) } catch { /* ignore */ } }
+          const post = (msg: any) => { try { bc.postMessage({ src: WINDOW_KIND, ...msg }) } catch { /* ignore */ } }
           const a = sidecar.analyses ?? {}
           const patch: Partial<AppState> = {}
           // Only patch when the sidecar actually carries data for the
@@ -3674,6 +3670,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       } catch { /* ignore */ }
     } catch (err: any) {
       set({ error: err.message, loading: false })
+    } finally {
+      _sidecarSwitching = false
     }
   },
 
@@ -4610,7 +4608,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     // Propagate to other windows (main viewer) so markers clear there too.
     try {
       const ch = new BroadcastChannel('tracer-sync')
-      ch.postMessage({ type: 'bursts-update', fieldBursts: get().fieldBursts })
+      ch.postMessage({ src: WINDOW_KIND, type: 'bursts-update', fieldBursts: get().fieldBursts })
       ch.close()
     } catch { /* ignore */ }
   },
@@ -6567,6 +6565,22 @@ useAppStore.subscribe((state) => {
 // writers above so existing users don't lose state during the transition.
 // ---------------------------------------------------------------------------
 let _sidecarTimer: ReturnType<typeof setTimeout> | null = null
+/** True while openFile swaps recordings; debounced saves skip it. */
+let _sidecarSwitching = false
+
+/** Write a pending (debounced) save for ``filePath`` now, before the
+ *  caller resets the per-file state. Repeats while the timer re-arms: a
+ *  store update that lands during the write (e.g. the window's own
+ *  ``*-update`` broadcast coming back) schedules another save, and that
+ *  one would otherwise fire after the reset and write an empty sidecar. */
+async function _flushPendingSidecar(filePath: string): Promise<void> {
+  for (let i = 0; i < 3 && _sidecarTimer; i++) {
+    clearTimeout(_sidecarTimer)
+    _sidecarTimer = null
+    try { await _saveSidecar(filePath, useAppStore.getState()) } catch { /* ignore */ }
+  }
+  if (_sidecarTimer) { clearTimeout(_sidecarTimer); _sidecarTimer = null }
+}
 let _sidecarRefs = {
   events: null as any,
   bursts: null as any,
@@ -6631,7 +6645,12 @@ useAppStore.subscribe((state) => {
   if (_sidecarTimer) clearTimeout(_sidecarTimer)
   _sidecarTimer = setTimeout(() => {
     _sidecarTimer = null
-    _saveSidecar(filePath, useAppStore.getState())
+    const now = useAppStore.getState()
+    // Never write state that no longer belongs to this file: during a
+    // file switch the slices are already reset, and after one they
+    // belong to another recording (or none).
+    if (_sidecarSwitching || now.recording?.filePath !== filePath) return
+    _saveSidecar(filePath, now)
   }, SIDECAR_DEBOUNCE_MS)
 })
 
