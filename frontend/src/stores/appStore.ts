@@ -484,7 +484,7 @@ function _sidecarPayloadFromState(state: AppState): SidecarPayload {
   return {
     format: 'tracer-sidecar',
     version: SIDECAR_VERSION,
-    app_version: '0.5.0',
+    app_version: typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : 'dev',
     recording_name: state.recording?.filePath?.split(/[/\\]/).pop(),
     meta: state.recordingMeta ?? undefined,
     analyses: {
@@ -1026,7 +1026,7 @@ export interface FPspData {
  *  `label` is an optional short description (e.g. "reconstructed (pA)"). */
 export interface ImSource {
   /** ``disabled`` = spontaneous AP run (no stimulus, Im not used). */
-  mode: 'protocol' | 'manual' | 'none' | 'disabled'
+  mode: 'protocol' | 'trace' | 'manual' | 'none' | 'disabled'
   label: string | null
 }
 
@@ -1057,6 +1057,9 @@ export interface IVCurveData {
   manualImEndS?: number
   manualImStartPA?: number
   manualImStepPA?: number
+  /** Recorded stimulus channel used as the Im source (null / absent =
+   *  protocol or manual). */
+  stimTrace?: number | null
 }
 
 /** Per-series burst-detection output, keyed in the store by "group:series". */
@@ -1361,6 +1364,9 @@ export interface APData {
   manualImEndS: number
   manualImStartPA: number
   manualImStepPA: number
+  /** Recorded stimulus channel used as the Im source (null / absent =
+   *  protocol or manual). */
+  imTrace?: number | null
   /** Run-scope form state from the last run. Persisted so reopening
    *  the file lands you on the exact same "which sweeps" selection.
    *  Optional because pre-v0.3.1 saves don't carry it. */
@@ -2444,6 +2450,8 @@ interface AppState {
       manualEndS: number
       manualStartPA: number
       manualStepPA: number
+      /** Recorded stimulus channel, when the Im source is a trace. */
+      traceIndex?: number | null
     },
     sweepIndices: number[] | null,
     detection: APDetectionParams,
@@ -2597,6 +2605,8 @@ interface AppState {
       manualImEndS?: number
       manualImStartPA?: number
       manualImStepPA?: number
+      /** Recorded stimulus channel, when the Im source is a trace. */
+      stimTrace?: number | null
       /** Form-state echoed onto the stored ``IVCurveData`` so a close-
        *  and-reopen cycle restores the user's exact run setup (the
        *  Im-source widget AND the run-scope dropdown). Optional —
@@ -5014,6 +5024,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         qs.set('manual_im_end_s', String(params.manualImEndS ?? 0))
         qs.set('manual_im_start_pa', String(params.manualImStartPA ?? 0))
         qs.set('manual_im_step_pa', String(params.manualImStepPA ?? 0))
+      } else if (params.stimTrace != null) {
+        qs.set('stim_trace', String(params.stimTrace))
       }
       const resp = await apiFetch(backendUrl, `/api/iv/run?${qs}`)
       const key = `${group}:${series}`
@@ -5065,6 +5077,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         sweepTo: params.sweepTo ?? existing?.sweepTo,
         sweepOne: params.sweepOne ?? existing?.sweepOne,
         manualImEnabled: params.manualImEnabled ?? existing?.manualImEnabled,
+        stimTrace: params.stimTrace !== undefined ? params.stimTrace : existing?.stimTrace,
         manualImStartS: params.manualImStartS ?? existing?.manualImStartS,
         manualImEndS: params.manualImEndS ?? existing?.manualImEndS,
         manualImStartPA: params.manualImStartPA ?? existing?.manualImStartPA,
@@ -5549,6 +5562,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         manual_im_end_s: imSource.manualEndS,
         manual_im_start_pa: imSource.manualStartPA,
         manual_im_step_pa: imSource.manualStepPA,
+        im_trace: imSource.manualEnabled ? null : (imSource.traceIndex ?? null),
         mode,
       }
       const resp = await fetch(`${backendUrl}/api/ap/run`, {
@@ -5627,6 +5641,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         manualImEndS: imSource.manualEndS,
         manualImStartPA: imSource.manualStartPA,
         manualImStepPA: imSource.manualStepPA,
+        imTrace: imSource.traceIndex ?? null,
         detection, kinetics,
         rheobaseMode,
         rampParams,

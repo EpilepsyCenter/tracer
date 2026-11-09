@@ -33,6 +33,7 @@ from pydantic import BaseModel
 from api.files import get_current_recording
 from api.fpsp import _stim_for_series, _detect_stim_onset_s
 from utils.scaling import scaled
+from utils.stimulus import current_in_pa, steps_for_series
 from analysis.ap import (
     run_ap, phase_plot_for_spike, _Spike, measure_spike_polar, kinetics_for_method,
     kinetics_on_filtered,
@@ -74,6 +75,10 @@ class APRunRequest(BaseModel):
     manual_im_end_s: float = 0.0
     manual_im_start_pa: float = 0.0
     manual_im_step_pa: float = 0.0
+    # Recorded trace with the stimulus current (index into the sweep's
+    # traces): an NWB stimulus series, an ABF command, a HEKA current
+    # monitor. Used when Manual Im is off; overrides the protocol (#28).
+    im_trace: Optional[int] = None
     # 'evoked' (default — stimulus-driven sweeps) or 'spontaneous'
     # (continuous recording, no stimulus: Im / F-I / rheobase /
     # latency are skipped).
@@ -114,6 +119,7 @@ async def ap_run(req: APRunRequest):
     # it in the ImSourceCard info line.
     spontaneous = req.mode == "spontaneous"
     use_manual = bool(req.manual_im_enabled) and not spontaneous
+    use_trace = req.im_trace is not None and not use_manual and not spontaneous
     sweeps_vm: list[np.ndarray] = []
     # Im is always fetched — we need it for F-I curves, rheobase, and
     # latency-to-first-spike. Manual fills from the formula; auto fills
@@ -126,7 +132,7 @@ async def ap_run(req: APRunRequest):
     # (older Patchmaster versions don't write one; other file formats
     # may not either once we add them).
     synth_channel = None
-    if not use_manual and not spontaneous:
+    if not use_manual and not use_trace and not spontaneous:
         target = _stim_for_series(rec, req.group, req.series)
         if target is not None:
             # Layered current-channel pick:
@@ -230,10 +236,37 @@ async def ap_run(req: APRunRequest):
     if sr <= 0:
         raise HTTPException(status_code=400, detail="No valid sweeps in selection")
 
+    # Im from a recorded stimulus trace: the trace itself (in pA), and its
+    # step per sweep for the F-I window and the latency onset.
+    trace_steps = None
+    trace_label = ""
+    if use_trace:
+        sweeps_im = []
+        stim_traces = []
+        for si in sweep_indices:
+            sw = ser.sweeps[si]
+            if req.im_trace < 0 or req.im_trace >= sw.trace_count:
+                raise HTTPException(status_code=400, detail=f"Im trace {req.im_trace} isn't in sweep {si + 1}")
+            st = sw.traces[req.im_trace]
+            trace_label = st.label or f"Ch {req.im_trace}"
+            pa = current_in_pa(scaled(st), st.units)
+            if pa is None:
+                raise HTTPException(status_code=400, detail=(
+                    f"The Im trace ({trace_label}, {st.units}) isn't a current. "
+                    "Pick the stimulus current channel, or use Manual Im."))
+            if st.sampling_rate != sr and pa.size:
+                # Resample onto the Vm clock so indices line up.
+                t_im = np.arange(pa.size) / st.sampling_rate
+                t_vm = np.arange(int(round(pa.size / st.sampling_rate * sr))) / sr
+                pa = np.interp(t_vm, t_im, pa)
+            sweeps_im.append(pa)
+            stim_traces.append(pa)
+        trace_steps = steps_for_series(stim_traces, sr)
+
     # Stim onset (used for first-spike latency only; rheobase 'exact'
     # uses the actual Im channel sample rather than this).
     im_onset_s: Optional[float] = None
-    target = None if spontaneous else _stim_for_series(rec, req.group, req.series)
+    target = None if spontaneous or use_trace else _stim_for_series(rec, req.group, req.series)
     if target is not None:
         try:
             im_onset_s = float(_detect_stim_onset_s(target))
@@ -251,6 +284,11 @@ async def ap_run(req: APRunRequest):
         # step start is the onset for first-spike latency (#25).
         if im_onset_s is None:
             im_onset_s = float(req.manual_im_start_s)
+    elif use_trace and trace_steps is not None:
+        im_windows_s = [(st.start_s, st.end_s) if st else None for st in trace_steps]
+        starts = [st.start_s for st in trace_steps if st]
+        if starts:
+            im_onset_s = float(np.median(starts))
     elif synth_channel is not None:
         im_windows_s = []
         for sweep_idx in sweep_indices:
@@ -298,6 +336,8 @@ async def ap_run(req: APRunRequest):
         im_source = {"mode": "disabled", "label": None}
     elif use_manual:
         im_source = {"mode": "manual", "label": None}
+    elif use_trace:
+        im_source = {"mode": "trace", "label": f"{trace_label} (pA)"}
     elif synth_channel is not None:
         unit = getattr(synth_channel, "stim_unit_label", None) or "pA"
         im_source = {"mode": "protocol", "label": f"reconstructed ({unit})"}

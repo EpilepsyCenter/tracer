@@ -12,7 +12,8 @@ Checked:
 - F-I current = the step level, and rheobase 'record' = the first firing
   step, with the analysis bounds over the whole sweep (#20);
 - first-spike latency from the step onset (#25), and both of the above
-  through the AP endpoint with Manual Im, as the window runs it;
+  through the AP endpoint with Manual Im and with the stimulus taken from
+  a recorded trace (#28), as the window runs them;
 - per spike: threshold, peak, amplitude, rise, decay, half-width, fAHP,
   mAHP, +slope (#21) and −slope (#22), within tolerances that allow for
   sampling at 20 kHz;
@@ -267,25 +268,33 @@ def main():
 
     # Through the endpoint: Manual Im, analysis bounds over the whole sweep,
     # no protocol (as for ABF / NWB files).
+    # The recording also carries its stimulus as a channel, as an NWB
+    # file does (trace 1, in A → pA after the reader's scaling).
     rec = Recording(file_path="synthetic.nwb", file_name="synthetic.nwb", format="NWB", groups=[
         Group(index=0, series_list=[Series(index=0, label="CC_steps", sweeps=[
-            Sweep(index=i, traces=[Trace(data=v, sampling_rate=FS_REC, units="mV", label="Vm")])
+            Sweep(index=i, traces=[Trace(data=v, sampling_rate=FS_REC, units="mV", label="Vm"),
+                                   Trace(data=im[i], sampling_rate=FS_REC, units="pA", label="Stimulus")])
             for i, v in enumerate(v20)])])])
     ap_api.get_current_recording = lambda: rec
-    api_res = asyncio.run(ap_api.ap_run(ap_api.APRunRequest(
-        group=0, series=0, trace=0, detection=DETECTION, kinetics=KINETICS, rheobase_mode="record",
-        manual_im_enabled=True, manual_im_start_s=on, manual_im_end_s=off,
-        manual_im_start_pa=LEVELS[0], manual_im_step_pa=LEVELS[1] - LEVELS[0])))
-    for i, ps in enumerate(api_res["per_sweep"]):
-        check(f"endpoint sweep {i + 1} F-I current", ps["im_mean_pa"] is not None
-              and abs(ps["im_mean_pa"] - LEVELS[i]) < 1e-9, f"{ps['im_mean_pa']} vs {LEVELS[i]}")
-        if counts[i]:
-            lat = ps.get("first_spike_latency_s")
-            want = truth[i][0]["peak_t_s"] - on
-            check(f"endpoint sweep {i + 1} latency", lat is not None
-                  and abs(lat - want) * 1000 < TOL["latency_ms"], f"{lat} vs {want}")
-    check("endpoint rheobase", api_res["rheobase"]["value"] == LEVELS[first],
-          f"{api_res['rheobase']['value']} vs {LEVELS[first]}")
+    common = dict(group=0, series=0, trace=0, detection=DETECTION, kinetics=KINETICS, rheobase_mode="record")
+    runs = {
+        "Manual Im": ap_api.APRunRequest(
+            **common, manual_im_enabled=True, manual_im_start_s=on, manual_im_end_s=off,
+            manual_im_start_pa=LEVELS[0], manual_im_step_pa=LEVELS[1] - LEVELS[0]),
+        "recorded trace": ap_api.APRunRequest(**common, im_trace=1),          # #28
+    }
+    for how, req in runs.items():
+        api_res = asyncio.run(ap_api.ap_run(req))
+        for i, ps in enumerate(api_res["per_sweep"]):
+            check(f"endpoint ({how}) sweep {i + 1} F-I current", ps["im_mean_pa"] is not None
+                  and abs(ps["im_mean_pa"] - LEVELS[i]) < 1e-9, f"{ps['im_mean_pa']} vs {LEVELS[i]}")
+            if counts[i]:
+                lat = ps.get("first_spike_latency_s")
+                want = truth[i][0]["peak_t_s"] - on
+                check(f"endpoint ({how}) sweep {i + 1} latency", lat is not None
+                      and abs(lat - want) * 1000 < TOL["latency_ms"], f"{lat} vs {want}")
+        check(f"endpoint ({how}) rheobase", api_res["rheobase"]["value"] == LEVELS[first],
+              f"{api_res['rheobase']['value']} vs {LEVELS[first]}")
 
     if fails:
         print("FAIL")

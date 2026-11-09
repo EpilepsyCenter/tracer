@@ -1713,12 +1713,17 @@ charging through Rs:
 
 > **Cm** *(pF)* = τ / Rs
 
-with units arranged so that τ in ms divided by Rs in MΩ gives Cm
-in pF directly. The formula approximates the full *Cm = τ × (Rs +
-Rin) / (Rs · Rin)* by neglecting the contribution of Rin, which is
-acceptable when Rin ≫ Rs — typical for healthy cells. For cells
-where the input resistance is low (sick cells, leaky seals), the
-reported Cm should be treated as approximate.
+τ in ms divided by Rs in MΩ gives nF; TRACER multiplies by 1000 and
+reports pF. The formula approximates the full *Cm = τ × (Rs + Rm) /
+(Rs · Rm)* (Rm the membrane resistance) by neglecting the Rm term, so
+it reads low by the factor Rm / (Rs + Rm): about 7 % low for Rs =
+10 MΩ and Rm = 130 MΩ. That's acceptable when Rm ≫ Rs, as in healthy
+cells; with a low membrane resistance (sick cells, leaky seals) treat
+the reported Cm as approximate.
+
+The fit also needs enough of the decay: make **Fit duration** several
+time constants long (at least 3–5 τ). In the ground-truth test, a
+5 ms fit on a 2.8 ms τ came out about 30 % short, and Cm with it.
 
 TRACER also applies a sanity filter: any computed Cm outside
 the range 0.1 pF to 2 000 pF is dropped from the row rather than
@@ -1776,8 +1781,8 @@ The **I-V Curve** window plots a cell's response amplitude against
 the level of injected stimulus, sweep by sweep, and fits a line
 through the result. The slope of that line is the cell's **input
 resistance** (or its conductance, depending on which axis you read
-the line off), and the X-intercept is the **reversal potential** of
-the underlying current. Per-sweep entries also expose two summary
+the line off), and in voltage clamp the window also reports the
+**reversal potential** of the underlying current. Per-sweep entries also expose two summary
 numbers — **sag amplitude** and **sag ratio** — that quantify the
 slow re-equilibration after a hyperpolarising step, useful for
 characterising HCN-mediated Iₕ.
@@ -1859,11 +1864,11 @@ re-running.
   fast-onset response (for example, the peak of a synaptic current
   before desensitisation).
 
-### Stimulus level: auto and manual
+### Stimulus level: auto, recorded trace and manual
 
 Each sweep in an I-V protocol carries a different level of
 injected stimulus, and the analysis needs to know what that level
-is to plot it against the response. TRACER offers two ways of
+is to plot it against the response. TRACER offers three ways of
 supplying it.
 
 **Auto** — the default — reads the level out of the recording's
@@ -1876,24 +1881,33 @@ picoamperes automatically. After a successful run, the panel
 reports back what it detected — for example,
 *Detected: reconstructed (mV)*.
 
-**Manual** is the fallback for ABF files, plain-text imports, or
-HEKA recordings whose protocol metadata is missing. Pick **Manual
+**Recorded trace** is for recordings that carry the stimulus as a
+channel: an NWB file's stimulus series, an ABF command channel, a
+HEKA current or voltage monitor. Pick **Recorded trace** and choose
+the channel; a channel named "Stim…" is offered first. For each sweep
+TRACER finds the step on that channel (the longest stretch away from
+the holding level, robust to noise on a recorded monitor) and uses
+its level, absolute, in the channel's units. A sweep without a step
+(0 pA) gets the level over its neighbours' step window.
+
+**Manual** is the fallback for files with neither. Pick **Manual
 (start / step)** and fill in four fields:
 
 - **start (s)** — the time at which the stimulus turns on.
 - **end (s)** — the time at which it turns off.
-- **start Im (pA)** — the stimulus level of the *first* sweep in
-  the analysis range.
-- **step (pA)** — the increment per sweep, so that the level for
-  sweep *n* is *start + n × step*.
+- **start** — the stimulus level of the *first* sweep in the
+  analysis range: pA in current clamp, mV (the absolute command) in
+  voltage clamp.
+- **step** — the increment per sweep, so that the level for sweep
+  *n* is *start + n × step*.
 
 The window shows the formula as a small caption under the inputs to
 make the convention explicit. Negative values and zero steps are
 allowed; TRACER uses whatever you supply.
 
-If you leave the window in Auto on a recording that does not have
-a usable stimulus, the run aborts with a clear message asking you
-to switch to Manual.
+If you leave the window in Auto on a recording that has no stimulus
+protocol, the run stops with a message asking you to pick the
+stimulus trace or switch to Manual.
 
 ### Run controls
 
@@ -1962,9 +1976,14 @@ What the fit reports:
     MΩ.
   - For other unit combinations the field is left blank, since
     there is no unambiguous resistance interpretation.
-- **Reversal potential** — the X-intercept of the line, read off
-  the plot directly. The Y axis on the I-V plot is forced to
-  include zero so that the crossing is always visible.
+- **Reversal potential (Erev)** — voltage clamp only: the command
+  potential where a line fitted to the *absolute* currents (steady
+  state or peak, as the Y metric) crosses zero. The plotted response
+  is baseline-subtracted, so the plotted line always crosses zero at
+  the holding potential; that crossing is *not* the reversal. In
+  current clamp no reversal is reported (the x-intercept there is a
+  current). Cohort's *Reversal potential* metric uses the same
+  definition.
 
 ### The results panel
 
@@ -2300,21 +2319,25 @@ that sweep; the corresponding F–I point is highlighted.
 The lower-right of the Counting tab shows the cell's F–I curve as
 a scatter plot, one point per sweep, with the injected current on
 the X axis and the firing rate on the Y axis. TRACER gets the
-per-sweep current in one of two ways.
+per-sweep current in one of three ways (the **Im source** card).
 
 - **Auto** (default) — reads the stimulus channel reconstructed
-  from the recording's `.pgf` protocol, and uses the mean of that
-  channel over the analysis bounds as the per-sweep Im. The
-  detected stimulus source is reported in a caption ("*Detected:
-  reconstructed (pA)*"); when no usable protocol is found the
-  caption reads "*F-I curve needs an Im channel — pick one above
-  and re-run.*" and the curve panel stays empty.
+  from the recording's `.pgf` protocol, and uses its mean over the
+  step as the per-sweep Im. The detected stimulus source is reported
+  in a caption ("*Detected: reconstructed (pA)*"); when there's no
+  protocol the caption says so and the curve panel stays empty.
 
-- **Manual** — for ABF files or recordings whose protocol is
-  missing, tick **Manual Im** in the left panel and supply
-  *start (s)*, *end (s)*, *start (pA)* and *step (pA)* fields.
-  Sweep *n* is then assumed to carry an Im of *start_pA + n ×
-  step_pA*, constant across the supplied window and zero outside.
+- **Recorded trace** — for recordings that carry the stimulus current
+  as a channel (an NWB stimulus series, an ABF command, a HEKA
+  current monitor): choose the channel. TRACER finds each sweep's
+  step on it and uses the channel's mean over the step as Im; the
+  step's start is the onset for first-spike latency.
+
+- **Manual** — for files with neither: supply *start (s)*,
+  *end (s)*, *start (pA)* and *step (pA)*. Sweep *n* is then assumed
+  to carry an Im of *start_pA + n × step_pA*, constant across the
+  supplied window and zero outside; *start (s)* is the onset for
+  latency.
 
 Clicking a point on the F–I curve jumps the spike viewer to the
 first AP of that sweep.
@@ -3443,18 +3466,21 @@ sweep-to-sweep noise still cancels in the average.
 For the slope-based methods, the algorithm runs as follows on
 each (averaged) sweep:
 
-1. Find the **trough** inside the fEPSP window — the most negative
-   sample for a downward response.
-2. Estimate a **local baseline** from the first ~2 ms of the
-   fEPSP window.
+1. The **baseline** is the mean of the **Baseline** cursor window.
+2. Find the **trough** inside the fEPSP window — the most negative
+   sample for a downward response (the direction setting decides).
 3. Compute the response **amplitude** as *trough − baseline*.
-4. **Walk backward from the trough** until the trace crosses
-   *baseline + 10 % of amplitude*; **walk forward from there**
-   until the trace crosses *baseline + 90 %*. The 10 % and 90 %
-   percentages are user-configurable as **Slope low / high %**.
-5. **Linear-regress** the samples between those two crossings on a
-   millisecond time axis. The reported slope is in *units / ms*
-   with an *R²* of fit.
+4. **Walk backward from the trough** to the last sample before the
+   trace is 10 % of the amplitude away from baseline: the start of
+   the rising phase.
+5. From there, take the first sample past **Slope low %** and the
+   first past **Slope high %** of the amplitude (defaults 20 / 80;
+   no interpolation between samples).
+6. **Linear-regress** the samples between those two. The slope is
+   reported in *units / s* (e.g. mV/s).
+
+The volley amplitude is measured the same way in the Volley window,
+from the same baseline.
 
 For the **amplitude** method, only the trough and amplitude are
 reported. For the **range_slope** method, the slope is fitted with

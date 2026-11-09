@@ -851,6 +851,7 @@ export function BatchWindow({ backendUrl }: Props) {
       manualEndS: Number(p.manualImEndS ?? 0),
       manualStartPA: Number(p.manualImStartPA ?? 0),
       manualStepPA: Number(p.manualImStepPA ?? 0),
+      traceIndex: p.manualImEnabled ? null : (p.imTrace ?? null),
     }
     await forEachMatch(item, fileFraction, async (g, s) => {
       const channel = item.recipe.channel ?? 0
@@ -898,6 +899,7 @@ export function BatchWindow({ backendUrl }: Props) {
       manualImEndS: p.manualImEndS,
       manualImStartPA: p.manualImStartPA,
       manualImStepPA: p.manualImStepPA,
+      stimTrace: p.manualImEnabled ? null : (p.stimTrace ?? null),
     }
     await forEachMatch(item, fileFraction, async (g, s) => {
       const channel = item.recipe.channel ?? 0

@@ -627,12 +627,14 @@ def extract_ap_spontaneous(slice_data: dict, sidecar: dict) -> CellExtraction:
 def extract_iv(slice_data: dict, sidecar: dict) -> CellExtraction:
     """Linear fit on the I-V curve.
 
-    The slope and reversal here are unit-agnostic — caller knows
-    whether stim is current (slope = R, reversal in mV) or voltage
-    (slope = 1/R, reversal in pA) from ``meta.stim_unit`` /
-    ``meta.response_unit``. We don't try to convert because input
-    resistance from a current-injection IV is the same number under
-    both interpretations.
+    The slope is unit-agnostic: current clamp gives R (mV/pA), voltage
+    clamp 1/R (pA/mV); ``meta.stim_unit`` / ``meta.response_unit`` say
+    which. The reversal potential is reported for voltage clamp only (the
+    response is a current), as the zero crossing of the *absolute*
+    currents: the baseline-subtracted response is zero at the holding
+    potential by construction, so its zero crossing is just the holding
+    potential (#24). In current clamp the zero crossing is a current, not
+    a potential, so none is reported.
     """
     points = slice_data.get('points') or []
     metric = slice_data.get('responseMetric', 'steady')
@@ -659,8 +661,16 @@ def extract_iv(slice_data: dict, sidecar: dict) -> CellExtraction:
         slope, intercept = np.polyfit(xs, ys, 1)
         scalars['iv_slope'] = float(slope)
         scalars['iv_intercept'] = float(intercept)
-        if slope != 0:
-            scalars['reversal_potential'] = -float(intercept) / float(slope)
+        resp_u = str(slice_data.get('responseUnit') or '').strip()
+        if resp_u in ('pA', 'nA', 'µA', 'uA', 'A'):
+            absolute = [(p.get('stimLevel'), float(p.get(field_name)))
+                        for p in points
+                        if p.get('stimLevel') is not None and p.get(field_name) is not None]
+            xa = np.array([a[0] for a in absolute], dtype=float)
+            ya = np.array([a[1] for a in absolute], dtype=float)
+            s_abs, i_abs = np.polyfit(xa, ya, 1)
+            if s_abs != 0:
+                scalars['reversal_potential'] = -float(i_abs) / float(s_abs)
 
     meta: dict[str, Any] = {
         'n_points': len(points),

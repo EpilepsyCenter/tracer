@@ -11,7 +11,7 @@ import {
 import { useThemeStore, useThemeKey } from '../../stores/themeStore'
 import { NumInput } from '../common/NumInput'
 import { resolveSweeps } from '../../utils/sweepSelection'
-import { ImSourceCard } from '../common/ImSourceCard'
+import { ImSourceCard, defaultStimTrace } from '../common/ImSourceCard'
 import { ChannelsOverlaySelect, STIMULUS_OVERLAY_KEY } from '../common/ChannelsOverlaySelect'
 import { OverlayTraceViewer, OverlayChannel } from '../common/OverlayTraceViewer'
 import { usePlotMenu } from '../common/PlotMenu'
@@ -209,6 +209,8 @@ export function APWindow({
   const [manualImEndS, setManualImEndS] = useState(0)
   const [manualImStartPA, setManualImStartPA] = useState(0)
   const [manualImStepPA, setManualImStepPA] = useState(0)
+  // Recorded stimulus channel as the Im source (null = protocol / manual).
+  const [imTrace, setImTrace] = useState<number | null>(null)
   const hasSyncedRef = useRef(false)
   useEffect(() => {
     if (hasSyncedRef.current) return
@@ -225,6 +227,9 @@ export function APWindow({
     if (ser && series >= ser.length) setSeries(0)
   }, [fileInfo, group, series])
   const channels = useMemo(() => channelsForSeries(fileInfo, group, series), [fileInfo, group, series])
+  const stimOptions = useMemo(
+    () => channels.map((c: any) => ({ index: c.index, label: c.label, units: c.units })),
+    [channels])
   useEffect(() => {
     if (channels.length > 0 && trace >= channels.length) setTrace(0)
   }, [channels, trace])
@@ -683,6 +688,7 @@ export function APWindow({
     setManualImEndS(entry.manualImEndS ?? 0)
     setManualImStartPA(entry.manualImStartPA ?? 0)
     setManualImStepPA(entry.manualImStepPA ?? 0)
+    setImTrace(entry.imTrace ?? null)
     setDetection(entry.detection)
     setKinetics(entry.kinetics)
     setRheobaseMode(entry.rheobaseMode)
@@ -810,6 +816,7 @@ export function APWindow({
         manualEndS: manualImEndS,
         manualStartPA: manualImStartPA,
         manualStepPA: manualImStepPA,
+        traceIndex: !manualImEnabled && !spontaneous ? imTrace : null,
       },
       sweepIndices,
       detection, kinetics,
@@ -1003,8 +1010,16 @@ export function APWindow({
                 stimulus protocol; Manual falls back to start/step
                 values. Shared with the IV window via ImSourceCard. */}
             {!spontaneous && <ImSourceCard
-              mode={manualImEnabled ? 'manual' : 'auto'}
-              onModeChange={(m) => setManualImEnabled(m === 'manual')}
+              mode={manualImEnabled ? 'manual' : imTrace != null ? 'trace' : 'auto'}
+              onModeChange={(m) => {
+                setManualImEnabled(m === 'manual')
+                if (m === 'trace') {
+                  setImTrace((cur) => cur ?? defaultStimTrace(stimOptions, trace))
+                } else setImTrace(null)
+              }}
+              traces={stimOptions}
+              traceIndex={imTrace}
+              onTraceChange={setImTrace}
               manual={{
                 startS: manualImStartS,
                 endS: manualImEndS,

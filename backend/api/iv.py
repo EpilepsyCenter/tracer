@@ -18,6 +18,7 @@ from fastapi import APIRouter, HTTPException, Query
 
 from api.files import get_current_recording
 from utils.scaling import scaled
+from utils.stimulus import is_current_unit, steps_for_series
 from readers.heka_native.pgf import PgfStimulation, PgfChannel
 
 router = APIRouter()
@@ -103,6 +104,11 @@ async def run_iv(
     manual_im_step_pa: float = Query(0.0, description=(
         "Im increment between consecutive sweeps (pA)."
     )),
+    stim_trace: Optional[int] = Query(None, description=(
+        "Index of a recorded trace holding the stimulus (NWB stimulus, ABF "
+        "command, HEKA monitor). Each sweep's level is its step's level. "
+        "Used when Manual Im is off, instead of the protocol."
+    )),
 ):
     """Run I-V analysis over every sweep in a series.
 
@@ -129,13 +135,14 @@ async def run_iv(
         raise HTTPException(status_code=400, detail="Invalid group/series index")
 
     target: Optional[PgfStimulation] = None
-    if not manual_im_enabled:
+    use_trace = stim_trace is not None and not manual_im_enabled
+    if not manual_im_enabled and not use_trace:
         if _pgf_data is None:
             raise HTTPException(
                 status_code=400,
                 detail=(
-                    "No stimulus info for this recording. Enable 'Manual Im' "
-                    "to provide start/end times and amplitudes by hand."
+                    "No stimulus protocol for this recording. Pick the "
+                    "stimulus trace as the Im source, or enable 'Manual Im'."
                 ),
             )
         # Linearly map (group, series) → stim index (same logic as traces.py::stimulus).
@@ -168,6 +175,24 @@ async def run_iv(
             sweep_filter = {int(x) for x in sweeps.split(",") if x.strip() != ""}
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid `sweeps` list")
+
+    # Recorded stimulus trace: the level of each sweep's step (#28).
+    trace_levels: dict[int, float] = {}
+    trace_unit = ""
+    if use_trace:
+        idxs = [i for i in range(len(ser.sweeps)) if sweep_filter is None or i in sweep_filter]
+        traces = []
+        for i in idxs:
+            sw = ser.sweeps[i]
+            if stim_trace < 0 or stim_trace >= sw.trace_count:
+                raise HTTPException(status_code=400, detail=f"Stimulus trace {stim_trace} isn't in sweep {i + 1}")
+            st = sw.traces[stim_trace]
+            trace_unit = st.units
+            traces.append(scaled(st))
+        sr_stim = ser.sweeps[idxs[0]].traces[stim_trace].sampling_rate if idxs else 0.0
+        for i, step in zip(idxs, steps_for_series(traces, sr_stim)):
+            if step is not None:
+                trace_levels[i] = step.level
 
     points = []
     response_unit = ""
@@ -208,7 +233,13 @@ async def run_iv(
 
         if manual_im_enabled:
             stim_level = manual_im_start_pa + sw_idx * manual_im_step_pa
-            stim_unit = "pA"
+            # The manual numbers are a voltage in voltage clamp (the
+            # response is a current), a current otherwise (#24).
+            stim_unit = "mV" if is_current_unit(response_unit) else "pA"
+        elif use_trace:
+            if sw_idx not in trace_levels:
+                continue
+            stim_level, stim_unit = trace_levels[sw_idx], trace_unit
         elif target is not None:
             stim_level, stim_unit = _stim_level_for_sweep(target, sw_idx)
         else:
@@ -244,6 +275,9 @@ async def run_iv(
     # surface it. Matches the shape AP returns.
     if manual_im_enabled:
         im_source = {"mode": "manual", "label": None}
+    elif use_trace:
+        lbl = ser.sweeps[0].traces[stim_trace].label if ser.sweeps and stim_trace < ser.sweeps[0].trace_count else ""
+        im_source = {"mode": "trace", "label": f"{lbl or f'Ch {stim_trace}'} ({trace_unit})"}
     elif target is not None:
         picked = _pick_stim_channel(target)
         unit = getattr(picked, "stim_unit_label", None) or stim_unit or ""
