@@ -1088,6 +1088,17 @@ export function BatchWindow({ backendUrl }: Props) {
         ...fpspParams, seriesB, sweepIndices, appendToExisting: false,
         runMode: p.runMode, sweepFrom: p.sweepFrom, sweepTo: p.sweepTo, sweepOne: p.sweepOne,
       })
+      // The window keeps normalisation and the time axis on the entry, and
+      // runFPsp leaves a target's own (default: off): carry the
+      // template's so Batch repeats what the template showed (#23).
+      const after = useAppStore.getState()
+      if (after.fpspCurves[`${g}:${s}:${mode}`]) {
+        if (p.normalize != null) after.setFPspNormalize(mode, g, s, !!p.normalize)
+        if (p.normBaselineFrom != null && p.normBaselineTo != null) {
+          after.setFPspNormBaseline(mode, g, s, Number(p.normBaselineFrom), Number(p.normBaselineTo))
+        }
+        if (p.timeAxis) after.setFPspTimeAxis(mode, g, s, p.timeAxis)
+      }
     })
   }, [forEachMatch, appRunFPsp])
 
