@@ -4,15 +4,17 @@ import type { ImSource } from '../../stores/appStore'
 
 /**
  * Shared Im-source configuration card used by the AP and IV analysis
- * windows. Two modes:
+ * windows. Three modes:
  *
  *   - Auto   — backend reconstructs Im from the recording's stimulus
- *              protocol. The card only shows an info line with what
- *              the last run actually picked, so users can tell auto
+ *              protocol (HEKA). The card only shows an info line with
+ *              what the last run actually picked, so users can tell auto
  *              worked (or failed).
+ *   - Trace  — a recorded channel holds the stimulus (NWB stimulus, ABF
+ *              command, HEKA monitor); the user picks it, and each
+ *              sweep's level and timing come from its step.
  *   - Manual — user supplies start/step/window and Im is computed as
  *              `start_pa + sweep_index * step_pa` within [start_s, end_s].
- *              Fallback when the recording has no stimulus protocol.
  *
  * The `detected` field is populated from the last run's backend
  * response (via `APData.imSource` / `IVCurveData.imSource`) and is
@@ -31,17 +33,37 @@ interface ManualIm {
   stepPA: number
 }
 
+export type ImSourceMode = 'auto' | 'trace' | 'manual'
+
+export interface StimTraceOption { index: number; label: string; units: string }
+
+/** The channel to offer first: one named like a stimulus, else the first
+ *  channel that isn't the analysed one. The user can always change it. */
+export function defaultStimTrace(channels: StimTraceOption[], analysed: number): number | null {
+  const named = channels.find((c) => /^stim/i.test(c.label) && c.index !== analysed)
+  if (named) return named.index
+  return channels.find((c) => c.index !== analysed)?.index ?? null
+}
+
 export function ImSourceCard({
   mode, onModeChange,
   manual, onManualChange,
   detected,
+  traces = [], traceIndex = null, onTraceChange,
+  levelUnit = 'pA',
 }: {
-  mode: 'auto' | 'manual'
-  onModeChange: (m: 'auto' | 'manual') => void
+  mode: ImSourceMode
+  onModeChange: (m: ImSourceMode) => void
   manual: ManualIm
   onManualChange: (patch: Partial<ManualIm>) => void
   /** Populated from the last run's response. null before first run. */
   detected: ImSource | null | undefined
+  /** Channels of the series, for the Trace mode. */
+  traces?: StimTraceOption[]
+  traceIndex?: number | null
+  onTraceChange?: (index: number) => void
+  /** Unit of the manual levels: pA (current clamp) or mV (voltage clamp). */
+  levelUnit?: string
 }) {
   return (
     <div className="section-card" style={{
@@ -51,12 +73,30 @@ export function ImSourceCard({
       <label style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         <span style={{ color: 'var(--text-muted)' }}>Im source</span>
         <select value={mode}
-          onChange={(e) => onModeChange(e.target.value as 'auto' | 'manual')}
+          onChange={(e) => onModeChange(e.target.value as ImSourceMode)}
           style={{ width: '100%' }}>
           <option value="auto">Auto (from stimulus protocol)</option>
+          <option value="trace" disabled={traces.length === 0}>Recorded trace</option>
           <option value="manual">Manual (start / step)</option>
         </select>
       </label>
+
+      {mode === 'trace' && (
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <span style={{ color: 'var(--text-muted)' }}>Stimulus trace</span>
+          <select value={traceIndex ?? ''}
+            onChange={(e) => onTraceChange?.(Number(e.target.value))}
+            style={{ width: '100%' }}>
+            {traceIndex == null && <option value="">— pick a channel —</option>}
+            {traces.map((c) => (
+              <option key={c.index} value={c.index}>{c.label} ({c.units})</option>
+            ))}
+          </select>
+          {detected?.mode === 'trace' && (
+            <span style={{ color: 'var(--text-muted)' }}>● Used: {detected.label}</span>
+          )}
+        </label>
+      )}
 
       {mode === 'auto' && (
         <div style={{
@@ -88,12 +128,12 @@ export function ImSourceCard({
               onChange={(v) => onManualChange({ endS: v })} />
           </label>
           <label style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <span style={{ color: 'var(--text-muted)' }}>Start Im (pA)</span>
+            <span style={{ color: 'var(--text-muted)' }}>Start ({levelUnit})</span>
             <NumInput value={manual.startPA} step={1}
               onChange={(v) => onManualChange({ startPA: v })} />
           </label>
           <label style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <span style={{ color: 'var(--text-muted)' }}>Step (pA)</span>
+            <span style={{ color: 'var(--text-muted)' }}>Step ({levelUnit})</span>
             <NumInput value={manual.stepPA} step={1}
               onChange={(v) => onManualChange({ stepPA: v })} />
           </label>
@@ -101,7 +141,7 @@ export function ImSourceCard({
             gridColumn: '1 / -1',
             color: 'var(--text-muted)', fontStyle: 'italic',
           }}>
-            Im(sweep n) = startPA + n · stepPA
+            level(sweep n) = start + n · step
           </span>
         </div>
       )}
@@ -118,6 +158,7 @@ function describeDetected(d: ImSource | null | undefined): string {
     // Shouldn't happen in Auto mode, but just in case.
     return 'Manual Im values in use.'
   }
+  if (d.mode === 'trace') return `● Recorded trace: ${d.label}`
   // d.mode === 'none'
-  return '⚠ No Im source found — switch to Manual to provide values.'
+  return '⚠ No stimulus protocol — pick the stimulus channel (Recorded trace) or use Manual.'
 }

@@ -5,7 +5,7 @@ import 'uplot/dist/uPlot.min.css'
 import { useAppStore, IVCurveData, IVResponseMetric, CursorPositions } from '../../stores/appStore'
 import { useThemeStore, useThemeKey } from '../../stores/themeStore'
 import { NumInput } from '../common/NumInput'
-import { ImSourceCard } from '../common/ImSourceCard'
+import { ImSourceCard, defaultStimTrace } from '../common/ImSourceCard'
 import { ChannelsOverlaySelect, STIMULUS_OVERLAY_KEY } from '../common/ChannelsOverlaySelect'
 import { OverlayTraceViewer, OverlayChannel } from '../common/OverlayTraceViewer'
 import { usePlotMenu } from '../common/PlotMenu'
@@ -25,6 +25,11 @@ interface FileInfo {
 
 function cssVar(name: string): string {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+}
+
+/** True for current units (the response of a voltage-clamp I-V). */
+function isCurrentUnit(u?: string | null): boolean {
+  return ['pa', 'na', 'µa', 'ua', 'a'].includes((u ?? '').trim().toLowerCase())
 }
 
 function channelsForSeries(fileInfo: FileInfo | null, group: number, series: number): any[] {
@@ -79,6 +84,9 @@ export function IVCurveWindow({
   }, [fileInfo, group, series])
 
   const channels = useMemo(() => channelsForSeries(fileInfo, group, series), [fileInfo, group, series])
+  const stimOptions = useMemo(
+    () => channels.map((c: any) => ({ index: c.index, label: c.label, units: c.units })),
+    [channels])
   useEffect(() => {
     if (channels.length > 0 && channel >= channels.length) setChannel(0)
   }, [channels, channel])
@@ -122,6 +130,7 @@ export function IVCurveWindow({
     if (entry.manualImEndS != null) setManualImEndS(entry.manualImEndS)
     if (entry.manualImStartPA != null) setManualImStartPA(entry.manualImStartPA)
     if (entry.manualImStepPA != null) setManualImStepPA(entry.manualImStepPA)
+    setStimTrace(entry.stimTrace ?? null)
     // Restore the cursor windows the original run used. Without
     // this, the cursors stay at whatever the main TraceViewer
     // currently shows — typically the defaults — and the next Run
@@ -163,6 +172,8 @@ export function IVCurveWindow({
   const [manualImEndS, setManualImEndS] = useState(0.6)
   const [manualImStartPA, setManualImStartPA] = useState(-100)
   const [manualImStepPA, setManualImStepPA] = useState(20)
+  // Recorded stimulus channel as the Im source (null = protocol / manual).
+  const [stimTrace, setStimTrace] = useState<number | null>(null)
 
   // ---- Mini-viewer state ----
   const [previewSweep, setPreviewSweep] = useState(currentSweep)
@@ -314,6 +325,7 @@ export function IVCurveWindow({
       manualImEndS,
       manualImStartPA,
       manualImStepPA,
+      stimTrace: manualImEnabled ? null : stimTrace,
       // Form-state passes through the action now and lands on the
       // stored entry inside ``runIVCurve`` itself; the broadcast
       // afterwards carries it to the main window's store and from
@@ -383,15 +395,27 @@ export function IVCurveWindow({
     //   VC: stim mV, response pA  → slope (pA/mV) → R = 1000 / slope  [MΩ]
     //   CC: stim pA, response mV  → slope (mV/pA) → R = slope × 1000  [MΩ]
     //   otherwise — not meaningful.
+    // The response unit decides the mode: older Manual-Im runs labelled a
+    // voltage-clamp stimulus "pA" (#24).
     let rInMOhm: number | null = null
-    const stimU = entry.stimUnit.toLowerCase()
+    let reversalMV: number | null = null
     const respU = entry.responseUnit.toLowerCase()
-    if (stimU === 'mv' && respU === 'pa' && slope !== 0) {
+    const vc = isCurrentUnit(respU)
+    if (vc && slope !== 0) {
       rInMOhm = 1000 / slope  // signed; take abs in UI
-    } else if (stimU === 'pa' && respU === 'mv') {
+      // Reversal: zero crossing of the ABSOLUTE currents. The plotted
+      // response is baseline-subtracted, so its own zero crossing is
+      // always the holding potential.
+      const ya = entry.points.map((p) => entry.responseMetric === 'peak' ? p.transientPeak : p.steadyState)
+      const mya = ya.reduce((a, b) => a + b, 0) / n
+      let numA = 0
+      for (let i = 0; i < n; i++) numA += (xs[i] - mx) * (ya[i] - mya)
+      const slopeA = numA / den
+      if (slopeA !== 0) reversalMV = mx - mya / slopeA
+    } else if (respU === 'mv') {
       rInMOhm = slope * 1000
     }
-    return { slope, intercept, r2, rInMOhm }
+    return { slope, intercept, r2, rInMOhm, reversalMV }
   }, [entry])
 
   return (
@@ -523,8 +547,17 @@ export function IVCurveWindow({
                 start/step/window (for recordings where the stimulus
                 wasn't saved or the protocol doesn't expose Im). */}
             <ImSourceCard
-              mode={manualImEnabled ? 'manual' : 'auto'}
-              onModeChange={(m) => setManualImEnabled(m === 'manual')}
+              mode={manualImEnabled ? 'manual' : stimTrace != null ? 'trace' : 'auto'}
+              onModeChange={(m) => {
+                setManualImEnabled(m === 'manual')
+                if (m === 'trace') {
+                  setStimTrace((cur) => cur ?? defaultStimTrace(stimOptions, channel))
+                } else setStimTrace(null)
+              }}
+              traces={stimOptions}
+              traceIndex={stimTrace}
+              onTraceChange={setStimTrace}
+              levelUnit={isCurrentUnit(channels.find((c: any) => c.index === channel)?.units) ? 'mV' : 'pA'}
               manual={{
                 startS: manualImStartS,
                 endS: manualImEndS,
@@ -782,6 +815,12 @@ export function IVCurveWindow({
                       Rin = {Math.abs(fit.rInMOhm).toFixed(1)} MΩ
                     </span>
                   )}
+                  {fit.reversalMV != null && (
+                    <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}
+                      title="Zero crossing of the absolute currents (not of the baseline-subtracted plot)">
+                      Erev = {fit.reversalMV.toFixed(1)} mV
+                    </span>
+                  )}
                 </span>
               )}
             </div>
@@ -825,7 +864,7 @@ function IVPlot({
   entry: IVCurveData | undefined
   heightSignal: number
   onSelectIdx: (idx: number) => void
-  fit: { slope: number; intercept: number; r2: number; rInMOhm: number | null } | null
+  fit: { slope: number; intercept: number; r2: number; rInMOhm: number | null; reversalMV?: number | null } | null
 }) {
   const themeKey = useThemeKey()
   const containerRef = useRef<HTMLDivElement>(null)
@@ -1650,7 +1689,7 @@ function ResultsTabs({
   entry, fit, onSelectRow,
 }: {
   entry: IVCurveData | undefined
-  fit: { slope: number; intercept: number; r2: number; rInMOhm: number | null } | null
+  fit: { slope: number; intercept: number; r2: number; rInMOhm: number | null; reversalMV?: number | null } | null
   onSelectRow: (idx: number) => void
 }) {
   const [activeTab, setActiveTab] = useState<'iv' | 'table'>('iv')
