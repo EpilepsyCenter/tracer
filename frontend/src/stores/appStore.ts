@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { WINDOW_KIND } from '../utils/windowKind'
+import { mergeSidecarSlots, type SidecarSlot } from '../utils/sidecarMerge'
 import type { TrainParams } from '../utils/trains'
 import { computeBurstTrainIds } from '../utils/burstTrains'
 import {
@@ -518,11 +519,16 @@ function _sidecarPayloadFromState(state: AppState): SidecarPayload {
   }
 }
 
-async function _saveSidecar(filePath: string, state: AppState): Promise<void> {
+/** Write the sidecar. With ``slots``, only those slices come from
+ *  ``state``; everything else stays as it is on disk, so a window can
+ *  never overwrite results it didn't produce itself (#31). Without, or
+ *  when there's no sidecar yet, the whole state is written. */
+async function _saveSidecar(filePath: string, state: AppState, slots?: SidecarSlot[]): Promise<void> {
   const api = window.electronAPI
   if (!api?.writeSidecar || !filePath) return
+  if (slots && slots.length === 0) return
   try {
-    const payload = _sidecarPayloadFromState(state)
+    let payload: any = _sidecarPayloadFromState(state)
     // Meta block is owned by the metadata window — it writes
     // synchronously via writeSidecar at the moment of each user
     // edit. Main's debounced auto-save fires for unrelated state
@@ -538,6 +544,7 @@ async function _saveSidecar(filePath: string, state: AppState): Promise<void> {
     if (api.readSidecar) {
       try {
         const existing = await api.readSidecar(filePath)
+        if (existing && slots) payload = mergeSidecarSlots(existing as Record<string, any>, payload, slots)
         if (existing && (existing as any).meta) {
           payload.meta = (existing as any).meta as SidecarMeta
         }
@@ -3682,6 +3689,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ error: err.message, loading: false })
     } finally {
       _sidecarSwitching = false
+      // What was just loaded is what's on disk: not an edit to save back
+      // (a write of it could put the loaded copy over a newer one, #31).
+      _sidecarRefs = _sidecarRefsOf(get())
+      _sidecarDirty.clear()
+      if (_sidecarTimer) { clearTimeout(_sidecarTimer); _sidecarTimer = null }
     }
   },
 
@@ -6583,6 +6595,36 @@ let _sidecarTimer: ReturnType<typeof setTimeout> | null = null
 /** True while openFile swaps recordings; debounced saves skip it. */
 let _sidecarSwitching = false
 
+/** Slices this window changed itself since its last save (#31). */
+const _sidecarDirty = new Set<SidecarSlot>()
+function _takeDirty(): SidecarSlot[] {
+  const out = [..._sidecarDirty]
+  _sidecarDirty.clear()
+  return out
+}
+
+/** Before this window adopts another recording (a state snapshot from
+ *  the window that opened it), write its own unsaved edits to the file
+ *  they belong to. The debounced save would otherwise see the new file
+ *  and skip them. */
+export function flushBeforeRecordingChange(nextPath: string | null | undefined): void {
+  const cur = useAppStore.getState().recording?.filePath
+  if (!cur || cur === nextPath || !_sidecarTimer) return
+  clearTimeout(_sidecarTimer)
+  _sidecarTimer = null
+  void _saveSidecar(cur, useAppStore.getState(), _takeDirty())
+}
+
+/** > 0 while a window adopts another window's broadcast state. */
+let _adoptDepth = 0
+/** Run ``fn`` — a cross-window message handler — so the state it sets
+ *  counts as adopted, not as this window's own edit: it isn't written to
+ *  the sidecar from here (the sending window saves it). */
+export function adoptingMessage(fn: () => void): void {
+  _adoptDepth++
+  try { fn() } finally { _adoptDepth-- }
+}
+
 /** Write a pending (debounced) save for ``filePath`` now, before the
  *  caller resets the per-file state. Repeats while the timer re-arms: a
  *  store update that lands during the write (e.g. the window's own
@@ -6592,9 +6634,10 @@ async function _flushPendingSidecar(filePath: string): Promise<void> {
   for (let i = 0; i < 3 && _sidecarTimer; i++) {
     clearTimeout(_sidecarTimer)
     _sidecarTimer = null
-    try { await _saveSidecar(filePath, useAppStore.getState()) } catch { /* ignore */ }
+    try { await _saveSidecar(filePath, useAppStore.getState(), _takeDirty()) } catch { /* ignore */ }
   }
   if (_sidecarTimer) { clearTimeout(_sidecarTimer); _sidecarTimer = null }
+  _sidecarDirty.clear()
 }
 let _sidecarRefs = {
   events: null as any,
@@ -6619,14 +6662,9 @@ let _sidecarRefs = {
   scaleOverrides: null as any,
   filtersBySeries: null as any,
 }
-useAppStore.subscribe((state) => {
-  // Same gate as the per-slice prefs subscribers above: skip while
-  // ``loading`` is true so the openFile clear-state transition
-  // can't schedule a phantom save with a stale filePath.
-  if (state.loading) return
-  const filePath = state.recording?.filePath
-  if (!filePath) return
-  const next = {
+/** The tracked slices of ``state``, keyed as in ``_SIDECAR_SLOTS``. */
+function _sidecarRefsOf(state: AppState): typeof _sidecarRefs {
+  return {
     events: state.eventsAnalyses,
     bursts: state.fieldBursts,
     spectral: state.spectralAnalyses,
@@ -6649,14 +6687,26 @@ useAppStore.subscribe((state) => {
     scaleOverrides: state.scaleOverrides,
     filtersBySeries: state.filtersBySeries,
   }
+}
+
+useAppStore.subscribe((state) => {
+  // Same gate as the per-slice prefs subscribers above: skip while
+  // ``loading`` is true so the openFile clear-state transition
+  // can't schedule a phantom save with a stale filePath.
+  if (state.loading) return
+  const filePath = state.recording?.filePath
+  if (!filePath) return
+  const next = _sidecarRefsOf(state)
   // Reference-equality check across the tracked slices — avoids
   // re-scheduling on unrelated state churn (e.g. trace fetches).
-  let changed = false
-  for (const k of Object.keys(next) as (keyof typeof next)[]) {
-    if (next[k] !== _sidecarRefs[k]) { changed = true; break }
-  }
-  if (!changed) return
+  const changed = (Object.keys(next) as SidecarSlot[]).filter((k) => next[k] !== _sidecarRefs[k])
+  if (changed.length === 0) return
   _sidecarRefs = next
+  // State adopted from another window's broadcast is that window's to
+  // save; writing it from here could put an older copy over newer
+  // results (#31). Only this window's own edits are saved from here.
+  if (_adoptDepth > 0) return
+  for (const k of changed) _sidecarDirty.add(k)
   if (_sidecarTimer) clearTimeout(_sidecarTimer)
   _sidecarTimer = setTimeout(() => {
     _sidecarTimer = null
@@ -6665,7 +6715,7 @@ useAppStore.subscribe((state) => {
     // file switch the slices are already reset, and after one they
     // belong to another recording (or none).
     if (_sidecarSwitching || now.recording?.filePath !== filePath) return
-    _saveSidecar(filePath, now)
+    _saveSidecar(filePath, now, _takeDirty())
   }, SIDECAR_DEBOUNCE_MS)
 })
 
@@ -6678,12 +6728,11 @@ window.addEventListener('beforeunload', () => {
   const state = useAppStore.getState()
   const filePath = state.recording?.filePath
   if (!filePath) return
-  if (_sidecarTimer) {
-    clearTimeout(_sidecarTimer)
-    _sidecarTimer = null
-  }
+  if (!_sidecarTimer) return          // nothing of this window's unsaved
+  clearTimeout(_sidecarTimer)
+  _sidecarTimer = null
   // Fire-and-forget — renderer can't block the unload.
-  void _saveSidecar(filePath, state)
+  void _saveSidecar(filePath, state, _takeDirty())
 })
 
 declare global {

@@ -1,5 +1,5 @@
 import React, { useMemo, useEffect, useRef, useState, useCallback } from 'react'
-import { useAppStore, CursorPositions, fileCloseResetSlices, FilterState, RecordingInfo, stateSnapshotMessage } from '../../stores/appStore'
+import { useAppStore, CursorPositions, fileCloseResetSlices, FilterState, RecordingInfo, stateSnapshotMessage, adoptingMessage } from '../../stores/appStore'
 import { NumInput } from '../common/NumInput'
 
 // ---- Stable, module-level sub-components ----
@@ -223,7 +223,8 @@ export function CursorPanel() {
     try {
       const ch = new BroadcastChannel('tracer-sync')
       channelRef.current = ch
-      ch.onmessage = (ev) => {
+      // State adopted from analysis windows is theirs to save (#31).
+      ch.onmessage = (ev) => adoptingMessage(() => {
         // Cross-window file close — when another window (currently
         // the Batch window before kicking off a multi-file run)
         // posts ``file-close``, clear the main window's per-recording
@@ -379,7 +380,7 @@ export function CursorPanel() {
             order: Number(f.order ?? 4),
           })
         }
-      }
+      })
       return () => ch.close()
     } catch { /* ignore */ }
   }, [])
