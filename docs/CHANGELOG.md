@@ -13,6 +13,42 @@ starts, and from Help ▸ What's New. Newest version first.
   `python3 scripts/release_notes.py <version> --apply`.
 -->
 
+## 1.4.0
+
+Several analyses now give different, correct values when you run them again: rheobase and the F–I curve with Manual Im, action potential slopes, rise times and half-widths, and the voltage-clamp reversal potential. Re-run analyses you report from, and re-run any Field Potential Batch made with 1.3.x.
+
+### New
+
+- **Im from a recorded stimulus trace.** When the stimulus is a channel in the file (an NWB stimulus series, an ABF command channel, a HEKA current or voltage monitor), pick *Recorded trace* as the Im source in the Action Potentials and I-V windows and choose the channel. TRACER finds each sweep's step on it for the F–I curve, rheobase, latency and I-V levels. Batch uses the template's choice. [Read more](manual:11. I-V Curve > Stimulus level: auto, recorded trace and manual)
+
+- **Reversal potential in voltage clamp.** The I-V window shows *Erev*, where the absolute currents cross zero. [Read more](manual:11. I-V Curve > The I-V line)
+
+### Improved
+
+- **Checked against known answers.** Action potentials, I-V curves and the way results are saved are now tested on simulated recordings whose answers are known, every time TRACER changes.
+
+- **Manual corrections** for Resistance (Cm units, the approximation it uses, how long the fit should be) and for how the fEPSP baseline and slope are measured. [Read more](manual:15. Field Potential (fEPSP / LTP) > The fEPSP slope algorithm)
+
+### Fixed
+
+- **Batch kept the Field Potential results of the last file only.** Every other file was saved and then emptied a second later. All files keep their results now. [Read more](manual:19. Batch > How each recipe is repeated)
+
+- **Batch repeats normalisation and the time axis** of a Field Potential template.
+
+- **F–I curve and rheobase with Manual Im** averaged the current over the analysis bounds, so with bounds over the whole sweep every point sat at a fraction of its step (half, for a 0.5 s step in a 1 s sweep). They now use the step's current. Rheobase from HEKA protocols had the same problem when the bounds covered more than the step. [Read more](manual:12. Action Potentials > The Counting tab)
+
+- **+slope is reported for every spike** (it was empty at 20 kHz with later threshold methods such as Sekerli), and **−slope no longer picks up the next spike's upstroke** in fast trains. [Read more](manual:12. Action Potentials > The Kinetics tab)
+
+- **Rise time and half-width**: the 200 kHz interpolation stretched rise times by up to about 20 % and shortened half-widths slightly.
+
+- **First-spike latency** for ABF and NWB recordings: measured from the Manual Im start or the recorded step (it was empty).
+
+- **Reversal potential in Cohort** was always the holding potential in voltage clamp; it now comes from the absolute currents, and current-clamp I-V curves no longer report one. With Manual Im in voltage clamp the levels are in mV, so the input resistance is shown.
+
+- **Saving with several windows open**: each window saves only what it changed, so a window that hasn't caught up with another can't overwrite its results. [Read more](manual:7. Where Your Work is Stored > The recording sidecar)
+
+- **Sidecars record the TRACER version** that wrote them (they all said 0.5.0).
+
 ## 1.3.1
 
 ### Improved
