@@ -231,6 +231,9 @@ def _detect_spikes_noise_threshold(
     seg = vm[i0:i1]
     params = dict(detection)
     params["filter_enabled"] = False
+    # Detect on both sides; the spike's direction is applied below (an
+    # epoch whose largest deflection points the other way is dropped).
+    params["peak_direction"] = "auto"
     det = detect_threshold_epochs(seg, sr, params)
     epochs = det["epochs"]
     dev = det["detrended"] - det["baseline_value"]

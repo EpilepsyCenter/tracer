@@ -156,6 +156,20 @@ def _estimate_baseline(
     return signal, baseline, noise
 
 
+def _directional_deviation(dev: np.ndarray, direction: str) -> np.ndarray:
+    """Deviation from baseline that counts for detection: only the negative
+    side for ``negative``, only the positive side for ``positive``, both
+    (absolute value) for ``auto``. Without this, a discharge's rebound of
+    the other sign (e.g. after the 1 Hz high-pass of a band-pass) was
+    detected as a burst of its own even with "negative" chosen."""
+    d = str(direction or "auto").lower()
+    if d == "negative":
+        return np.maximum(-dev, 0.0)
+    if d == "positive":
+        return np.maximum(dev, 0.0)
+    return np.abs(dev)
+
+
 def _extract_epochs(above: np.ndarray, min_dur: int, min_gap: int, sr: float) -> list[dict]:
     """Extract contiguous True-epochs from a boolean mask; merge close ones
     within ``min_gap`` samples and drop any shorter than ``min_dur``."""
@@ -201,7 +215,8 @@ def detect_threshold_epochs(data: np.ndarray, sr: float, params: dict) -> dict:
     ``threshold`` method and the AP window's ``noise_threshold`` method.
 
     Pipeline: optional pre-detection filter → baseline + noise estimate
-    (``baseline_mode`` / ``noise_method``) → |signal − baseline| →
+    (``baseline_mode`` / ``noise_method``) → signal − baseline, keeping only
+    the ``peak_direction`` side (both sides, |·|, for ``auto``) →
     moving-average smoothing (``smooth_ms``) → epochs where the smoothed
     trace exceeds ``n_sd × noise`` → merge epochs closer than
     ``min_gap_ms`` → drop epochs shorter than ``min_duration_ms``.
@@ -228,7 +243,8 @@ def detect_threshold_epochs(data: np.ndarray, sr: float, params: dict) -> dict:
     detrended, baseline_value, noise_value = _estimate_baseline(
         filtered, sr, baseline_mode, params,
     )
-    rectified = np.abs(detrended - baseline_value)
+    rectified = _directional_deviation(detrended - baseline_value,
+                                       params.get("peak_direction", "auto"))
     smoothed = uniform_filter1d(rectified, smooth_samples)
 
     threshold_value = n_sd * noise_value
@@ -407,7 +423,8 @@ class BurstDetection(AnalysisBase):
         baseline_value = float(np.median(filtered))
 
         raw_thresh = params.get("spike_threshold", None)
-        centered = np.abs(filtered - baseline_value)
+        centered = _directional_deviation(filtered - baseline_value,
+                                          params.get("peak_direction", "auto"))
         # Treat None, 0, and negative values all as "auto" — the frontend
         # sends 0 as its sentinel for auto because JSON has no undefined.
         if raw_thresh is None or float(raw_thresh) <= 0:

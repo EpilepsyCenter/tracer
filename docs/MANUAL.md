@@ -3190,7 +3190,13 @@ Parameters:
 - **Min gap (ms)** (default 100) — merge bursts separated by
   less than this.
 - **Peak direction** (`auto` / `positive` / `negative`) — sign of
-  the deviation that counts as a burst.
+  the deviation that counts as a burst. With *Negative* only
+  excursions below the baseline are thresholded (with *Positive*
+  only those above); *Auto* thresholds both. Use a direction when
+  discharges are followed by a rebound of the other sign, e.g. the
+  overshoot a band-pass filter adds after a large discharge, which
+  *Auto* detects as a burst of its own. The ISI method uses the
+  same rule for its spikes.
 
 The right default for clean field-potential bursts after a
 bandpass filter.
@@ -3323,7 +3329,10 @@ the names appear in the viewers, tables, exports and Cohort details. A
 **Detection for** switch above the method picks which channel the
 detection settings edit. Each channel has its own method, filter,
 threshold and polarity, and the partner starts as a copy of the
-reference. **Run** detects on both channels.
+reference. If the partner's discharges point the other way (an
+electrode in another layer), set the partner's **Peak direction** to
+the opposite sign, or *Auto*: a direction that doesn't match the
+discharges finds none of them. **Run** detects on both channels.
 
 The second trace appears under the first, on the same time axis; both
 move together. Add and remove discharges on either trace by hand, as
