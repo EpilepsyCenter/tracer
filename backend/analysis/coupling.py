@@ -17,10 +17,17 @@ Measures, per frequency (pooled over every segment of every sweep):
   Signed: positive = reference leads.
 * **wPLI** — weighted phase-lag index, |Σ Im(Sxy)| / Σ |Im(Sxy)| over
   segments, 0–1. Also blind to zero-lag sharing, and less sensitive to
-  noise than imaginary coherence (Vinck et al., 2011).
+  noise than imaginary coherence (Vinck et al., 2011). With a finite
+  number of segments it is biased upward: about 0.1 with ~120 segments
+  and no coupling at all.
+* **debiased wPLI²** — Vinck et al. (2011): the squared wPLI
+  with each segment's product with itself left out,
+  ((Σ Im)² − Σ Im²) / ((Σ |Im|)² − Σ Im²). Its expected value is 0
+  without coupling whatever the number of segments, so it can be
+  slightly negative; with coupling it estimates wPLI².
 * **phase** — angle of Sxy; a delay τ gives phase −2π·f·τ.
 
-Per band: mean coherence / imaginary coherence / wPLI over the band's bins
+Per band: mean coherence / imaginary coherence / wPLI / debiased wPLI² over the band's bins
 (mains bins left out when line-noise exclusion is on), and the delay from
 the slope of the unwrapped phase across the band, weighted by coherence —
 reported only when the band's mean coherence is at least 0.3.
@@ -82,7 +89,7 @@ def cross_spectra(x_pieces: list[np.ndarray], y_pieces: list[np.ndarray], sr: fl
     keep = None
     sxx = syy = None
     sxy = None
-    sum_im = sum_abs_im = None
+    sum_im = sum_abs_im = sum_im_sq = None
     n_seg = 0
     for x, y in zip(x_pieces, y_pieces):
         n = min(len(x), len(y))
@@ -100,7 +107,7 @@ def cross_spectra(x_pieces: list[np.ndarray], y_pieces: list[np.ndarray], sr: fl
                 keep = f <= fmax
                 freqs = f[keep]
                 z = np.zeros(int(keep.sum()))
-                sxx, syy, sum_im, sum_abs_im = z.copy(), z.copy(), z.copy(), z.copy()
+                sxx, syy, sum_im, sum_abs_im, sum_im_sq = z.copy(), z.copy(), z.copy(), z.copy(), z.copy()
                 sxy = np.zeros(int(keep.sum()), dtype=complex)
             zx = zx[keep, :]
             zy = zy[keep, :]
@@ -110,6 +117,7 @@ def cross_spectra(x_pieces: list[np.ndarray], y_pieces: list[np.ndarray], sr: fl
             sxy += cross.sum(axis=1)
             sum_im += cross.imag.sum(axis=1)
             sum_abs_im += np.abs(cross.imag).sum(axis=1)
+            sum_im_sq += (cross.imag ** 2).sum(axis=1)
             n_seg += zx.shape[1]
             start += zx.shape[1] * step
     if freqs is None or n_seg < 2:
@@ -125,11 +133,15 @@ def cross_spectra(x_pieces: list[np.ndarray], y_pieces: list[np.ndarray], sr: fl
         # means the reference leads, like every other lag here.
         icoh = -sxy.imag / denom
         wpli = np.abs(sum_im) / sum_abs_im
+        # Debiased squared wPLI (Vinck et al. 2011): leaves out
+        # each segment's product with itself.
+        wpli_deb = (sum_im ** 2 - sum_im_sq) / (sum_abs_im ** 2 - sum_im_sq)
     return {
         "freqs": freqs,
         "coherence": np.nan_to_num(coh, nan=0.0),
         "imag_coherence": np.nan_to_num(icoh, nan=0.0),
         "wpli": np.nan_to_num(wpli, nan=0.0),
+        "wpli_debiased": np.nan_to_num(wpli_deb, nan=0.0, posinf=0.0, neginf=0.0),
         "phase": np.angle(sxy),
         "n_segments": n_seg,
         "freq_res_hz": sr / nperseg,
@@ -170,7 +182,7 @@ def band_coupling(cs: dict, params: dict) -> dict:
         m = (freqs >= lo) & (freqs < hi) & ~lmask
         if not m.any():
             out[name] = {"low": lo, "high": hi, "coherence": None, "imag_coherence": None,
-                         "wpli": None, "phase_delay_ms": None}
+                         "wpli": None, "wpli_debiased": None, "phase_delay_ms": None}
             continue
         coh = float(cs["coherence"][m].mean())
         delay = None
@@ -182,6 +194,7 @@ def band_coupling(cs: dict, params: dict) -> dict:
             "coherence": coh,
             "imag_coherence": float(cs["imag_coherence"][m].mean()),
             "wpli": float(cs["wpli"][m].mean()),
+            "wpli_debiased": float(cs["wpli_debiased"][m].mean()),
             "phase_delay_ms": delay,
         }
     return out
@@ -276,7 +289,8 @@ def analyse_coupling(x_pieces: list[np.ndarray], y_pieces: list[np.ndarray], sr:
     xc = cross_correlation(x_pieces, y_pieces, sr, params)
     spectra = _thin({
         "freqs": cs["freqs"], "coherence": cs["coherence"],
-        "imag_coherence": cs["imag_coherence"], "wpli": cs["wpli"], "phase": cs["phase"],
+        "imag_coherence": cs["imag_coherence"], "wpli": cs["wpli"],
+        "wpli_debiased": cs["wpli_debiased"], "phase": cs["phase"],
     }, len(cs["freqs"]))
     return {
         **spectra,

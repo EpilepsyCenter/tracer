@@ -2176,11 +2176,12 @@ function RegionHeaderCells({ results, regions }: { results: SpectralRegionResult
 // Coupling tab
 // ------------------------------------------------------------------
 
-type CouplingMeasure = 'coherence' | 'imag' | 'wpli' | 'phase'
+type CouplingMeasure = 'coherence' | 'imag' | 'wpli' | 'dwpli' | 'phase'
 const COUPLING_MEASURES: { key: CouplingMeasure; label: string; axis: string }[] = [
   { key: 'coherence', label: 'Coherence', axis: 'Coherence' },
   { key: 'imag', label: 'Imag. coherence', axis: 'Imaginary coherence' },
   { key: 'wpli', label: 'wPLI', axis: 'wPLI' },
+  { key: 'dwpli', label: 'Debiased wPLI²', axis: 'Debiased wPLI²' },
   { key: 'phase', label: 'Phase', axis: 'Phase (rad)' },
 ]
 
@@ -2242,7 +2243,7 @@ function CouplingPanel({ results, regions, params, heightSignal }: {
           const b = get(r)
           if (!b || b.coherence == null) return '—'
           return (
-            <span title={`imaginary coherence ${f2(b.imagCoherence)}`}>
+            <span title={`imaginary coherence ${f2(b.imagCoherence)} · debiased wPLI² ${f2(b.wpliDebiased)}`}>
               {f2(b.coherence)}
               <span style={{ color: 'var(--text-muted)', marginLeft: 6 }}>wPLI {f2(b.wpli)}</span>
               <span style={{ color: 'var(--text-muted)', marginLeft: 6 }}>{b.phaseDelayMs != null ? `${b.phaseDelayMs >= 0 ? '+' : ''}${b.phaseDelayMs.toFixed(1)} ms` : '—'}</span>
@@ -2253,6 +2254,7 @@ function CouplingPanel({ results, regions, params, heightSignal }: {
           { label: `${n} ${range} coherence`, values: ok.map((r) => num(get(r)?.coherence)) },
           { label: `${n} ${range} imaginary coherence`, values: ok.map((r) => num(get(r)?.imagCoherence)) },
           { label: `${n} ${range} wPLI`, values: ok.map((r) => num(get(r)?.wpli)) },
+          { label: `${n} ${range} debiased wPLI²`, values: ok.map((r) => num(get(r)?.wpliDebiased)) },
           { label: `${n} ${range} phase delay (ms)`, values: ok.map((r) => num(get(r)?.phaseDelayMs)) },
         ],
       }
@@ -2291,7 +2293,9 @@ function CouplingPanel({ results, regions, params, heightSignal }: {
         Each band shows coherence, wPLI and the phase-slope delay ({P} − {R}; positive = {R} leads).
         Coherence also counts the zero-lag signal two nearby electrodes pick up from the same field;
         imaginary coherence and wPLI ignore it, so a high coherence with wPLI near 0 points to volume
-        conduction rather than coupling. Delays are shown only where coherence reaches {params.coupling_min_coherence}.
+        conduction rather than coupling. With a finite number of segments wPLI reads above 0 even
+        without coupling (about 0.1 with 120 segments); the debiased wPLI² (hover a band, or the
+        plot) is 0 on average without coupling. Delays are shown only where coherence reaches {params.coupling_min_coherence}.
         A strong narrow rhythm pulls the phase-slope delay of its own band toward zero; the
         cross-correlation lag is the more robust overall delay. Select rows and right-click to copy.
       </div>
@@ -2351,7 +2355,7 @@ function CouplingSpectrumPlot({ results, colorIdx, measure, xLog, params, height
     const tables: uPlot.AlignedData[] = results.map((r) => {
       const c = r.coupling!
       const ys = measure === 'coherence' ? c.coherence : measure === 'imag' ? c.imagCoherence
-        : measure === 'wpli' ? c.wpli : c.phase
+        : measure === 'wpli' ? c.wpli : measure === 'dwpli' ? c.wpliDebiased : c.phase
       const xs: number[] = [], vs: (number | null)[] = []
       for (let i = 0; i < c.freqs.length; i++) {
         if (xLog && c.freqs[i] <= 0) continue
@@ -2364,7 +2368,7 @@ function CouplingSpectrumPlot({ results, colorIdx, measure, xLog, params, height
     if (xs0.length === 0) return null
     const xMin = Math.max(xs0[0], params.fmin > 0 ? params.fmin : xs0[0])
     const xMax = xs0[xs0.length - 1]
-    const yr: [number, number] = measure === 'phase' ? [-Math.PI, Math.PI] : measure === 'imag' ? [-1, 1] : [0, 1]
+    const yr: [number, number] = measure === 'phase' ? [-Math.PI, Math.PI] : measure === 'imag' ? [-1, 1] : measure === 'dwpli' ? [-0.2, 1] : [0, 1]
     const axis = plotAxisStyle()
     const shade = cssVar('--text-muted')
     const opts: uPlot.Options = {

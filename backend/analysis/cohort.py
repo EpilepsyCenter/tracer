@@ -1668,6 +1668,8 @@ def extract_spectral(slice_data: dict, sidecar: dict) -> CellExtraction:
                 put(f'{region}_{bs}_imag_coherence', _spectral_num((b or {}).get('imagCoherence')),
                     f'{rl} · {band} imaginary coherence')
                 put(f'{region}_{bs}_wpli', _spectral_num((b or {}).get('wpli')), f'{rl} · {band} wPLI')
+                put(f'{region}_{bs}_wpli_debiased', _spectral_num((b or {}).get('wpliDebiased')),
+                    f'{rl} · {band} debiased wPLI²')
                 put(f'{region}_{bs}_phase_delay_ms', _spectral_num((b or {}).get('phaseDelayMs')),
                     f'{rl} · {band} phase delay', 'ms')
 
