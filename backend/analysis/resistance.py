@@ -92,9 +92,18 @@ class ResistanceAnalysis(AnalysisBase):
         )
         if fit is not None:
             result.update(fit)
-            # Cm = tau / Rs (tau in ms, Rs in MOhm) → pF
+            # Cm from the charging time constant of Rs in series with
+            # Rm || Cm: tau = Cm * Rs * Rm / (Rs + Rm), so
+            #   Cm = tau * (Rs + Rm) / (Rs * Rm) = tau * Rin / (Rs * (Rin - Rs))
+            # with Rin = |V| / I_ss = Rs + Rm. (tau ms, R MOhm -> nF; x1000 -> pF.)
+            # tau / Rs alone leaves out the Rm term and reads low by
+            # Rm / (Rs + Rm). It is the fallback when Rin is missing or
+            # not larger than Rs (no valid Rm).
             if rs is not None and rs > 0 and fit.get("tau") is not None:
-                cm = fit["tau"] / rs * 1000
+                if rin is not None and rin > rs:
+                    cm = fit["tau"] * rin / (rs * (rin - rs)) * 1000
+                else:
+                    cm = fit["tau"] / rs * 1000
                 if 0.1 < cm < 2000:
                     result["cm"] = float(cm)
 
