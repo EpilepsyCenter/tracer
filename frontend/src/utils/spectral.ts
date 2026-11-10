@@ -98,6 +98,9 @@ export interface CouplingBandResult {
   coherence: number | null
   imagCoherence: number | null
   wpli: number | null
+  /** Debiased squared wPLI (Vinck et al. 2011): 0 on average without
+   *  coupling, can be slightly negative. */
+  wpliDebiased: number | null
   /** Phase-slope delay, partner − reference (ms); null below the
    *  coherence floor. */
   phaseDelayMs: number | null
@@ -113,6 +116,7 @@ export interface CouplingResult {
   coherence: number[]
   imagCoherence: number[]
   wpli: number[]
+  wpliDebiased: number[]
   phase: number[]
   bands: Record<string, CouplingBandResult>
   xcorr: {
@@ -336,7 +340,7 @@ function couplingFromBackend(c: any): CouplingResult {
     bands[name] = {
       low: Number(b.low), high: Number(b.high),
       coherence: b.coherence ?? null, imagCoherence: b.imag_coherence ?? null,
-      wpli: b.wpli ?? null, phaseDelayMs: b.phase_delay_ms ?? null,
+      wpli: b.wpli ?? null, wpliDebiased: b.wpli_debiased ?? null, phaseDelayMs: b.phase_delay_ms ?? null,
     }
   }
   const x = c.xcorr
@@ -345,7 +349,7 @@ function couplingFromBackend(c: any): CouplingResult {
     partnerChannel: Number(c.partner_channel ?? 0),
     partnerUnits: c.partner_units,
     freqs: c.freqs ?? [], coherence: c.coherence ?? [], imagCoherence: c.imag_coherence ?? [],
-    wpli: c.wpli ?? [], phase: c.phase ?? [],
+    wpli: c.wpli ?? [], wpliDebiased: c.wpli_debiased ?? [], phase: c.phase ?? [],
     bands,
     xcorr: x ? {
       lagsMs: x.lags_ms ?? [], r: x.r ?? [], peakR: Number(x.peak_r ?? 0),
@@ -409,7 +413,7 @@ export function buildSpectralBandCSV(
     'line_freq_hz', 'line_noise_rms', 'line_1st_prominence_db', 'line_noise_excluded',
     ...(anyCoupling ? [
       'coupling_partner_channel', 'xcorr_peak_r', 'xcorr_peak_lag_ms', 'xcorr_zero_lag_r',
-      ...bandNames.flatMap((n) => [`${n}_coherence`, `${n}_imag_coherence`, `${n}_wpli`, `${n}_phase_delay_ms`]),
+      ...bandNames.flatMap((n) => [`${n}_coherence`, `${n}_imag_coherence`, `${n}_wpli`, `${n}_wpli_debiased`, `${n}_phase_delay_ms`]),
     ] : []),
     'error',
   ]
@@ -436,7 +440,7 @@ export function buildSpectralBandCSV(
             c?.partnerChannel, c?.xcorr?.peakR, c?.xcorr?.peakLagMs, c?.xcorr?.zeroLagR,
             ...bandNames.flatMap((n) => {
               const b = c?.bands?.[n]
-              return [b?.coherence, b?.imagCoherence, b?.wpli, b?.phaseDelayMs]
+              return [b?.coherence, b?.imagCoherence, b?.wpli, b?.wpliDebiased, b?.phaseDelayMs]
             }),
           ]
         })() : []),

@@ -5147,13 +5147,15 @@ fires first.
 |---|---|
 | **Coherence** (0–1) | How consistently the two sites share each frequency. Two nearby electrodes also share the zero-lag field of the same source (volume conduction), and coherence counts that too. |
 | **Imaginary coherence** (−1–1) | Only the lagged part of the sharing; zero-lag pickup contributes nothing. Positive = reference leads. |
-| **wPLI** (0–1) | Weighted phase-lag index: like imaginary coherence, blind to zero-lag sharing, and steadier with noise. High coherence with wPLI near 0 points to volume conduction rather than coupling. |
+| **wPLI** (0–1) | Weighted phase-lag index: like imaginary coherence, blind to zero-lag sharing, and steadier with noise. High coherence with wPLI near 0 points to volume conduction rather than coupling. With a finite number of segments it reads above 0 even without coupling (about 0.1 with 120 segments, e.g. 2 min in 2-s segments). |
+| **Debiased wPLI²** | Vinck et al. (2011): the squared wPLI with each segment's product with itself left out. Its average is 0 without coupling, whatever the number of segments, so single values can be slightly negative; with coupling it estimates wPLI². Use it to compare recordings of different lengths, or to decide whether there is any lagged coupling at all. |
 | **Phase-slope delay** (ms) | The delay implied by how the phase between the channels changes across a band. Reported only for bands whose mean coherence reaches **Delay needs coherence ≥** (default 0.3). |
 | **Cross-correlation** | Peak r, the lag at the peak (to a fraction of a sample) and r at zero lag, after a band-pass (**Cross-corr. band**, default 1–100 Hz) within **Max lag** (default ±200 ms). |
 
 The tab shows the coherence spectrum (switch to imaginary coherence,
-wPLI or phase), the cross-correlation curve, and a table with each
-band's coherence, wPLI and delay per region. Select rows and
+wPLI, debiased wPLI² or phase), the cross-correlation curve, and a
+table with each band's coherence, wPLI and delay per region (hover a
+cell for imaginary coherence and debiased wPLI²). Select rows and
 right-click to **Copy as TSV**. Both plots offer **Export for
 ASTERISM** and vector export.
 
@@ -5164,10 +5166,10 @@ is the more robust overall delay; use band delays for broadband
 activity.
 
 Coupling also goes into **Band CSV** (cross-correlation and per-band
-coherence, imaginary coherence, wPLI and delay), into Cohort as
+coherence, imaginary coherence, wPLI, debiased wPLI² and delay), into Cohort as
 `<region>_xcorr_peak_r`, `<region>_xcorr_lag_ms`,
 `<region>_xcorr_zero_lag_r` and `<region>_<band>_coherence`,
-`_imag_coherence`, `_wpli`, `_phase_delay_ms`, and Batch copies the
+`_imag_coherence`, `_wpli`, `_wpli_debiased`, `_phase_delay_ms`, and Batch copies the
 coupling settings with the rest.
 
 ### Export

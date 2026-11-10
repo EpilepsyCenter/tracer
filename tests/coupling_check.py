@@ -55,6 +55,8 @@ check("lagged: theta coherence high", th["coherence"] > 0.8, str(th["coherence"]
 check("lagged: phase-slope delay", th["phase_delay_ms"] is not None and abs(th["phase_delay_ms"] - TAU * 1000) < 0.5,
       str(th["phase_delay_ms"]))
 check("lagged: wPLI high", th["wpli"] > 0.9, str(th["wpli"]))
+check("lagged: debiased wPLI² close to wPLI²", abs(th["wpli_debiased"] - th["wpli"] ** 2) < 0.05,
+      f'{th["wpli_debiased"]} vs {th["wpli"] ** 2}')
 check("lagged: imaginary coherence positive (reference leads)", th["imag_coherence"] > 0.1, str(th["imag_coherence"]))
 xc = res["xcorr"]
 check("lagged: xcorr lag", xc["peak_lag_ms"] is not None and abs(xc["peak_lag_ms"] - TAU * 1000) < 0.2, str(xc["peak_lag_ms"]))
@@ -83,6 +85,17 @@ resi = C.analyse_coupling([x], [noise(1.0)], sr, P)
 bi = resi["bands"]["theta"]
 check("independent: coherence low", bi["coherence"] < 0.1, str(bi["coherence"]))
 check("independent: no delay below the coherence floor", bi["phase_delay_ms"] is None, str(bi["phase_delay_ms"]))
+# wPLI is biased above 0 with a finite number of segments; the debiased
+# wPLI² (Vinck et al. 2011) is 0 on average. Over several independent
+# pairs and every band, its mean is near 0 and well below wPLI's.
+wp, dw = [], []
+for _ in range(6):
+    r_ = C.analyse_coupling([noise(1.0)], [noise(1.0)], sr, P)
+    for v in r_["bands"].values():
+        if v["wpli"] is not None:
+            wp.append(v["wpli"]); dw.append(v["wpli_debiased"])
+check("independent: debiased wPLI² ~0", abs(np.mean(dw)) < 0.01, f"mean {np.mean(dw):.4f}")
+check("independent: wPLI biased above 0", np.mean(wp) > 0.05, f"mean {np.mean(wp):.3f}")
 
 # 5. Through run_regions: two-channel fake series, several sweeps, one
 #    sweep excluded; the coupling block rides on each region.
