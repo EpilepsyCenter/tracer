@@ -487,7 +487,7 @@ def _template_peak_offset(template: np.ndarray) -> int:
 
 def _refine_to_data_peak(
     values: np.ndarray, candidates, template: np.ndarray, sr: float,
-    direction: str,
+    direction: str, drop_slopes: bool = True,
 ) -> np.ndarray:
     """Move each candidate (an index at the event's foot) to the data
     extremum where the template predicts the peak.
@@ -497,6 +497,14 @@ def _refine_to_data_peak(
     time, at least 1 ms). A wider window (e.g. the whole template) lets
     a small event be moved onto a larger event that follows it, so the
     small one is lost and the large one counted twice.
+
+    With ``drop_slopes`` (the default), a candidate whose extremum is not
+    a peak is dropped: when the data ``pre`` samples before the extremum
+    are more extreme, the window sits on the decay of an earlier, larger
+    event and the "peak" is just the first sample of the window. Such
+    candidates come from the deconvolution's residual on large events
+    whose shape differs from the template. With ``drop_slopes=False``
+    every candidate gives one peak.
     """
     x = np.asarray(values, dtype=float)
     tp = _template_peak_offset(template)
@@ -510,7 +518,12 @@ def _refine_to_data_peak(
             out.append(int(c))
             continue
         seg = x[a:b]
-        out.append(int(a + (np.argmin(seg) if sign < 0 else np.argmax(seg))))
+        k = int(a + (np.argmin(seg) if sign < 0 else np.argmax(seg)))
+        if drop_slopes and a > 0:
+            back = sign * x[max(0, k - pre):k + 1]
+            if int(np.argmax(back)) != back.size - 1:
+                continue
+        out.append(k)
     return np.asarray(out, dtype=int)
 
 
@@ -1422,7 +1435,11 @@ def run_events(
                 t_idx = int(np.argmax(stacked[:, pi]))
                 peak_template_idxs.append(t_idx)
                 # Move to the data extremum near that template's peak.
-                peak_idxs.append(int(_refine_to_data_peak(x, [pi], tmpl_list[t_idx], sr, direction)[0]))
+                ref = _refine_to_data_peak(x, [pi], tmpl_list[t_idx], sr, direction)
+                if ref.size == 0:          # on the decay of a larger event
+                    peak_template_idxs.pop()
+                    continue
+                peak_idxs.append(int(ref[0]))
             detection_measure = r_traces[0]  # primary template's DM for overlay
     elif method == "template_deconvolution":
         if not tmpl_list:
