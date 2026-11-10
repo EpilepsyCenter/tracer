@@ -16,6 +16,9 @@ Checked, for template correlation and deconvolution:
 - deconvolution ignores the template's baseline offset b0 (it divided by
   a box of b0 with the event on top);
 - every auto-detected event deflects in the search direction;
+- large events slower than the template give no second detection on
+  their decay (deconvolution's residual put a candidate there and the
+  peak search returned the first sample of its window);
 - the biexponential fit keeps tau_rise < tau_decay (it could swap them).
 
 The design follows the blind ground-truth validation of November 2026.
@@ -168,7 +171,20 @@ def main():
         check(f"{method}: larger event of each pair found", large >= 0.95, f"{large:.2f}")
         check(f"{method}: pairs, no extra detections", len(recs) - hits <= 1, f"{len(recs) - hits} extra")
 
-    # --- 3. template fit on single noisy events ---
+    # --- 3. large events slower than the template, 250 ms apart ---
+    # Deconvolution leaves a residual on the decay; its candidates there
+    # must not become events (their "peak" was a sample on the slope).
+    big_ev = [(0.2 + 0.25 * k + 0.05 * rng.random(), 30.0 * rng.lognormal(0, 0.3),
+               0.6 * rng.lognormal(0, 0.3), 9.0 * rng.lognormal(0, 0.3)) for k in range(120)]
+    x3, t3 = simulate(rng, 30.4, big_ev)
+    for method in ("template_correlation", "template_deconvolution"):
+        recs = detect(x3, method, tmpl, floor)
+        det_t = np.array([r.peak_time_s for r in recs])
+        hits, _ = match(det_t, t3)
+        check(f"{method}: large slow events, each found once", hits >= 118 and len(recs) - hits == 0,
+              f"{hits}/120 found, {len(recs) - hits} extra")
+
+    # --- 4. template fit on single noisy events ---
     swapped, err = 0, []
     for k in range(40):
         tr, td = 0.5 + 0.5 * rng.random(), 3.0 + 4.0 * rng.random()

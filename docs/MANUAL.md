@@ -2755,7 +2755,9 @@ foot-to-peak time, at least 1 ms, before the foot to the same
 margin after the template's peak), so the reported peak time is on
 the actual trace — not on the correlation curve. The **Min IEI** is
 applied after this move, so two candidates can never end up on the
-same peak.
+same peak. A candidate whose extremum is not a peak (the trace is
+more extreme just before it, i.e. the window sits on the decay of an
+earlier, larger event) is dropped.
 
 This is the right default for most miniature recordings: it is
 robust to drifting baselines and, with a good template, picks up
@@ -2787,7 +2789,10 @@ fixed correlation-r cutoff is too stiff.
 
 Each deconvolution peak marks an event's foot; as for correlation,
 it is moved to the data extremum near the template's peak, and the
-**Min IEI** is applied after the move. Only the template's shape
+**Min IEI** is applied after the move. Large events whose shape
+differs from the template leave a residual in the deconvolved trace,
+which can cross the cutoff on their decay; these candidates have no
+peak of their own and are dropped, as for correlation. Only the template's shape
 is used: its baseline *b₀* (for a template fitted on the raw
 trace, the holding current) is removed before the division.
 
