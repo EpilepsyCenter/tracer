@@ -3153,7 +3153,13 @@ Parameters:
 - **Min gap (ms)** (default 100) — merge bursts separated by
   less than this.
 - **Peak direction** (`auto` / `positive` / `negative`) — sign of
-  the deviation that counts as a burst.
+  the deviation that counts as a burst. With *Negative* only
+  excursions below the baseline are thresholded (with *Positive*
+  only those above); *Auto* thresholds both. Use a direction when
+  discharges are followed by a rebound of the other sign, e.g. the
+  overshoot a band-pass filter adds after a large discharge, which
+  *Auto* detects as a burst of its own. The ISI method uses the
+  same rule for its spikes.
 
 The right default for clean field-potential bursts after a
 bandpass filter.
