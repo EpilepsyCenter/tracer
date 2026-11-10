@@ -2732,14 +2732,24 @@ data and the template is above a cutoff (Clements & Bekkers
   see the Template Generator below);
 - the **direction** (auto / positive / negative).
 
-After accepted windows are picked, each candidate is refined to
-the data-space extremum within a window of the template's
-characteristic width, so the reported peak time is on the actual
-trace — not on the smoothed correlation curve.
+Each accepted window marks where the template's start lines up
+with an event's foot. The candidate is then moved to the data
+extremum near the template's own peak (from half the template's
+foot-to-peak time, at least 1 ms, before the foot to the same
+margin after the template's peak), so the reported peak time is on
+the actual trace — not on the correlation curve. The **Min IEI** is
+applied after this move, so two candidates can never end up on the
+same peak.
 
 This is the right default for most miniature recordings: it is
 robust to drifting baselines and, with a good template, picks up
 events that an amplitude threshold buried in noise would miss.
+
+One limit: the correlation is computed over the whole template
+width. When a larger event falls inside that window, the
+correlation at a smaller event just before it stays low, and the
+smaller event can be missed. With frequent or overlapping events,
+use a shorter template width or deconvolution.
 
 #### Template — deconvolution (`template_deconvolution`)
 
@@ -2758,6 +2768,12 @@ The histogram-fit cutoff makes this method effectively
 self-calibrating to the noise floor of each recording, which is
 why it is often the first thing to try on noisy data where a
 fixed correlation-r cutoff is too stiff.
+
+Each deconvolution peak marks an event's foot; as for correlation,
+it is moved to the data extremum near the template's peak, and the
+**Min IEI** is applied after the move. Only the template's shape
+is used: its baseline *b₀* (for a template fitted on the raw
+trace, the holding current) is removed before the division.
 
 ### Detection parameters and pre-detection processing
 
@@ -2802,7 +2818,8 @@ event carries these fields:
   *baseline + a · exp(−t/τ)*.
 - **per-event biexponential fit** — `b0`, `b1`, `τ_rise`,
   `τ_decay`, and *R²* of a fit of the same biexponential the
-  templates use. The R² is what the **min biexp R²** exclusion
+  templates use. The fit keeps *τ_rise* < *τ_decay* (here and in
+  the Template Generator), so the two can't come out swapped. The R² is what the **min biexp R²** exclusion
   filter tests against.
 
 Each event also carries a `manual` flag (set when you added it by
@@ -2817,9 +2834,13 @@ kinetics have been measured, so an excluded event can still be
 seen in the browser if you turn the filter off temporarily.
 
 - **Amplitude min / max** — absolute amplitude band in the
-  recording's units (defaults 5 to 2000).
+  recording's units (defaults 5 to 2000). Detected events must
+  also deflect in the search direction: with direction negative, an
+  event with a positive amplitude (e.g. a peak placed on the decay
+  of a larger event) is dropped.
 - **Min IEI (ms)** — collapse events closer than this together,
-  keeping the larger.
+  keeping the larger. It is applied to the final peaks, after each
+  candidate has been moved onto the data.
 - **Min biexp R²** — drops events whose biexponential fit did not
   converge well; useful to remove noise hits that survived the
   template match.

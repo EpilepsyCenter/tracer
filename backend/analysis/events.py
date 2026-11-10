@@ -157,23 +157,32 @@ def fit_biexponential(
         b1_lo, b1_hi = 0.0, np.inf
     else:
         b1_lo, b1_hi = -np.inf, np.inf
-    lo = (-np.inf, b1_lo, tau_r_lo, tau_d_lo)
+    # τ_decay is fitted as τ_rise + Δ with Δ ≥ 0, so the fit can't
+    # swap the two: otherwise it can land on τ_rise > τ_decay with a
+    # huge b1, a degenerate solution that describes the shape with the
+    # labels the wrong way round.
+    lo = (-np.inf, b1_lo, tau_r_lo, 0.0)
     hi = (np.inf, b1_hi, tau_r_hi, tau_d_hi)
     # Clamp the initial-guess τs into the bounds so curve_fit doesn't
     # start outside them (scipy raises if p0 ∉ bounds).
     tau_r0 = min(max(tau_r0, tau_r_lo * 1.01), tau_r_hi * 0.99)
     tau_d0 = min(max(tau_d0, tau_d_lo * 1.01), tau_d_hi * 0.99)
-    p0 = (b0_guess, b1_guess, tau_r0, tau_d0)
+    delta0 = min(max(tau_d0 - tau_r0, tau_d_lo), tau_d_hi * 0.99)
+    p0 = (b0_guess, b1_guess, tau_r0, delta0)
+
+    def _model(t_, b0_, b1_, tr_, dd_):
+        return biexp_event(t_, b0_, b1_, tr_, tr_ + dd_)
 
     try:
         popt, _ = curve_fit(
-            biexp_event, tt, v, p0=p0, bounds=(lo, hi), maxfev=5000,
+            _model, tt, v, p0=p0, bounds=(lo, hi), maxfev=5000,
         )
     except (RuntimeError, ValueError):
         # Fall back to seed if curve_fit can't converge.
         popt = np.array(p0, dtype=float)
 
-    b0, b1, tau_r, tau_d = (float(x) for x in popt)
+    b0, b1, tau_r, delta = (float(x) for x in popt)
+    tau_d = min(tau_r + delta, tau_d_hi)
     fit_v = biexp_event(tt, b0, b1, tau_r, tau_d)
 
     # R² — 1 - SSres / SStot (>= 0 when fit > mean-model, can go
@@ -329,6 +338,13 @@ def _deconvolve(
     if n < 16 or len(tmpl) < 4:
         return np.zeros(n)
 
+    # Deconvolution needs the event shape alone. A template fitted on
+    # raw data carries the recording's baseline as b0 (e.g. the holding
+    # current); left in, the zero-padded template is a box of b0 with
+    # the event on top, and the division finds the box, not the events.
+    # (Correlation is unaffected: Pearson r ignores an offset.)
+    tmpl = tmpl - tmpl[0]
+
     # Optional template-to-data rescaling (EE default).
     if scale_template_to_data:
         tmax, tmin = float(np.max(tmpl)), float(np.min(tmpl))
@@ -463,6 +479,79 @@ def _find_peaks_above(
     return np.sort(peaks[keep])
 
 
+def _template_peak_offset(template: np.ndarray) -> int:
+    """Samples from the template's start (the event foot) to its extremum."""
+    t = np.asarray(template, dtype=float)
+    return int(np.argmax(np.abs(t - t[0])))
+
+
+def _refine_to_data_peak(
+    values: np.ndarray, candidates, template: np.ndarray, sr: float,
+    direction: str,
+) -> np.ndarray:
+    """Move each candidate (an index at the event's foot) to the data
+    extremum where the template predicts the peak.
+
+    The search runs from ``pre`` before the candidate to ``pre`` past
+    the template's own peak (``pre`` = half the template's foot-to-peak
+    time, at least 1 ms). A wider window (e.g. the whole template) lets
+    a small event be moved onto a larger event that follows it, so the
+    small one is lost and the large one counted twice.
+    """
+    x = np.asarray(values, dtype=float)
+    tp = _template_peak_offset(template)
+    pre = max(int(round(0.001 * sr)), tp // 2)
+    sign = -1 if direction == "negative" else 1
+    out = []
+    for c in np.asarray(candidates, dtype=int):
+        a = max(0, int(c) - pre)
+        b = min(len(x), int(c) + tp + pre + 1)
+        if b <= a + 1:
+            out.append(int(c))
+            continue
+        seg = x[a:b]
+        out.append(int(a + (np.argmin(seg) if sign < 0 else np.argmax(seg))))
+    return np.asarray(out, dtype=int)
+
+
+def _enforce_min_interval(
+    values: np.ndarray, peaks, min_dist: int, direction: str, tags=None,
+):
+    """Drop peaks closer than ``min_dist`` samples to a larger one.
+
+    Runs on data-space peaks (after refinement), so two candidates that
+    were moved onto the same sample are merged. The most extreme peak
+    wins; ties keep the earlier one. Returns sorted peaks, plus the
+    matching ``tags`` (e.g. template indices) when given.
+    """
+    x = np.asarray(values, dtype=float)
+    p = np.asarray(peaks, dtype=int)
+    tg = list(tags) if tags is not None else [None] * len(p)
+    if p.size == 0:
+        return (p, []) if tags is not None else p
+    order = np.argsort(p, kind="stable")
+    p = p[order]
+    tg = [tg[i] for i in order]
+    # identical samples first
+    _, first = np.unique(p, return_index=True)
+    p = p[first]
+    tg = [tg[i] for i in first]
+    if min_dist > 1 and p.size > 1:
+        mag = -x[p] if direction == "negative" else x[p]
+        keep = np.ones(p.size, dtype=bool)
+        for i in np.argsort(-mag, kind="stable"):
+            if not keep[i]:
+                continue
+            lo = np.searchsorted(p, p[i] - min_dist + 1)
+            hi = np.searchsorted(p, p[i] + min_dist)
+            for j in range(lo, hi):
+                if j != i:
+                    keep[j] = False
+        p = p[keep]
+        tg = [t for t, k in zip(tg, keep) if k]
+    return (p, tg) if tags is not None else p
+
+
 def detect_correlation(
     values: np.ndarray, sr: float, template: np.ndarray,
     cutoff: float = 0.4,
@@ -483,22 +572,11 @@ def detect_correlation(
     # look for positive r peaks irrespective of event polarity.
     run_starts = _find_peaks_above(r, cutoff, min_dist, direction=1)
 
-    # Convert run-start indices to data-peak indices by scanning the
-    # template window and picking the data sample with the largest
-    # deviation in the requested direction.
-    w = len(template)
-    sign = -1 if direction == "negative" else 1
-    peaks = []
-    for s in run_starts:
-        e = min(len(values), s + w)
-        if e <= s + 1:
-            continue
-        seg = values[s:e]
-        if sign < 0:
-            peaks.append(int(s + np.argmin(seg)))
-        else:
-            peaks.append(int(s + np.argmax(seg)))
-    return np.asarray(peaks, dtype=int)
+    # The correlation peak is where the template's start lines up with
+    # the event foot. Move it to the data extremum near the template's
+    # own peak, then enforce the minimum interval on the moved peaks.
+    peaks = _refine_to_data_peak(values, run_starts, template, sr, direction)
+    return _enforce_min_interval(values, peaks, min_dist, direction)
 
 
 def detect_deconvolution(
@@ -542,23 +620,13 @@ def detect_deconvolution(
     if raw_peaks.size == 0:
         return np.zeros(0, dtype=int), decon, mu, sigma
 
-    sign = -1 if direction == "negative" else 1
-    # Refine each deconvolution peak to the data-space extremum in a
-    # small window around it (EE: ``deconv_peak_search_region_multiplier``
-    # × ~rise-to-peak samples). 10 ms works well for typical EPSCs.
-    w = max(int(round(sr * 0.010)), 5)
-    refined = []
-    for p in raw_peaks:
-        a = max(0, p - w)
-        b = min(len(values), p + w)
-        if b <= a + 1:
-            continue
-        seg = values[a:b]
-        if sign < 0:
-            refined.append(int(a + np.argmin(seg)))
-        else:
-            refined.append(int(a + np.argmax(seg)))
-    return np.asarray(refined, dtype=int), decon, mu, sigma
+    # Refine each deconvolution peak (at the event foot) to the data
+    # extremum near the template's rise-to-peak time, as EE scales its
+    # search region by the rise-to-peak samples. A fixed ±10 ms window
+    # moved several candidates onto the same large event (duplicates).
+    # The minimum interval is enforced again on the moved peaks.
+    refined = _refine_to_data_peak(values, raw_peaks, template, sr, direction)
+    return _enforce_min_interval(values, refined, min_dist, direction), decon, mu, sigma
 
 
 def detect_threshold(
@@ -1345,8 +1413,6 @@ def run_events(
             # Refine each peak by snapping to the local extremum of the
             # RAW trace — otherwise peak_idx might sit on a correlation
             # lobe rather than the trace extremum.
-            sign = -1 if direction == "negative" else 1
-            snap = max(1, int(round(0.5 * min_iei_ms / 1000.0 * sr)))
             peak_idxs = []
             for pi in peak_idxs_raw:
                 # Tag template by argmax across templates AT the raw
@@ -1355,11 +1421,8 @@ def run_events(
                 # snapped sample which may be a few ms off.
                 t_idx = int(np.argmax(stacked[:, pi]))
                 peak_template_idxs.append(t_idx)
-                a = max(0, pi - snap); b = min(len(x), pi + snap + 1)
-                if b <= a + 1:
-                    peak_idxs.append(pi); continue
-                seg = x[a:b]
-                peak_idxs.append(int(a + (np.argmin(seg) if sign < 0 else np.argmax(seg))))
+                # Move to the data extremum near that template's peak.
+                peak_idxs.append(int(_refine_to_data_peak(x, [pi], tmpl_list[t_idx], sr, direction)[0]))
             detection_measure = r_traces[0]  # primary template's DM for overlay
     elif method == "template_deconvolution":
         if not tmpl_list:
@@ -1424,6 +1487,14 @@ def run_events(
     # detector forgot to populate it (defensive — shouldn't happen).
     if len(peak_template_idxs) != len(peak_idxs):
         peak_template_idxs = [None] * len(peak_idxs)
+
+    # No two detections closer than the minimum interval, measured on
+    # the final (data-space) peaks. Covers the multi-template merges,
+    # whose candidates are refined per template.
+    _md = max(1, int(round(min_iei_ms / 1000.0 * sr)))
+    peak_idxs, peak_template_idxs = _enforce_min_interval(
+        x, peak_idxs, _md, direction, tags=peak_template_idxs)
+    peak_template_idxs = list(peak_template_idxs)
 
     # ---- Step 1.5: apply manual skip regions ----
     # Drop any detected peak whose time falls inside a skip region.
@@ -1543,6 +1614,13 @@ def run_events(
         # ---- Step 4: exclusion (manual-added events bypass amp/auc guards) ----
         amp_abs = abs(k.amplitude)
         if not mf:
+            # An auto-detected event must deflect in the search
+            # direction. A peak placed on the decay of a larger event
+            # can measure a small amplitude of the opposite sign, which
+            # the |amplitude| filter alone would let through.
+            if (direction == "negative" and k.amplitude > 0) or \
+                    (direction == "positive" and k.amplitude < 0):
+                continue
             if amp_abs < amplitude_min_abs:
                 continue
             if amp_abs > amplitude_max_abs:
