@@ -1616,8 +1616,10 @@ Three parameters drive the analysis.
 
 - **Fit duration (ms)** — the length of the window over which the
   exponential is fitted, measured **from the peak of the
-  transient**. Anywhere from 0.5 to 50 ms; the default of about
-  5 ms is appropriate for most patch-clamp transients.
+  transient**. Anywhere from 0.5 to 50 ms. Make it at least 3–5
+  time constants: the default of 5 ms suits transients with
+  τ ≤ 1–1.5 ms; slower ones need longer (see *How the numbers are
+  computed*).
 
 ### Run controls
 
@@ -1714,22 +1716,36 @@ zero so a pathologically bad fit can never drag the column into
 the negatives.
 
 **Step 6 — Cm.** Membrane capacitance is recovered from the time
-constant and Rs by treating the cell as a simple RC circuit
-charging through Rs:
+constant by treating the cell as Cm in parallel with the membrane
+resistance Rm, charged through Rs. The transient then decays with
+τ = Cm · Rs · Rm / (Rs + Rm), so
 
-> **Cm** *(pF)* = τ / Rs
+> **Cm** *(pF)* = τ × (Rs + Rm) / (Rs · Rm) = τ × Rin / (Rs × (Rin − Rs))
 
-τ in ms divided by Rs in MΩ gives nF; TRACER multiplies by 1000 and
-reports pF. The formula approximates the full *Cm = τ × (Rs + Rm) /
-(Rs · Rm)* (Rm the membrane resistance) by neglecting the Rm term, so
-it reads low by the factor Rm / (Rs + Rm): about 7 % low for Rs =
-10 MΩ and Rm = 130 MΩ. That's acceptable when Rm ≫ Rs, as in healthy
-cells; with a low membrane resistance (sick cells, leaky seals) treat
-the reported Cm as approximate.
+where Rin = Rs + Rm is the input resistance from step 4. τ in ms
+over MΩ gives nF; TRACER multiplies by 1000 and reports pF. If Rin
+is missing or not larger than Rs, TRACER falls back to τ / Rs, which
+leaves out the Rm term and reads low by Rm / (Rs + Rm). (Earlier
+versions always used τ / Rs: about 7 % low for Rs = 10 MΩ and
+Rm = 130 MΩ.)
+
+**Rs and the amplifier filter.** Rs = |V_step| / |peak current|
+assumes the recorded peak is the true one. The amplifier's low-pass
+filter blunts a fast transient, so the recorded peak is smaller and
+Rs reads high, more so for fast transients and narrow filters. In the
+ground-truth test (2.9 kHz Bessel, 20 kHz sampling), Rs read
+4–17 % high, and Cm 3–13 % low with it; extrapolating the fitted
+decay back to the step onset overshoots by about as much the other
+way, because the filter also delays the transient. For accurate Rs
+and Cm, record test pulses with a wide filter (e.g. 10 kHz or more)
+and a matching sampling rate.
 
 The fit also needs enough of the decay: make **Fit duration** several
-time constants long (at least 3–5 τ). In the ground-truth test, a
-5 ms fit on a 2.8 ms τ came out about 30 % short, and Cm with it.
+time constants long (at least 3–5 τ), and use *Mono* unless the
+transient clearly has two components. In the ground-truth test, a
+5 ms biexponential fit on a 2.8 ms τ came out about 30 % short, and
+Cm with it; a 15 ms monoexponential fit gave τ within 1.5 % in all
+six cells.
 
 TRACER also applies a sanity filter: any computed Cm outside
 the range 0.1 pF to 2 000 pF is dropped from the row rather than
