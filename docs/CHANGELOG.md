@@ -13,6 +13,30 @@ starts, and from Help ▸ What's New. Newest version first.
   `python3 scripts/release_notes.py <version> --apply`.
 -->
 
+## 1.5.0
+
+Event detection, Resistance (Cm), burst detection and action potential slopes give different, correct values when you run them again. Re-run analyses you report from.
+
+### New
+
+- **Debiased wPLI²** in spectral coupling (Vinck et al., 2011). Plain wPLI sits above 0 without any coupling (about 0.1 with 120 segments); the debiased version averages 0, so recordings of different lengths can be compared. In the Coupling tab, the Band CSV and Cohort. [Read more](manual:22. Spectral Analysis > Coupling with a second channel)
+
+### Improved
+
+- **Action potential +slope and −slope are the sample-to-sample dV/dt** by default, as in Stimfit and Clampfit. The old 0.5 ms window averaged over an upstroke that lasts about 0.2 ms and reported about a third of the maximum, so +slope values are now about three times higher. The window can still be widened. [Read more](manual:12. Action Potentials > The Kinetics tab)
+
+### Fixed
+
+- **Event detection counted some events more than once.** Candidates could land on the same peak and all be kept (up to 92 duplicates in 2 minutes), and deconvolution could count a large event a second time on its decay. Each event is now counted once, and it must deflect in the search direction. [Read more](manual:13. Event Detection > Choosing a detection method)
+
+- **Deconvolution with a template fitted on the raw trace** divided by the holding current as well, which gave many false detections at low signal-to-noise (19–69 per minute at SNR 3–4, now 0–3).
+
+- **Event rise and decay time constants could be swapped** in the per-event fits (10–28 % of events), and in the Template Generator. [Read more](manual:13. Event Detection > Per-event kinetics)
+
+- **Resistance: Cm read low** by Rm / (Rs + Rm). It was τ / Rs and now uses the full formula. [Read more](manual:10. Resistance — Rs / Rin / Cm > How the numbers are computed)
+
+- **Burst detection ignored Peak direction** when detecting: a discharge's rebound of the other sign was detected as a burst of its own, which also lowered the propagation fraction between two sites. Negative and Positive now detect only that side; Auto keeps both. [Read more](manual:14. Burst Detection (Field Bursts) > Method 1 — Threshold)
+
 ## 1.4.0
 
 Several analyses now give different, correct values when you run them again: rheobase and the F–I curve with Manual Im, action potential slopes, rise times and half-widths, and the voltage-clamp reversal potential. Re-run analyses you report from, and re-run any Field Potential Batch made with 1.3.x.
