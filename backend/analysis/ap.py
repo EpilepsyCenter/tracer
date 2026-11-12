@@ -646,24 +646,32 @@ def _measure_spike(
     fahp_vm, fahp_t = _min_in_window(fahp_search_start_ms, fahp_search_end_ms)
     mahp_vm, mahp_t = _min_in_window(mahp_search_start_ms, mahp_search_end_ms)
 
-    # Max rise / decay slopes: dV/dt averaged over a centred window of
-    # max_slope_window_ms, then the largest value between threshold and
-    # peak (+slope) and the most negative between the peak and the fAHP
-    # minimum (−slope). The average is taken on the trace around the
-    # spike, not inside the phase, so a rise shorter than the window
-    # still gets a value (#21); and the falling phase stops at the fAHP,
-    # so the next spike's upstroke can't be picked up (#22).
-    win_samples = max(1, int(round(max_slope_window_ms / dt_ms)))
+    # Max rise / decay slopes. The slope over k samples is
+    # (v[i+k] − v[i]) / (k·dt), the mean of k sample-to-sample slopes,
+    # with k from max_slope_window_ms. 0 (the default) gives k = 1: the
+    # sample-to-sample dV/dt that Stimfit and Clampfit report. Each slope
+    # is placed at the centre of its k samples. +slope is the largest
+    # with its centre between threshold and peak, −slope the most
+    # negative between the peak and the fAHP minimum. The window may
+    # reach outside the phase, so a rise shorter than the window still
+    # gets a value (#21), and the falling phase stops at the fAHP, so the
+    # next spike's upstroke can't be picked up (#22).
+    k = max(1, int(round(max_slope_window_ms / dt_ms)))
+    h = k // 2
     fall_end_idx = decay_end_idx
     if fahp_t is not None:
         fall_end_idx = min(decay_end_idx, int(round(fahp_t * sr)) + 1)
-    pad = win_samples
-    s0 = max(0, thr_idx - pad)
-    s1 = min(dvdt.size, max(fall_end_idx, spike.peak_idx + 1) + pad)
-    kernel = np.ones(win_samples) / win_samples
-    smoothed = np.convolve(dvdt[s0:s1], kernel, mode="same")
-    rise_sm = smoothed[thr_idx - s0:spike.peak_idx + 1 - s0]
-    fall_sm = smoothed[spike.peak_idx - s0:fall_end_idx - s0]
+
+    def _slopes(c0: int, c1: int) -> np.ndarray:
+        """Slopes over k samples whose centre index lies in [c0, c1]."""
+        j0 = max(0, c0 - h)
+        j1 = min(vm.size - k, c1 - (k - h)) + 1
+        if j1 <= j0:
+            return np.empty(0)
+        return (vm[j0 + k:j1 + k] - vm[j0:j1]) / (k * dt_ms)
+
+    rise_sm = _slopes(thr_idx, spike.peak_idx)
+    fall_sm = _slopes(spike.peak_idx, max(fall_end_idx, spike.peak_idx + 1))
     max_rise = float(rise_sm.max()) if rise_sm.size else None
     max_decay = float(fall_sm.min()) if fall_sm.size else None
 
@@ -707,7 +715,7 @@ def kinetics_kwargs(kinetics: dict) -> dict:
         fahp_search_end_ms=float(k.get("fahp_search_end_ms", 5.0)),
         mahp_search_start_ms=float(k.get("mahp_search_start_ms", 5.0)),
         mahp_search_end_ms=float(k.get("mahp_search_end_ms", 100.0)),
-        max_slope_window_ms=float(k.get("max_slope_window_ms", 0.5)),
+        max_slope_window_ms=float(k.get("max_slope_window_ms", 0.0)),
         interpolate=bool(k.get("interpolate_to_200khz", True)),
         amplitude_ref=str(k.get("amplitude_ref", "threshold")),
         baseline_window_ms=float(k.get("baseline_window_ms", 10.0)),

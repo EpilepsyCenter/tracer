@@ -772,7 +772,7 @@ Other kinetics options:
 - Rise-time low / high % (default 10 / 90); decay low / high %
 - Decay endpoint: `to_threshold` (default) | `to_fahp` (uses min Vm in the fAHP window as the floor)
 - fAHP search window (ms after peak), mAHP search window (ms after peak)
-- Max-slope window (ms) — sliding-mean window over `dV/dt` whose `argmax|·|` gives `max_rise_slope` / `max_decay_slope`
+- Max-slope window (ms) — span of the slope (V[i+k] − V[i]) / (k·dt) whose extremes give `max_rise_slope` / `max_decay_slope`; 0 (default) = one sample
 
 Kinetics columns: threshold_vm, threshold_t_s, peak_vm, peak_t_s, amplitude_mv, rise_time_s, decay_time_s, half_width_s, fahp_vm, fahp_t_s, mahp_vm, mahp_t_s, max_rise_slope_mv_ms, max_decay_slope_mv_ms, manual.
 

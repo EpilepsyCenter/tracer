@@ -150,7 +150,7 @@ const DEFAULT_KINETICS: APKineticsParams = {
   fahp_search_end_ms: 5,
   mahp_search_start_ms: 5,
   mahp_search_end_ms: 100,
-  max_slope_window_ms: 0.5,
+  max_slope_window_ms: 0,  // 0 = one sample (as Stimfit and Clampfit)
   interpolate_to_200khz: true,
   baseline_window_ms: 10,
   measure_on: 'raw',
@@ -1781,8 +1781,8 @@ function APKineticsPanel({
         onChange={(v) => set('mahp_search_end_ms', v)} />
 
       <SubHeader>Slope</SubHeader>
-      <ParamRow label="Max-slope window (ms)"
-        value={kinetics.max_slope_window_ms} step={0.1} min={0.1}
+      <ParamRow label="Max-slope window (ms, 0 = 1 sample)"
+        value={kinetics.max_slope_window_ms} step={0.05} min={0}
         onChange={(v) => set('max_slope_window_ms', v)} />
       <div style={{ gridColumn: '1 / -1' }}>
         <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 'var(--font-size-label)' }}>

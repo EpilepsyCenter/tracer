@@ -2439,7 +2439,7 @@ the rest of the per-spike measurement.
 | **Decay end** | *to_threshold* | Whether the decay percentages refer to the trace returning *to threshold* or *to the fAHP minimum* |
 | **fAHP start / end (ms)** | 0 / 5 | Window after the peak in which the **fast AHP** minimum is searched |
 | **mAHP start / end (ms)** | 5 / 100 | Window after the peak in which the **medium AHP** minimum is searched |
-| **Max-slope window (ms)** | 0.5 | Width of the centred window over which dV/dt is averaged for the **+slope** and **−slope** outputs |
+| **Max-slope window (ms)** | 0 (one sample) | Span over which the **+slope** and **−slope** are taken, as (V[i+k] − V[i]) / (k·dt) with k samples in the window. 0 uses one sample, the sample-to-sample dV/dt that Stimfit and Clampfit report. A wider window smooths noise but lowers the maximum: an AP upstroke lasts about 0.2 ms, so a 0.5 ms window reports about a third of it |
 | **Interp to 200 kHz** | on | Resamples the rise and decay segments to 200 kHz with linear interpolation before measuring percentage-crossing times; the slopes themselves remain on the original sampling grid |
 
 The interpolation is purely for *time-of-crossing* refinement —

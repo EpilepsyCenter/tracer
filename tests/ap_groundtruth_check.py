@@ -266,6 +266,26 @@ def main():
         check("+slope with Sekerli I", up is not None and abs(up / g["up"] - 1) <= TOL["up_rel"],
               f"{up} vs {g['up']:.1f}")
 
+    # Default slope window (0 = one sample): +slope and −slope are the
+    # sample-to-sample dV/dt of the 20 kHz trace, as Stimfit and Clampfit
+    # report them, i.e. the extreme forward differences between threshold
+    # and peak and between peak and fAHP minimum.
+    one = run_ap(
+        sweeps_vm=v20, sweeps_im=im, sweep_indices=list(range(len(LEVELS))), sr=FS_REC,
+        detection=DETECTION, kinetics={k: v for k, v in KINETICS.items() if k != "max_slope_window_ms"},
+        rheobase_mode="record", ramp_params=None, im_onset_s=on, im_windows_s=[(on, off)] * len(LEVELS),
+    )
+    for sp in one["per_spike"]:
+        v = v20[sp["sweep"]]
+        ip = int(round(sp["peak_t_s"] * FS_REC))
+        it = int(round(sp["threshold_t_s"] * FS_REC))
+        ia = int(round(sp["fahp_t_s"] * FS_REC))
+        d = np.diff(v) * FS_REC / 1000
+        for name, got, want in (("+slope", sp["max_rise_slope_mv_ms"], d[it:ip].max()),
+                                ("−slope", sp["max_decay_slope_mv_ms"], d[ip:ia + 1].min())):
+            check(f"{name}, one-sample default", got is not None and abs(got - want) < 1e-9,
+                  f"{got} vs {want}")
+
     # Through the endpoint: Manual Im, analysis bounds over the whole sweep,
     # no protocol (as for ABF / NWB files).
     # The recording also carries its stimulus as a channel, as an NWB
